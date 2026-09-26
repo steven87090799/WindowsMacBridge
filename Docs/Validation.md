@@ -7,6 +7,7 @@
 - 120,000 個 copy down/up 與額外 120,000+ browser modifier/down/repeat/up 混合事件，ledger 最後歸零。這是純核心測試，不是實體輸入 CPU/RSS/延遲的測量。
 - HID ledger 驗證六種交換、左右 Shift、双裝置共同持有、拔除只釋放自身、切 Remote 釋放輸出並等待 neutral、容量上限及虛擬輸出未 ready 時禁止 seize。此 ledger 尚未連接裝置／driver。
 - Release App 建置、ad-hoc codesign strict verify、包內 registry/scopes 載入 `--self-check` 通過。
+- 獨立 `bash scripts/build-hid-helper.sh`：VirtualHID client release build、10 項離線 report/lifecycle tests 及 helper `--self-check` 通過（與 App 的 63 項分開）。額外 100,000 次 report 編碼，不連 driver、不注入事件。官方 8.6.0.pkg 簽署／公證 metadata 檢查通過；沒有安裝。
 - `--diagnose-backend` 沒有開 tap、open/seize 裝置或注入事件；本次列出 0 個可見 keyboard service，因此沒有取得真實雙鍵盤／內建鍵盤識別驗證。0 並非不存在鍵盤的證明。
 - Info.plist 與 git diff whitespace 檢查通過。CLT 缺少可選 framework search path 的 linker warnings 未阻止建置。
 

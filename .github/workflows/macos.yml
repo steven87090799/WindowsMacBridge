@@ -6,6 +6,13 @@ on:
 permissions:
   contents: read
 jobs:
+  hid-helper-prototype:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned VirtualHID client and run offline tests
+        run: bash scripts/build-hid-helper.sh
   test-and-package:
     runs-on: macos-15
     timeout-minutes: 15

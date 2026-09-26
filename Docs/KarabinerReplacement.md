@@ -56,7 +56,9 @@ SwiftUI / 輸入法協調器（登入使用者）
 
 不可讓 UI 傳任意 shell 或無限制 HID stream 給 root helper。限制設定 schema、目標使用者/session、鍵盘範圍與動作。服務掉線/心跳停止時先送空 output reports，釋放每個 seized device；服務重啟必須等待所有實體鍵放開。不能同時讓 Event Tap 與 HID backend 翻譯同一批輸入。
 
-後續必要工程：固定 driver 版本與校驗、C++ bridge/IPC、root helper 的簽署及安裝移除、ServiceManagement lifecycle、Secure Input/session 同步、physical usage page 正規化、consumer report、真實雙鍵盤與 Fn/Globe 驗收。這些 adapter/installer **尚未完成**。本次未安裝 daemon/driver，未以 root 取得鍵盤独占，未改動 Karabiner 或系統設定。
+已新增可獨立建置的 [VirtualHID helper 原型](../Tools/HIDBackend/README.md)：固定 SDK 與 checksum、Swift/C/C++ bridge、keyboard/Fn/consumer report 編碼、driver readiness/reset、離線生命週期模型。尚未安裝或接入 App。
+
+後續必要工程：driver 安裝版本協調、身分驗證 IPC、root helper 的簽署及安裝移除、ServiceManagement lifecycle、Secure Input/session 同步、physical usage page 正規化、consumer report、真實雙鍵盤與 Fn/Globe 驗收。這些 adapter/installer **尚未完成**。本次未安裝 daemon/driver，未以 root 取得鍵盤独占，未改動 Karabiner 或系統設定。
 
 ## 驗收
 

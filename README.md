@@ -21,7 +21,7 @@ Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macO
 
 要試用本次快捷鍵功能，須在設定選擇「所有鍵盤（快捷鍵預覽）」並啟用 Windows 快捷鍵。這與完整替代的裝置隔離要求不同。不要同時套用相同 Karabiner 規則，以免重複映射。
 
-完整替代後端需要指定 IOHIDDevice capture、Privileged helper、DriverKit virtual keyboard。可以評估重用官方已簽署的獨立虛擬 HID driver；自行發行 driver 則涉及自己的 entitlement 與 provisioning。本 repository 尚未安裝或打包任何 root helper／driver。
+完整替代後端需要指定 IOHIDDevice capture、Privileged helper、DriverKit virtual keyboard。可以評估重用官方已簽署的獨立虛擬 HID driver；自行發行 driver 則涉及自己的 entitlement 與 provisioning。本 repository 尚未安裝或打包任何 root helper／driver。可獨立建置的 [VirtualHID helper 原型](Tools/HIDBackend/README.md) 已加入，尚未接入 App。
 
 ## 建置與執行
 
