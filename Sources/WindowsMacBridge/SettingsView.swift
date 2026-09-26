@@ -18,14 +18,14 @@ struct SettingsView: View {
         Form {
             Section("WindowsMacBridge — 開發預覽版") {
                 Text(controller.summary).font(.headline).textSelection(.enabled)
-                Toggle("啟用 Windows 快捷鍵", isOn: Binding(get: { controller.settings.enabled }, set: controller.setEnabled))
+                Toggle("啟用 Windows 快捷鍵", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
                 Text("Ctrl+C / X / V / A / Z / Y / S / F / P → macOS 快捷鍵。原生 Command 操作保持不變。")
                 Text("Terminal、Remote、VM、Game、IDE 預設原樣通過。Finder 的 Ctrl+X 尚未啟用。Alt+Tab、Home/End 與 Finder 移動流程仍在規劃中。")
                     .foregroundStyle(.secondary)
             }
             Section("登入啟動") {
                 Toggle("登入時啟動 WindowsMacBridge", isOn: Binding(
-                    get: { controller.sourceStatus.loginRegistered }, set: controller.inputSources.setLoginEnabled))
+                    get: { controller.sourceStatus.loginRegistered }, set: { controller.inputSources.setLoginEnabled($0) }))
                 LabeledContent("登入項目", value: controller.sourceStatus.loginStatus)
                 Button("開啟登入項目設定") { controller.inputSources.openLoginSettings() }
                 if let issue = controller.sourceStatus.loginIssue { Text(issue).foregroundStyle(.orange) }
@@ -64,7 +64,7 @@ struct SettingsView: View {
                     Button("結束舊版 VChewingGuard") { controller.inputSources.quitLegacyApp() }
                 }
                 Toggle("啟用輸入法守護", isOn: Binding(
-                    get: { controller.sourceStatus.enabled }, set: controller.inputSources.setEnabled))
+                    get: { controller.sourceStatus.enabled }, set: { controller.inputSources.setEnabled($0) }))
                 Text("啟用後優先維持唯音繁體；切至 ABC 會維持英文，直到下次切換、重新啟用或重啟 App。唯音輸入法需另行安裝。")
                 LabeledContent("目前來源", value: controller.sourceStatus.current)
                 HStack {
@@ -80,15 +80,15 @@ struct SettingsView: View {
             }
             Section("切換快捷鍵與延遲") {
                 Toggle("啟用唯音／ABC 切換快捷鍵", isOn: Binding(
-                    get: { controller.sourceStatus.hotkeyEnabled }, set: controller.inputSources.setHotkeyEnabled))
-                Picker("快捷鍵", selection: Binding(get: { controller.sourceStatus.preset }, set: controller.inputSources.setPreset)) {
+                    get: { controller.sourceStatus.hotkeyEnabled }, set: { controller.inputSources.setHotkeyEnabled($0) }))
+                Picker("快捷鍵", selection: Binding(get: { controller.sourceStatus.preset }, set: { controller.inputSources.setPreset($0) })) {
                     ForEach(HotkeyPreset.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
                 LabeledContent("快捷鍵註冊", value: controller.sourceStatus.hotkeyRegistered ? "已註冊" : "未註冊／暫停")
                 Stepper("修正延遲：\(controller.sourceStatus.debounceMilliseconds) ms", value: Binding(
-                    get: { controller.sourceStatus.debounceMilliseconds }, set: controller.inputSources.setDebounce), in: 200...1200, step: 50)
+                    get: { controller.sourceStatus.debounceMilliseconds }, set: { controller.inputSources.setDebounce($0) }), in: 200...1200, step: 50)
                 Stepper("啟動等待：\(controller.sourceStatus.startupDelayMilliseconds) ms", value: Binding(
-                    get: { controller.sourceStatus.startupDelayMilliseconds }, set: controller.inputSources.setStartupDelay), in: 0...5000, step: 250)
+                    get: { controller.sourceStatus.startupDelayMilliseconds }, set: { controller.inputSources.setStartupDelay($0) }), in: 0...5000, step: 250)
             }
             Section("整合與診斷") {
                 Button("匯入舊版 VChewingGuard 偏好") { controller.inputSources.importLegacyPreferences() }
@@ -156,7 +156,7 @@ struct SettingsView: View {
             Text("此時間不含完整 OS／App 延遲，不代表端到端驗收。")
                 .font(.caption).foregroundStyle(.secondary)
             Toggle("短期規則診斷（5 分鐘，僅記憶體，最多 128 筆）",
-                   isOn: Binding(get: { controller.diagnosticsEnabled }, set: controller.setDiagnostics))
+                   isOn: Binding(get: { controller.diagnosticsEnabled }, set: { controller.setDiagnostics($0) }))
             List(controller.status.diagnostics) { record in
                 HStack {
                     Text(record.rule)
