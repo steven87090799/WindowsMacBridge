@@ -44,3 +44,18 @@ Core 規則與 down/up、repeat、左右 Ctrl、modifier 不一致、釋放 Ctrl
 3. Alt+Tab 的 output ownership、滑鼠互動、中止及 crash 測試，通過前不啟用。
 4. Finder move intent、非 callback clipboard metadata、明確確認及 TOCTOU 限制。
 5. 已驗證的 helper/process registry 與 Remote matrix。
+
+
+## 0.2.0 整合版追加手動驗收
+
+- 僅一個 Menu Bar／設定視窗／WindowsMacBridge process；重複 open 不產生第二份。
+- 首次設定三項功能皆關閉；未授權時單獨使用唯音功能不要求 Accessibility。
+- 唯音與 ABC 手動切換、hotkey 四種 preset、衝突時保留原設定、守護 debounce 和有界重試。
+- 舊版守護執行中：顯示衝突、hotkey 未註冊、無 TIS 修正；正常結束舊版後可啟用新守護。
+- 遠端／VM／Game 前景：guard 選擇工作取消，切換鍵解除註冊；返回本機後依使用者設定恢復。
+- 手動與自動來源切換前，Windows 翻譯 gate 關閉；按住 Ctrl 切回 ABC 必須先放鍵才恢復翻譯。
+- 使用 Menu Bar 全域 Pause／Resume，確認兩個功能一同停止／恢復，使用者各自 enabled 偏好不變。
+- Secure Input 等待中進入 Remote 或 Pause，不在新 App 執行舊的延遲選擇。
+- screens sleep、system sleep、inactive session 交錯通知，不因單一 wake 提早恢復。
+- 舊版偏好匯入不帶入啟用狀態、登入項目、歷史；新 App 登入啟動需固定安裝路徑。
+- 首次、切換、resume 的 IME 組字和不同 App 行為需實機確認；中文 Windows 翻譯仍未啟用。

@@ -1,0 +1,25 @@
+name: macOS validation
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test-and-package:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Unit and in-process AppKit tests
+        run: bash scripts/test.sh
+      - name: Build and verify development app
+        run: bash scripts/build-app.sh
+      - name: Package app
+        run: ditto -c -k --keepParent "$(cat build/APP_PATH.txt)" build/WindowsMacBridge.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WindowsMacBridge-development
+          path: build/WindowsMacBridge.zip

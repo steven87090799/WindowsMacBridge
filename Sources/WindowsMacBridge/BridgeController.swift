@@ -3,8 +3,14 @@ import AppKit
 import SwiftUI
 import BridgeCore
 import BridgePlatform
+import InputSourceSupport
+import InputSourceCore
 
 @MainActor final class BridgeController: ObservableObject {
+    let inputSources = InputSourceCoordinator()
+    @Published var sourceStatus = InputSourceStatus()
+    @Published var sourceDiagnostics = ""
+    @Published var sourceLog = ""
     @Published var status = EngineStatus()
     @Published var context = ApplicationContext()
     @Published var settings: BridgeSettings
@@ -20,7 +26,10 @@ import BridgePlatform
     private var registry: ApplicationRegistry?
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
-    private var sessionActive = true
+    private enum SuspensionReason { case systemSleep, screensSleep, inactiveSession }
+    private var suspensionReasons = Set<SuspensionReason>()
+    private var sessionActive: Bool { suspensionReasons.isEmpty }
+    private var legacyAppRunning = false
     private var restartToken: UInt64 = 0
     private var lastEmergency = false
     private var debugUntil: Date?
@@ -50,15 +59,30 @@ import BridgePlatform
         catch { configurationError = "App 保護清單無法載入；翻譯已停用。" }
     }
     func start() {
+        inputSources.onChange = { [weak self] status in
+            guard let self else { return }
+            sourceStatus = status
+            refreshLayout()
+            onStatusChange?()
+        }
+        inputSources.liveSelectionAllowed = { [weak self] in
+            guard let self else { return false }
+            return !InputSourceCoordinator.legacyAppRunning && sourceSuspension(for: currentApplicationContext()) == nil
+        }
+        refreshLegacyApplication()
         refreshApplication()
         refreshLayout()
         let center = NSWorkspace.shared.notificationCenter
         observe(center, NSWorkspace.didActivateApplicationNotification) { $0.refreshApplication() }
-        observe(center, NSWorkspace.didTerminateApplicationNotification) { $0.refreshApplication() }
-        observe(center, NSWorkspace.willSleepNotification) { $0.setSession(false) }
-        observe(center, NSWorkspace.didWakeNotification) { $0.setSession(true); $0.refreshApplication() }
-        observe(center, NSWorkspace.sessionDidResignActiveNotification) { $0.setSession(false) }
-        observe(center, NSWorkspace.sessionDidBecomeActiveNotification) { $0.setSession(true); $0.refreshApplication() }
+        observe(center, NSWorkspace.didTerminateApplicationNotification) { $0.refreshLegacyApplication(); $0.refreshApplication() }
+        observe(center, NSWorkspace.didLaunchApplicationNotification) { $0.refreshLegacyApplication(); $0.publish() }
+        observe(center, NSWorkspace.willSleepNotification) { $0.setSuspended(.systemSleep, true) }
+        observe(center, NSWorkspace.didWakeNotification) { $0.setSuspended(.systemSleep, false); $0.refreshApplication() }
+        observe(center, NSWorkspace.screensDidSleepNotification) { $0.setSuspended(.screensSleep, true) }
+        observe(center, NSWorkspace.screensDidWakeNotification) { $0.setSuspended(.screensSleep, false) }
+        observe(center, NSWorkspace.sessionDidResignActiveNotification) { $0.setSuspended(.inactiveSession, true) }
+        observe(center, NSWorkspace.sessionDidBecomeActiveNotification) { $0.setSuspended(.inactiveSession, false); $0.refreshApplication() }
+        inputSources.start()
         engine.start()
         publish()
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
@@ -75,11 +99,11 @@ import BridgePlatform
         timer?.invalidate(); timer = nil
         for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         observers.removeAll()
+        inputSources.stop()
         engine.stop()
     }
     private func tick() {
         status = engine.snapshot()
-        refreshLayout()
         if let until = pauseUntil, until <= Date() { resume() }
         if let until = debugUntil, until <= Date() { setDiagnostics(false) }
         if status.emergencyPaused && !lastEmergency {
@@ -90,23 +114,41 @@ import BridgePlatform
     }
     private func refreshLayout() {
         let current = KeyboardLayoutResolver.current()
-        if layoutID != current.id || layoutSupported != current.supported {
-            layoutID = current.id; layoutSupported = current.supported; publish()
+        let supported = current.supported && !sourceStatus.selectionInProgress
+        if layoutID != current.id || layoutSupported != supported {
+            layoutID = current.id; layoutSupported = supported; publish()
         }
     }
-    private func refreshApplication() {
-        guard let app = NSWorkspace.shared.frontmostApplication else {
-            context = ApplicationContext(); publish(); return
-        }
+    private func currentApplicationContext() -> ApplicationContext {
+        guard let app = NSWorkspace.shared.frontmostApplication else { return ApplicationContext() }
         let bundle = app.bundleIdentifier ?? ""
         var mode = registry?.mode(for: bundle, overrides: settings.overrides) ?? .disabled
         if app.processIdentifier == ProcessInfo.processInfo.processIdentifier { mode = .disabled }
-        context = ApplicationContext(processID: app.processIdentifier, bundleID: bundle,
-                                     displayName: app.localizedName ?? "Unknown", mode: mode)
-        if app.processIdentifier != ProcessInfo.processInfo.processIdentifier { targetApp = context }
+        return ApplicationContext(processID: app.processIdentifier, bundleID: bundle,
+                                  displayName: app.localizedName ?? "Unknown", mode: mode)
+    }
+    private func refreshApplication() {
+        context = currentApplicationContext()
+        if context.processID != ProcessInfo.processInfo.processIdentifier { targetApp = context }
+        refreshLayout()
         publish()
     }
-    private func setSession(_ active: Bool) { sessionActive = active; publish() }
+    private func refreshLegacyApplication() { legacyAppRunning = InputSourceCoordinator.legacyAppRunning }
+    private func sourceSuspension(for app: ApplicationContext) -> InputSourceSuspension? {
+        InputSourcePolicy.suspension(context: app,
+            isHostApp: app.processID == ProcessInfo.processInfo.processIdentifier,
+            paused: paused || status.emergencyPaused, sessionActive: sessionActive,
+            legacyAppRunning: legacyAppRunning)
+    }
+    private func setSuspended(_ reason: SuspensionReason, _ suspended: Bool) {
+        if suspended { suspensionReasons.insert(reason) } else { suspensionReasons.remove(reason) }
+        publish()
+    }
+    func refreshSourceDiagnostics() {
+        sourceDiagnostics = inputSources.diagnostics
+        sourceLog = inputSources.recentLog
+        sourceStatus = inputSources.status
+    }
     private func publish() {
         var config = EngineConfiguration()
         config.context = context
@@ -116,6 +158,7 @@ import BridgePlatform
         config.diagnostics = diagnosticsEnabled
         config.restartToken = restartToken
         engine.update(config)
+        inputSources.updateProtection(sourceSuspension(for: context))
     }
     func setEnabled(_ value: Bool) {
         store.update { $0.enabled = value }; settings = store.settings
@@ -128,7 +171,7 @@ import BridgePlatform
         publish(); onStatusChange?()
     }
     func resume() {
-        pauseUntil = nil; pausedUntilRestart = false
+        pauseUntil = nil; pausedUntilRestart = false; status.emergencyPaused = false
         restartToken &+= 1; publish(); onStatusChange?()
     }
     func setDiagnostics(_ enabled: Bool) {

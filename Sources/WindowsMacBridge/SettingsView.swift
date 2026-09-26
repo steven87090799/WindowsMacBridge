@@ -1,11 +1,13 @@
 import SwiftUI
 import BridgeCore
+import InputSourceSupport
 
 struct SettingsView: View {
     @ObservedObject var controller: BridgeController
     var body: some View {
         TabView {
             general.tabItem { Label("一般與權限", systemImage: "keyboard") }
+            inputSources.tabItem { Label("唯音與輸入法", systemImage: "character.bubble") }
             profiles.tabItem { Label("App 規則", systemImage: "app.badge") }
             diagnostics.tabItem { Label("診斷", systemImage: "waveform.path.ecg") }
         }
@@ -21,7 +23,14 @@ struct SettingsView: View {
                 Text("Terminal、Remote、VM、Game、IDE 預設原樣通過。Finder 的 Ctrl+X 尚未啟用。Alt+Tab、Home/End 與 Finder 移動流程仍在規劃中。")
                     .foregroundStyle(.secondary)
             }
-            Section("權限") {
+            Section("登入啟動") {
+                Toggle("登入時啟動 WindowsMacBridge", isOn: Binding(
+                    get: { controller.sourceStatus.loginRegistered }, set: controller.inputSources.setLoginEnabled))
+                LabeledContent("登入項目", value: controller.sourceStatus.loginStatus)
+                Button("開啟登入項目設定") { controller.inputSources.openLoginSettings() }
+                if let issue = controller.sourceStatus.loginIssue { Text(issue).foregroundStyle(.orange) }
+            }
+            Section("權限（僅 Windows 快捷鍵需要）") {
                 LabeledContent("Accessibility", value: controller.status.accessibility ? "已授權" : "尚未授權")
                 LabeledContent("Event posting", value: controller.status.postAccess ? "可用" : "尚未授權")
                 LabeledContent("Input monitoring", value: controller.status.listenAccess ? "可用" : "尚未授權／依 tap 能力而定")
@@ -42,7 +51,59 @@ struct SettingsView: View {
                     Button("暫停至重啟") { controller.pause(minutes: nil) }
                     Button("恢復／重啟引擎") { controller.resume() }
                 }
-                Text("緊急暫停：Control + Option + Command + P。Tap 失效或 Client 獨占輸入時，請使用 Menu Bar 暫停／結束。")
+                Text("暫停同時停止 Windows 翻譯、輸入法守護與輸入法快捷鍵。緊急暫停：Control + Option + Command + P。Tap 失效或 Client 獨占輸入時，請使用 Menu Bar 暫停／結束。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }.formStyle(.grouped)
+    }
+    private var inputSources: some View {
+        Form {
+            Section("唯音繁體／ABC") {
+                Text(controller.sourceStatus.summary).font(.headline)
+                if controller.sourceStatus.suspension == .legacyApp {
+                    Button("結束舊版 VChewingGuard") { controller.inputSources.quitLegacyApp() }
+                }
+                Toggle("啟用輸入法守護", isOn: Binding(
+                    get: { controller.sourceStatus.enabled }, set: controller.inputSources.setEnabled))
+                Text("啟用後優先維持唯音繁體；切至 ABC 會維持英文，直到下次切換、重新啟用或重啟 App。唯音輸入法需另行安裝。")
+                LabeledContent("目前來源", value: controller.sourceStatus.current)
+                HStack {
+                    Button("唯音繁體") { controller.inputSources.select(.vChewing) }
+                    Button("ABC") { controller.inputSources.select(.abc) }
+                    Button("重新偵測") { controller.inputSources.rediscover() }
+                }.disabled(controller.sourceStatus.suspension != nil)
+                if let issue = controller.sourceStatus.issue { Text(issue).foregroundStyle(.orange).textSelection(.enabled) }
+                Text("遠端桌面、VM、Game、Disabled Profile 會暫停守護及切換快捷鍵。Secure Input 期間延後切換。")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Windows 快捷鍵目前只在 ABC／U.S. 翻譯；唯音組字期間保持原生按鍵。切換為 ABC 後即可使用 Ctrl+C 等功能。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("切換快捷鍵與延遲") {
+                Toggle("啟用唯音／ABC 切換快捷鍵", isOn: Binding(
+                    get: { controller.sourceStatus.hotkeyEnabled }, set: controller.inputSources.setHotkeyEnabled))
+                Picker("快捷鍵", selection: Binding(get: { controller.sourceStatus.preset }, set: controller.inputSources.setPreset)) {
+                    ForEach(HotkeyPreset.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                LabeledContent("快捷鍵註冊", value: controller.sourceStatus.hotkeyRegistered ? "已註冊" : "未註冊／暫停")
+                Stepper("修正延遲：\(controller.sourceStatus.debounceMilliseconds) ms", value: Binding(
+                    get: { controller.sourceStatus.debounceMilliseconds }, set: controller.inputSources.setDebounce), in: 200...1200, step: 50)
+                Stepper("啟動等待：\(controller.sourceStatus.startupDelayMilliseconds) ms", value: Binding(
+                    get: { controller.sourceStatus.startupDelayMilliseconds }, set: controller.inputSources.setStartupDelay), in: 0...5000, step: 250)
+            }
+            Section("整合與診斷") {
+                Button("匯入舊版 VChewingGuard 偏好") { controller.inputSources.importLegacyPreferences() }
+                    .disabled(!controller.sourceStatus.canImportLegacy)
+                Text("匯入延遲與快捷鍵選擇。請結束舊版 App，並在系統登入項目停用 VChewingGuard；此 App 使用單一登入項目。")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let message = controller.sourceStatus.migrationMessage { Text(message) }
+                DisclosureGroup("輸入來源與守護診斷") {
+                    Button("更新診斷") { controller.refreshSourceDiagnostics() }
+                    Text(controller.sourceStatus.traditional).textSelection(.enabled)
+                    Text(controller.sourceStatus.abc).textSelection(.enabled)
+                    Text(controller.sourceDiagnostics).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    Text(controller.sourceLog).font(.system(.caption2, design: .monospaced)).textSelection(.enabled)
+                }
+                Text("守護日誌僅含來源 ID、切換結果與狀態，最多兩個約 512 KiB 檔案；不記錄按鍵或輸入內容。")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }.formStyle(.grouped)
