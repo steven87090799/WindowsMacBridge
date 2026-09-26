@@ -67,10 +67,13 @@ public struct ApplicationContext: Equatable, Sendable {
     public var bundleID: String
     public var displayName: String
     public var mode: ApplicationMode
+    public var executablePath: String
+    public var isBrowser: Bool
     public init(processID: Int32 = 0, bundleID: String = "", displayName: String = "Unknown",
-                mode: ApplicationMode = .disabled) {
+                mode: ApplicationMode = .disabled, executablePath: String = "", isBrowser: Bool = false) {
         self.processID = processID; self.bundleID = bundleID
         self.displayName = displayName; self.mode = mode
+        self.executablePath = executablePath; self.isBrowser = isBrowser
     }
 }
 
@@ -103,8 +106,10 @@ public struct ShortcutRule: Sendable {
     public let id: String
     public let input: Shortcut
     public let output: Shortcut
-    public init(id: String, input: Shortcut, output: Shortcut) {
+    public let action: ShortcutAction?
+    public init(id: String, input: Shortcut, output: Shortcut, action: ShortcutAction? = nil) {
         self.id = id; self.input = input; self.output = output
+        self.action = action
     }
 }
 
@@ -113,4 +118,15 @@ public enum EventDecision: Equatable, Sendable {
     case suppress
     case rewrite(keyCode: UInt16, modifiers: Modifiers, ruleID: String)
     case emergencyPause
+    case togglePassThrough
+    case action(ShortcutAction, ruleID: String)
+}
+
+public enum FinderAction: String, Sendable, CaseIterable {
+    case copy, cut, paste, open, rename, trash
+}
+public enum SystemAction: String, Sendable, CaseIterable { case openFinder, activityMonitor }
+public enum ShortcutAction: Equatable, Sendable {
+    case finder(FinderAction)
+    case system(SystemAction)
 }

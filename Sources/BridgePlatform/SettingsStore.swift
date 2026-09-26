@@ -5,7 +5,23 @@ public struct BridgeSettings: Codable, Sendable {
     public var schemaVersion = 1
     public var enabled = false
     public var overrides: [String: ApplicationMode] = [:]
+    public var keyboardScope: KeyboardScope = .builtInAndApple834
+    public var finderEnabled = false
+    public var allowIMEShortcuts = false
     public init() {}
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion, enabled, overrides, keyboardScope, finderEnabled, allowIMEShortcuts
+    }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
+        enabled = try values.decode(Bool.self, forKey: .enabled)
+        overrides = try values.decode([String: ApplicationMode].self, forKey: .overrides)
+        // Existing global-shortcut users retain their scope. New installs request device isolation.
+        keyboardScope = try values.decodeIfPresent(KeyboardScope.self, forKey: .keyboardScope) ?? .allKeyboards
+        finderEnabled = try values.decodeIfPresent(Bool.self, forKey: .finderEnabled) ?? false
+        allowIMEShortcuts = try values.decodeIfPresent(Bool.self, forKey: .allowIMEShortcuts) ?? false
+    }
 }
 
 @MainActor public final class SettingsStore {

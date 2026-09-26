@@ -10,6 +10,8 @@ public struct EngineConfiguration: Sendable {
     public var layoutSupported = false
     public var diagnostics = false
     public var restartToken: UInt64 = 0
+    public var keyboardScope: KeyboardScope = .builtInAndApple834
+    public var finderEnabled = false
     public init() {}
 }
 
@@ -29,6 +31,9 @@ public struct EngineStatus: Sendable {
     public var awaitingNeutral = true
     public var fault: String?
     public var emergencyPaused = false
+    public var manualPassThrough = false
+    public var backendIssue: String?
+    public var actionStatus = ""
     public var processed: UInt64 = 0
     public var translated: UInt64 = 0
     public var maxMicroseconds: Double = 0
@@ -62,24 +67,39 @@ public final class InputEngine: @unchecked Sendable {
     private var lastRestart: UInt64 = 0
     private var attemptedStart = false
     private var needsRecreation = false
-    private let marker = Int64.random(in: 1...Int64.max)
+    private let marker: Int64
+    private let actions: ShortcutActionDispatcher
     private var records = [DiagnosticRecord?](repeating: nil, count: 128)
     private var recordIndex = 0
     private var recordSequence: UInt64 = 0
     private var diagnosticDeadline: TimeInterval = 0
+    private var actionEpoch: UInt64 = 0
 
-    public init() {}
+    public init() {
+        let marker = Int64.random(in: 1...Int64.max)
+        self.marker = marker; actions = ShortcutActionDispatcher(marker: marker)
+        // Compile every table before an event callback can run.
+        _ = RuleEngine.browser; _ = RuleEngine.finder; _ = RuleEngine.system
+    }
     /// Invoke once per instance, by the owning lifecycle coordinator.
     public func start() { Thread { [self] in run() }.start() }
     public func update(_ configuration: EngineConfiguration) {
-        mailbox.lock.lock(); defer { mailbox.lock.unlock() }
+        mailbox.lock.lock()
+        let previous = mailbox.configuration
+        let cancel = previous.context != configuration.context || previous.enabled != configuration.enabled ||
+            previous.sessionActive != configuration.sessionActive || previous.keyboardScope != configuration.keyboardScope ||
+            previous.finderEnabled != configuration.finderEnabled || previous.layoutSupported != configuration.layoutSupported ||
+            previous.restartToken != configuration.restartToken
         mailbox.configuration = configuration; mailbox.revision &+= 1
+        mailbox.lock.unlock()
+        if cancel { actions.cancelPending() }
     }
     public func snapshot() -> EngineStatus {
         mailbox.lock.lock(); defer { mailbox.lock.unlock() }
         return mailbox.status
     }
     public func stop() {
+        actions.cancelPending(disable: true)
         mailbox.lock.lock(); defer { mailbox.lock.unlock() }
         mailbox.stopping = true
     }
@@ -92,6 +112,7 @@ public final class InputEngine: @unchecked Sendable {
         CFRunLoopRun()
         timer.invalidate()
         destroyTap()
+        actions.update(context: .init(), enabled: false)
     }
 
     private func readConfiguration() {
@@ -106,6 +127,8 @@ public final class InputEngine: @unchecked Sendable {
                 recovery.reset(); attemptedStart = false
                 needsRecreation = true
                 processor.invalidate()
+                processor.resumeManualPassThrough()
+                actionEpoch &+= 1
             }
             if !configuration.diagnostics {
                 for i in records.indices { records[i] = nil }
@@ -114,15 +137,23 @@ public final class InputEngine: @unchecked Sendable {
                 diagnosticDeadline = ProcessInfo.processInfo.systemUptime + 300
             }
         }
-        configureProcessor()
+        if changed { configureProcessor() }
     }
 
     private func configureProcessor() {
+        let scopeSupported = BackendCapabilities.eventTap.supports(configuration.keyboardScope)
+        status.backendIssue = scopeSupported ? nil : "內建鍵盤限定需要裝置攔截後端；目前不會套用到其他鍵盤。"
+        let active = configuration.enabled && configuration.sessionActive &&
+            status.accessibility && status.postAccess && !status.secureInput &&
+            status.fault == nil && !status.emergencyPaused && scopeSupported
         processor.configure(context: configuration.context,
-                            enabled: configuration.enabled && configuration.sessionActive &&
-                                status.accessibility && status.postAccess && !status.secureInput &&
-                                status.fault == nil && !status.emergencyPaused,
-                            layoutSupported: configuration.layoutSupported)
+                            enabled: active, layoutSupported: configuration.layoutSupported,
+                            controlsEnabled: active, finderEnabled: configuration.finderEnabled)
+        if !actions.update(context: configuration.context,
+                           enabled: active && configuration.layoutSupported && !processor.manualPassThrough,
+                           finderEnabled: configuration.finderEnabled, epoch: actionEpoch) {
+            processor.invalidate()
+        }
     }
 
     private func tick() {
@@ -138,6 +169,7 @@ public final class InputEngine: @unchecked Sendable {
         if status.accessibility != lastTrust || status.secureInput != lastSecure ||
             configuration.sessionActive != lastSessionActive {
             processor.invalidate()
+            actionEpoch &+= 1
             if status.accessibility && !lastTrust { attemptedStart = false }
             lastTrust = status.accessibility; lastSecure = status.secureInput
             lastSessionActive = configuration.sessionActive
@@ -157,6 +189,8 @@ public final class InputEngine: @unchecked Sendable {
         status.tapActive = tap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false
         status.awaitingNeutral = processor.isAwaitingNeutral
         status.processed = processor.processedCount; status.translated = processor.translatedCount
+        status.manualPassThrough = processor.manualPassThrough
+        status.actionStatus = actions.status()
         if diagnosticDeadline > 0 && ProcessInfo.processInfo.systemUptime >= diagnosticDeadline {
             for i in records.indices { records[i] = nil }
         }
@@ -204,6 +238,7 @@ public final class InputEngine: @unchecked Sendable {
     private func handle(_ type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             processor.invalidate()
+            actionEpoch &+= 1
             if configuration.enabled && configuration.sessionActive && status.accessibility &&
                 !status.secureInput && !status.emergencyPaused && status.fault == nil &&
                 recovery.mayRetry(at: ProcessInfo.processInfo.systemUptime), let tap {
@@ -211,6 +246,7 @@ public final class InputEngine: @unchecked Sendable {
             } else {
                 status.fault = "Event Tap 已停用；請放開按鍵後重新啟動。"
             }
+            configureProcessor()
             return Unmanaged.passUnretained(event)
         }
         if event.getIntegerValueField(.eventSourceUserData) == marker { return Unmanaged.passUnretained(event) }
@@ -237,6 +273,13 @@ public final class InputEngine: @unchecked Sendable {
         case .emergencyPause:
             status.emergencyPaused = true
             configureProcessor()
+            result = nil
+        case .togglePassThrough:
+            status.manualPassThrough = processor.manualPassThrough
+            configureProcessor()
+            result = nil
+        case .action(let action, _):
+            _ = actions.submit(action, context: configuration.context)
             result = nil
         case let .rewrite(outputKey, outputModifiers, ruleID):
             EventRewriter.apply(to: event, keyCode: outputKey, modifiers: outputModifiers, marker: marker)

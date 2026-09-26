@@ -1,3 +1,21 @@
+# 0.3.0-preview 驗證紀錄
+
+日期：2026-09-27。本機 arm64、Swift 6.4 / macOS 27 SDK，deployment target macOS 14。
+
+- 完整 `bash scripts/test.sh` 通過 61 tests（33 BridgeCore、9 Platform/AppKit、15 input-source core/policy、4 migration），追加的 `--filter ActionDispatcherTests` 2 tests 通過；合計 63 項。參數化案例另計。
+- 原始 78 條 fixture 中 66 個不同 shortcut inputs 的 keycode/modifier/輸出與白名單 action 對照通過；#63 由 Finder cut state 測試覆蓋。沒有將裝置限定或消費鍵宣稱為已接通。
+- 120,000 個 copy down/up 與額外 120,000+ browser modifier/down/repeat/up 混合事件，ledger 最後歸零。這是純核心測試，不是實體輸入 CPU/RSS/延遲的測量。
+- HID ledger 驗證六種交換、左右 Shift、双裝置共同持有、拔除只釋放自身、切 Remote 釋放輸出並等待 neutral、容量上限及虛擬輸出未 ready 時禁止 seize。此 ledger 尚未連接裝置／driver。
+- Release App 建置、ad-hoc codesign strict verify、包內 registry/scopes 載入 `--self-check` 通過。
+- `--diagnose-backend` 沒有開 tap、open/seize 裝置或注入事件；本次列出 0 個可見 keyboard service，因此沒有取得真實雙鍵盤／內建鍵盤識別驗證。0 並非不存在鍵盤的證明。
+- Info.plist 與 git diff whitespace 檢查通過。CLT 缺少可選 framework search path 的 linker warnings 未阻止建置。
+
+未執行真實 Finder 移動/刪除、鎖定畫面、Global Event Tap、IME composition、Remote/VM session、Secure Input、root helper 或 DriverKit 裝置攔截。不以單元測試取代這些驗收。未更動 Karabiner、登入項目、輸入法偏好或系統鍵盤設定。
+
+HID helper/IPC/driver 安裝整合與 #4/#5–10/#77/Alt+Tab 仍未完成；這是部分功能預覽，不是完整替代版。詳細界線见 [KarabinerReplacement.md](KarabinerReplacement.md)。Hosted CI 需以 PR 的實際 head 結果另行確認。
+
+---
+
 # 0.2.0 整合版驗證紀錄
 
 日期：2026-09-26～27。Swift 6.4 / arm64 / macOS 27.0 (26A428)，deployment target macOS 14。

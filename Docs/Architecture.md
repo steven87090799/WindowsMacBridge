@@ -1,3 +1,5 @@
+> 以下為 0.2 初始設計背景。0.3 的規則、Finder 輸出及 HID 後端界線以 [KarabinerReplacement.md](KarabinerReplacement.md) 為準；目前已有指定 PID 的 Finder down/up 輸出，不再是完全零注入。
+
 # Keyboard implementation boundaries (0.2.0)
 
 The unified input-source architecture, lifecycle policy and migration are documented in [ProjectIntegration.md](ProjectIntegration.md).

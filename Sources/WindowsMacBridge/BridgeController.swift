@@ -40,6 +40,8 @@ import InputSourceCore
         if let configurationError { return configurationError }
         if !settings.enabled { return "已停用" }
         if paused || status.emergencyPaused { return "已暫停" }
+        if status.manualPassThrough { return "右 Option+P 穿透：ON" }
+        if let issue = status.backendIssue { return issue }
         if !status.accessibility { return "等待輔助使用權限" }
         if !status.postAccess { return "等待事件輸出權限" }
         if let fault = status.fault { return fault }
@@ -103,7 +105,11 @@ import InputSourceCore
         engine.stop()
     }
     private func tick() {
+        let previousPassThrough = status.manualPassThrough
         status = engine.snapshot()
+        if previousPassThrough != status.manualPassThrough {
+            inputSources.updateProtection(sourceSuspension(for: context))
+        }
         if let until = pauseUntil, until <= Date() { resume() }
         if let until = debugUntil, until <= Date() { setDiagnostics(false) }
         if status.emergencyPaused && !lastEmergency {
@@ -113,7 +119,7 @@ import InputSourceCore
         onStatusChange?()
     }
     private func refreshLayout() {
-        let current = KeyboardLayoutResolver.current()
+        let current = KeyboardLayoutResolver.current(allowIME: settings.allowIMEShortcuts)
         let supported = current.supported && !sourceStatus.selectionInProgress
         if layoutID != current.id || layoutSupported != supported {
             layoutID = current.id; layoutSupported = supported; publish()
@@ -122,10 +128,12 @@ import InputSourceCore
     private func currentApplicationContext() -> ApplicationContext {
         guard let app = NSWorkspace.shared.frontmostApplication else { return ApplicationContext() }
         let bundle = app.bundleIdentifier ?? ""
-        var mode = registry?.mode(for: bundle, overrides: settings.overrides) ?? .disabled
+        let path = app.executableURL?.path ?? ""
+        var mode = registry?.mode(for: bundle, executablePath: path, overrides: settings.overrides) ?? .disabled
         if app.processIdentifier == ProcessInfo.processInfo.processIdentifier { mode = .disabled }
         return ApplicationContext(processID: app.processIdentifier, bundleID: bundle,
-                                  displayName: app.localizedName ?? "Unknown", mode: mode)
+                                  displayName: app.localizedName ?? "Unknown", mode: mode,
+                                  executablePath: path, isBrowser: registry?.isBrowser(bundle) ?? false)
     }
     private func refreshApplication() {
         context = currentApplicationContext()
@@ -137,7 +145,7 @@ import InputSourceCore
     private func sourceSuspension(for app: ApplicationContext) -> InputSourceSuspension? {
         InputSourcePolicy.suspension(context: app,
             isHostApp: app.processID == ProcessInfo.processInfo.processIdentifier,
-            paused: paused || status.emergencyPaused, sessionActive: sessionActive,
+            paused: paused || status.emergencyPaused || status.manualPassThrough, sessionActive: sessionActive,
             legacyAppRunning: legacyAppRunning)
     }
     private func setSuspended(_ reason: SuspensionReason, _ suspended: Bool) {
@@ -157,6 +165,8 @@ import InputSourceCore
         config.layoutSupported = layoutSupported
         config.diagnostics = diagnosticsEnabled
         config.restartToken = restartToken
+        config.keyboardScope = settings.keyboardScope
+        config.finderEnabled = settings.finderEnabled
         engine.update(config)
         inputSources.updateProtection(sourceSuspension(for: context))
     }
@@ -164,6 +174,18 @@ import InputSourceCore
         store.update { $0.enabled = value }; settings = store.settings
         configurationError = store.errorMessage
         if value { resume() } else { publish() }
+    }
+    func setKeyboardScope(_ value: KeyboardScope) {
+        store.update { $0.keyboardScope = value }; settings = store.settings
+        configurationError = store.errorMessage; publish()
+    }
+    func setFinderEnabled(_ value: Bool) {
+        store.update { $0.finderEnabled = value }; settings = store.settings
+        configurationError = store.errorMessage; publish()
+    }
+    func setIMEShortcuts(_ value: Bool) {
+        store.update { $0.allowIMEShortcuts = value }; settings = store.settings
+        configurationError = store.errorMessage; refreshLayout()
     }
     func pause(minutes: Int?) {
         pauseUntil = minutes.map { Date().addingTimeInterval(Double($0) * 60) }

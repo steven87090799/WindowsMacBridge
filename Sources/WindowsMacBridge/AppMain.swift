@@ -118,7 +118,7 @@ import InputSourceSupport
         if CommandLine.arguments.contains("--self-check") {
             do {
                 let registry = try ApplicationRegistry()
-                print("WindowsMacBridge 0.2.0: bundled registry loaded (\(registry.entries.count) entries); no event tap started.")
+                print("WindowsMacBridge 0.3.0-preview: bundled registry loaded (\(registry.entries.count) entries); no event tap started.")
             } catch {
                 print("WindowsMacBridge self-check failed: registry unavailable.")
                 exit(1)
@@ -127,6 +127,10 @@ import InputSourceSupport
         }
         if CommandLine.arguments.contains("--diagnose-input-sources") {
             print(InputSourceCoordinator.discoveryReport())
+            return
+        }
+        if CommandLine.arguments.contains("--diagnose-backend") {
+            print(HIDDeviceInventory.report())
             return
         }
         guard InputSourceCoordinator.acquireSingleInstance() else { return }

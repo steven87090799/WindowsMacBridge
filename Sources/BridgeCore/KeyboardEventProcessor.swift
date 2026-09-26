@@ -12,6 +12,9 @@ public struct KeyboardEventProcessor: Sendable {
     private var context = ApplicationContext()
     private var enabled = false
     private var layoutSupported = false
+    private var controlsEnabled = true
+    private var finderEnabled = false
+    public private(set) var manualPassThrough = false
     private var awaitingNeutral = true
     private var pressCount = 0
     public private(set) var modifiers = ModifierStateMachine()
@@ -23,18 +26,24 @@ public struct KeyboardEventProcessor: Sendable {
     public init() {}
 
     public mutating func configure(context newContext: ApplicationContext, enabled: Bool,
-                                   layoutSupported: Bool) {
+                                   layoutSupported: Bool, controlsEnabled: Bool = true,
+                                   finderEnabled: Bool = false) {
         let changedContext = context.processID != newContext.processID ||
-            context.bundleID != newContext.bundleID || context.mode != newContext.mode
+            context.bundleID != newContext.bundleID || context.mode != newContext.mode ||
+            context.isBrowser != newContext.isBrowser
         if changedContext {
             // Once a focus transaction ends, returning to the same PID must not revive it.
             for i in presses.indices where presses[i]?.rule != nil { presses[i]?.suppress = true }
         }
-        if changedContext || self.enabled != enabled || self.layoutSupported != layoutSupported {
+        if changedContext || self.enabled != enabled || self.layoutSupported != layoutSupported ||
+            self.finderEnabled != finderEnabled {
             awaitingNeutral = true
         }
         context = newContext; self.enabled = enabled; self.layoutSupported = layoutSupported
+        self.controlsEnabled = controlsEnabled; self.finderEnabled = finderEnabled
     }
+
+    public mutating func resumeManualPassThrough() { manualPassThrough = false; invalidate() }
 
     /// A gap makes retained presses tombstones, swallowing their later repeat/up.
     public mutating func invalidate() {
@@ -78,7 +87,7 @@ public struct KeyboardEventProcessor: Sendable {
                 return .suppress
             }
             // A repeat is stopped during pause/recovery. Release still pairs with its down.
-            if event.phase == .down && (!enabled || !layoutSupported) { return .suppress }
+            if event.phase == .down && (!enabled || !layoutSupported || manualPassThrough) { return .suppress }
             return rewrite(event, rule: rule)
         }
         guard event.phase == .down else { return .passThrough }
@@ -91,34 +100,67 @@ public struct KeyboardEventProcessor: Sendable {
         }
 
         // Reserved emergency pause, even in a protected application. Never consumes modifiers.
-        if event.keyCode == 35 && event.modifiers == [.control, .option, .command] {
+        if controlsEnabled && event.keyCode == 35 && event.modifiers == [.control, .option, .command] {
             presses[index] = Press(rule: nil, contextPID: context.processID,
                                    contextBundle: context.bundleID, contextMode: context.mode, suppress: true)
             pressCount += 1
             enabled = false; awaitingNeutral = true
             return .emergencyPause
         }
+        // Reserved in all application profiles, like rule #1 in the supplied file.
+        if controlsEnabled && modifiers.synchronized && event.keyCode == 35 && event.modifiers == .option &&
+            modifiers.isDown(.rightOption) && !modifiers.isDown(.leftOption) {
+            presses[index] = Press(rule: nil, contextPID: context.processID,
+                                   contextBundle: context.bundleID, contextMode: context.mode, suppress: true)
+            pressCount += 1
+            manualPassThrough.toggle(); invalidate()
+            return .togglePassThrough
+        }
         if event.modifiers.isEmpty && activePressCount == 0 { awaitingNeutral = false }
 
-        // Finder X is intentionally excluded until a safe file/text focus adapter exists.
-        let finderCut = context.bundleID == "com.apple.finder" && event.keyCode == 7
-        let rule = enabled && layoutSupported && !awaitingNeutral && modifiers.synchronized &&
-            context.mode.allowsTranslation && !finderCut
-            ? rules.match(keyCode: event.keyCode, modifiers: event.modifiers) : nil
+        let rule = enabled && layoutSupported && !manualPassThrough && !awaitingNeutral && modifiers.synchronized
+            ? match(event) : nil
         presses[index] = Press(rule: rule, contextPID: context.processID,
                                contextBundle: context.bundleID, contextMode: context.mode, suppress: false)
         pressCount += 1
         guard let rule else { return .passThrough }
         translatedCount &+= 1
+        if let action = rule.action {
+            presses[index]?.suppress = true
+            return .action(action, ruleID: rule.id)
+        }
         return rewrite(event, rule: rule)
+    }
+
+    private func match(_ event: KeyboardEvent) -> ShortcutRule? {
+        // Remote/VM/game protections precede every local action, not only Ctrl shortcuts.
+        guard context.mode == .macOS || context.mode == .terminal || context.mode == .ide else { return nil }
+        if let system = RuleEngine.system.match(keyCode: event.keyCode, modifiers: event.modifiers),
+           event.modifiers != .option || (modifiers.isDown(.leftOption) && !modifiers.isDown(.rightOption)) {
+            return system
+        }
+        guard context.mode.allowsTranslation else { return nil }
+        if context.bundleID == "com.apple.finder" {
+            if finderEnabled { return RuleEngine.finder.match(keyCode: event.keyCode, modifiers: event.modifiers) }
+            // Keep the old, non-stateful fallback until Finder actions are enabled.
+            if event.keyCode == 7 { return nil }
+            return rules.match(keyCode: event.keyCode, modifiers: event.modifiers)
+        }
+        if context.isBrowser, let browser = RuleEngine.browser.match(keyCode: event.keyCode, modifiers: event.modifiers) {
+            return browser
+        }
+        return rules.match(keyCode: event.keyCode, modifiers: event.modifiers)
     }
 
     private func rewrite(_ event: KeyboardEvent, rule: ShortcutRule) -> EventDecision {
         var outputModifiers = event.modifiers
-        // Do not resurrect Command/Shift if the physical Control has already been released.
-        if event.modifiers.contains(.control) {
-            outputModifiers.remove(.control)
-            outputModifiers.formUnion(rule.output.modifiers)
+        // Consume the actual input modifiers (Option navigation included), never rematch output.
+        let trigger = rule.input.modifiers.subtracting(.shift)
+        if trigger.isEmpty || event.modifiers.isSuperset(of: trigger) {
+            outputModifiers.subtract(rule.input.modifiers)
+            var added = rule.output.modifiers
+            if rule.input.modifiers.contains(.shift) && !event.modifiers.contains(.shift) { added.remove(.shift) }
+            outputModifiers.formUnion(added)
         }
         return .rewrite(keyCode: rule.output.keyCode, modifiers: outputModifiers, ruleID: rule.id)
     }

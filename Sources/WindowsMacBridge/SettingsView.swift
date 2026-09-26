@@ -19,9 +19,18 @@ struct SettingsView: View {
             Section("WindowsMacBridge — 開發預覽版") {
                 Text(controller.summary).font(.headline).textSelection(.enabled)
                 Toggle("啟用 Windows 快捷鍵", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
-                Text("Ctrl+C / X / V / A / Z / Y / S / F / P → macOS 快捷鍵。原生 Command 操作保持不變。")
-                Text("Terminal、Remote、VM、Game、IDE 預設原樣通過。Finder 的 Ctrl+X 尚未啟用。Alt+Tab、Home/End 與 Finder 移動流程仍在規劃中。")
+                Text("29 組一般快捷鍵與導覽、19 組瀏覽器規則；包含儲存、分頁、Ctrl+方向鍵、Ctrl+Home/End。")
+                Text("Terminal／IDE 的 Ctrl 快捷鍵保持原樣；Remote／VM／Game 停止所有本機動作。左 Option+E 開 Finder、左 Option+L 鎖定、Ctrl+Shift+Esc 開活動監視器。")
                     .foregroundStyle(.secondary)
+                Picker("鍵盤範圍", selection: Binding(get: { controller.settings.keyboardScope }, set: { controller.setKeyboardScope($0) })) {
+                    ForEach(KeyboardScope.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                Text("尚不能完整取代 Karabiner：內建鍵盤限定、Fn／Control 與 Option／Command 整鍵交換、亮度鍵需要裝置後端，目前未啟用。選擇內建限定時會停止翻譯，不會擅自套用至所有鍵盤。")
+                    .font(.caption).foregroundStyle(.orange)
+                Toggle("Finder 檔案快捷鍵（開啟／改名／剪下與移動）", isOn: Binding(
+                    get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
+                Text("只有可確認的檔案列表才啟用移動與改名；文字框維持文字操作。剪下標記於剪貼簿更新、切換 App、暫停或 5 分鐘後失效。")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("登入啟動") {
                 Toggle("登入時啟動 WindowsMacBridge", isOn: Binding(
@@ -44,14 +53,16 @@ struct SettingsView: View {
             }
             Section("輸入來源與暫停") {
                 LabeledContent("Input source", value: controller.layoutID)
-                Text("此版僅啟用 ABC／U.S. 鍵位；中文輸入法及其他 layout 會原樣通過。")
+                Toggle("唯音／中文 IME 也使用實體鍵位快捷鍵", isOn: Binding(
+                    get: { controller.settings.allowIMEShortcuts }, set: { controller.setIMEShortcuts($0) }))
+                Text("IME 選項需要底層 ABC／U.S. 配置；不讀取組字文字。候選選字與各 App 組字行為仍需實機驗證。")
                     .foregroundStyle(.secondary)
                 HStack {
                     Button("暫停 5 分鐘") { controller.pause(minutes: 5) }
                     Button("暫停至重啟") { controller.pause(minutes: nil) }
                     Button("恢復／重啟引擎") { controller.resume() }
                 }
-                Text("暫停同時停止 Windows 翻譯、輸入法守護與輸入法快捷鍵。緊急暫停：Control + Option + Command + P。Tap 失效或 Client 獨占輸入時，請使用 Menu Bar 暫停／結束。")
+                Text("右 Option+P 切換穿透；Control+Option+Command+P 緊急暫停。穿透也暫停輸入法守護。Tap 失效或 Client 獨占輸入時，請使用 Menu Bar 暫停／結束。")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }.formStyle(.grouped)
@@ -151,6 +162,9 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
             LabeledContent("Event Tap", value: controller.status.tapActive ? "Active" : "Inactive")
             LabeledContent("Secure Input", value: controller.status.secureInput ? "ON — suspend" : "OFF")
+            LabeledContent("鍵盤範圍", value: controller.settings.keyboardScope.title)
+            if let issue = controller.status.backendIssue { Text(issue).foregroundStyle(.orange) }
+            if !controller.status.actionStatus.isEmpty { Text(controller.status.actionStatus) }
             LabeledContent("Processed / translated", value: "\(controller.status.processed) / \(controller.status.translated)")
             LabeledContent("最大觀測處理時間", value: String(format: "%.2f µs", controller.status.maxMicroseconds))
             Text("此時間不含完整 OS／App 延遲，不代表端到端驗收。")
@@ -165,7 +179,7 @@ struct SettingsView: View {
                     Text(String(format: "%.2f µs", record.microseconds)).monospacedDigit()
                 }
             }
-            Text("不讀取輸入文字、不讀剪貼簿、不寫按鍵紀錄、不上傳。只顯示命中的內建規則；普通打字與 pass-through 不產生逐鍵診斷。")
+            Text("不讀取輸入文字或剪貼簿內容、不寫按鍵紀錄、不上傳。Finder 只使用剪貼簿版本及類型；普通打字不產生逐鍵診斷。")
                 .font(.caption).foregroundStyle(.secondary)
         }.padding()
     }

@@ -1,3 +1,5 @@
+> 此頁保留 0.2 驗收歷史。0.3 新增項目與仍未完成的 HID 替代要求見 [KarabinerReplacement.md](KarabinerReplacement.md)。中文 IME 與 Finder 功能現為可選預覽；未宣稱實機通過。
+
 # 開發預覽驗收
 
 ## 已自動化的範圍
