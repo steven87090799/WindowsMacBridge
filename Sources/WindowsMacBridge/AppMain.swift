@@ -2,6 +2,7 @@ import AppKit
 import ApplicationServices
 import SwiftUI
 import BridgePlatform
+import InputSourceSupport
 
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var controller: BridgeController!
@@ -13,12 +14,12 @@ import BridgePlatform
         installMainMenu()
         controller = BridgeController()
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.title = "W⌘"
-        let menu = NSMenu(); menu.delegate = self; item.menu = menu
+        item.button?.title = "W唯"
+        let menu = NSMenu(); menu.autoenablesItems = false; menu.delegate = self; item.menu = menu
         controller.onStatusChange = { [weak self] in
             guard let self else { return }
-            item.button?.toolTip = controller.summary
-            item.button?.title = controller.settings.enabled && !controller.paused && !controller.status.emergencyPaused ? "W⌘" : "WⅡ"
+            item.button?.toolTip = controller.summary + " · " + controller.sourceStatus.summary
+            item.button?.title = controller.settings.enabled && !controller.paused && !controller.status.emergencyPaused ? "W唯" : (controller.sourceStatus.enabled ? "唯" : "WⅡ")
         }
         controller.start()
         if !AXIsProcessTrusted() || !controller.settings.enabled { showSettings() }
@@ -61,7 +62,7 @@ import BridgePlatform
         let enabled = action("啟用 Windows Mode", #selector(toggleEnabled), in: menu)
         enabled.state = controller.settings.enabled ? .on : .off
         action("恢復／重啟引擎", #selector(resume), in: menu)
-        let pause = NSMenuItem(title: "暫停", action: nil, keyEquivalent: "")
+        let pause = NSMenuItem(title: "暫停所有輸入輔助", action: nil, keyEquivalent: "")
         let submenu = NSMenu()
         for minutes in [5, 15, 60] {
             let entry = action("\(minutes) 分鐘", #selector(pauseTimed(_:)), in: submenu)
@@ -69,6 +70,14 @@ import BridgePlatform
         }
         action("直到 App 重啟", #selector(pauseUntilRestart), in: submenu)
         pause.submenu = submenu; menu.addItem(pause)
+        menu.addItem(.separator())
+        label("輸入法：\(controller.sourceStatus.summary)", in: menu)
+        let guardItem = action("啟用唯音輸入法守護", #selector(toggleGuard), in: menu)
+        guardItem.state = controller.sourceStatus.enabled ? .on : .off
+        let chinese = action("切換至唯音繁體", #selector(selectChinese), in: menu)
+        let english = action("切換至 ABC", #selector(selectEnglish), in: menu)
+        chinese.isEnabled = controller.sourceStatus.suspension == nil
+        english.isEnabled = controller.sourceStatus.suspension == nil
         menu.addItem(.separator())
         action("設定／Profiles／診斷…", #selector(showSettings), in: menu)
         action("結束 WindowsMacBridge", #selector(quit), in: menu)
@@ -81,6 +90,9 @@ import BridgePlatform
         let entry = NSMenuItem(title: title, action: selector, keyEquivalent: "")
         entry.target = self; menu.addItem(entry); return entry
     }
+    @objc private func toggleGuard() { controller.inputSources.setEnabled(!controller.sourceStatus.enabled) }
+    @objc private func selectChinese() { controller.inputSources.select(.vChewing) }
+    @objc private func selectEnglish() { controller.inputSources.select(.abc) }
     @objc private func toggleEnabled() { controller.setEnabled(!controller.settings.enabled) }
     @objc private func resume() { controller.resume() }
     @objc private func pauseTimed(_ item: NSMenuItem) { controller.pause(minutes: item.tag) }
@@ -106,13 +118,18 @@ import BridgePlatform
         if CommandLine.arguments.contains("--self-check") {
             do {
                 let registry = try ApplicationRegistry()
-                print("WindowsMacBridge 0.1.0: bundled registry loaded (\(registry.entries.count) entries); no event tap started.")
+                print("WindowsMacBridge 0.2.0: bundled registry loaded (\(registry.entries.count) entries); no event tap started.")
             } catch {
                 print("WindowsMacBridge self-check failed: registry unavailable.")
                 exit(1)
             }
             return
         }
+        if CommandLine.arguments.contains("--diagnose-input-sources") {
+            print(InputSourceCoordinator.discoveryReport())
+            return
+        }
+        guard InputSourceCoordinator.acquireSingleInstance() else { return }
         let application = NSApplication.shared
         let delegate = AppDelegate()
         application.delegate = delegate

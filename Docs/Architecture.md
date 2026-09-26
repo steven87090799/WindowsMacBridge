@@ -1,4 +1,6 @@
-# Implementation boundaries (0.1.0)
+# Keyboard implementation boundaries (0.2.0)
+
+The unified input-source architecture, lifecycle policy and migration are documented in [ProjectIntegration.md](ProjectIntegration.md).
 
 ```text
 WindowsMacBridge (MainActor)
@@ -23,7 +25,7 @@ BridgeCore.KeyboardEventProcessor
                 Menu Bar / Settings
 ```
 
-Core has no CGEvent/AppKit/UI dependency. BridgePlatform owns all macOS side effects; the executable is the composition root. There are no synthetic modifier downs, no clipboard accesses and no event posting in this milestone. A process-random marker protects rewritten events if another component sends them back into the tap.
+Core has no CGEvent/AppKit/UI dependency. BridgePlatform owns keyboard side effects; InputSourceSupport owns TIS/Carbon/login side effects; the executable is the composition root. There are no synthetic modifier downs, no clipboard accesses and no event posting in this milestone. A process-random marker protects rewritten events if another component sends them back into the tap.
 
 ## Concurrency contract
 
@@ -50,4 +52,4 @@ Alt+Tab needs a separate synthetic-output ownership state machine, mouse interac
 
 ## Build and distribution
 
-Swift Package executable, macOS 14 minimum, Swift 6 concurrency checking. Build scripts use a per-workspace local cache and bundle resources inside Contents/Resources. Ad-hoc signature is for development only. No driver, privileged helper, sandbox entitlement workaround or automatic login agent.
+Swift Package executable, macOS 14 minimum, Swift 6 concurrency checking for the host and cores; the imported TIS adapter retains Swift 5 language mode behind its main-actor coordinator. Build scripts use a per-workspace local cache and bundle resources inside Contents/Resources. Ad-hoc signature is for development only. No driver, privileged helper, sandbox entitlement workaround or mandatory login agent (SMAppService login is opt-in).

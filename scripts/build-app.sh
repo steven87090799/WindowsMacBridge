@@ -10,6 +10,7 @@ app_directory="$task_scratch/Artifacts/WindowsMacBridge.app"
 mkdir -p "$app_directory/Contents/MacOS" "$app_directory/Contents/Resources"
 cp "$binary_directory/WindowsMacBridge" "$app_directory/Contents/MacOS/WindowsMacBridge"
 cp "$task_root/Resources/Info.plist" "$app_directory/Contents/Info.plist"
+/usr/bin/ditto "$task_root/Resources/Licenses" "$app_directory/Contents/Resources/Licenses"
 # The App adapter explicitly loads from Contents/Resources; no build-path fallback.
 for resource_bundle in "$binary_directory"/*.bundle; do
     [ -d "$resource_bundle" ] || continue
