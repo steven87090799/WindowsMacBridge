@@ -45,6 +45,6 @@ mkdir -p "$bridge_root/build/download"
 bridge_zip="$bridge_root/build/download/$(basename "$bridge_output").zip"
 [[ ! -e "$bridge_zip" ]] || { echo 'Release ZIP exists; left unchanged.' >&2; exit 1; }
 cp "$bridge_output.zip" "$bridge_zip"
-shasum -a 256 "$bridge_zip" > "$bridge_zip.sha256"
+(cd "$(dirname "$bridge_zip")" && shasum -a 256 "$(basename "$bridge_zip")") > "$bridge_zip.sha256"
 printf '%s\n' "$bridge_zip" > build/RELEASE_PATH.txt
 printf 'Packaged (not installed): %s\n' "$bridge_zip"
