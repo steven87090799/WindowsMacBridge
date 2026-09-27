@@ -118,7 +118,7 @@ import InputSourceSupport
         if CommandLine.arguments.contains("--self-check") {
             do {
                 let registry = try ApplicationRegistry()
-                print("WindowsMacBridge 0.3.0-preview: bundled registry loaded (\(registry.entries.count) entries); no event tap started.")
+                print("WindowsMacBridge 0.4.0 HID preview: bundled registry loaded (\(registry.entries.count) entries); no event tap or capture started.")
             } catch {
                 print("WindowsMacBridge self-check failed: registry unavailable.")
                 exit(1)

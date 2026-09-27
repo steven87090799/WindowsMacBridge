@@ -5,6 +5,7 @@ import BridgeCore
 import BridgePlatform
 import InputSourceSupport
 import InputSourceCore
+import HIDProtocol
 
 @MainActor final class BridgeController: ObservableObject {
     let inputSources = InputSourceCoordinator()
@@ -21,7 +22,9 @@ import InputSourceCore
     @Published var diagnosticsEnabled = false
     @Published var configurationError: String?
     @Published var targetApp: ApplicationContext?
+    @Published var hidStatus = HIDStatus()
     private let engine = InputEngine()
+    private let hid = HIDBackendClient()
     private let store = SettingsStore()
     private var registry: ApplicationRegistry?
     private var timer: Timer?
@@ -40,6 +43,13 @@ import InputSourceCore
         if let configurationError { return configurationError }
         if !settings.enabled { return "已停用" }
         if paused || status.emergencyPaused { return "已暫停" }
+        if settings.inputBackend == .deviceHID {
+            if settings.keyboardScope != .builtInAndApple834 { return "HID 後端僅支援指定鍵盤範圍" }
+            if hidStatus.manualPassThrough { return "右 Option+P 穿透：ON" }
+            if hidStatus.capturedDevices == 0 { return hidStatus.state }
+            if !context.mode.allowsTranslation { return context.mode.title }
+            return "Windows HID Mode：ON（\(hidStatus.capturedDevices) 個裝置）"
+        }
         if status.manualPassThrough { return "右 Option+P 穿透：ON" }
         if let issue = status.backendIssue { return issue }
         if !status.accessibility { return "等待輔助使用權限" }
@@ -86,6 +96,7 @@ import InputSourceCore
         observe(center, NSWorkspace.sessionDidBecomeActiveNotification) { $0.setSuspended(.inactiveSession, false); $0.refreshApplication() }
         inputSources.start()
         engine.start()
+        hid.start()
         publish()
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
@@ -103,10 +114,21 @@ import InputSourceCore
         observers.removeAll()
         inputSources.stop()
         engine.stop()
+        hid.stop()
     }
     private func tick() {
         let previousPassThrough = status.manualPassThrough
         status = engine.snapshot()
+        if settings.inputBackend == .deviceHID {
+            hidStatus = hid.status
+            status.manualPassThrough = hidStatus.manualPassThrough
+            status.emergencyPaused = hidStatus.emergencyPaused
+            status.secureInput = hidStatus.secureInput
+            status.processed = hidStatus.processed; status.translated = hidStatus.translated
+            status.maxMicroseconds = hidStatus.maxMicroseconds
+            status.actionStatus = hid.actionStatus
+            status.backendIssue = nil
+        }
         if previousPassThrough != status.manualPassThrough {
             inputSources.updateProtection(sourceSuspension(for: context))
         }
@@ -167,6 +189,8 @@ import InputSourceCore
         config.restartToken = restartToken
         config.keyboardScope = settings.keyboardScope
         config.finderEnabled = settings.finderEnabled
+        hid.update(config, active: settings.inputBackend == .deviceHID)
+        config.enabled = config.enabled && settings.inputBackend == .eventTap
         engine.update(config)
         inputSources.updateProtection(sourceSuspension(for: context))
     }
@@ -179,6 +203,17 @@ import InputSourceCore
         store.update { $0.keyboardScope = value }; settings = store.settings
         configurationError = store.errorMessage; publish()
     }
+    func setInputBackend(_ value: InputBackend) {
+        store.update { $0.inputBackend = value
+            $0.keyboardScope = value == .deviceHID ? .builtInAndApple834 : .allKeyboards
+        }
+        settings = store.settings; configurationError = store.errorMessage
+        restartToken &+= 1; publish()
+    }
+    func openHelperLocation() {
+        NSWorkspace.shared.selectFile(HIDService.root + "/BridgeHIDHelper.app", inFileViewerRootedAtPath: HIDService.root)
+    }
+    func requestHIDListening() { hid.requestInputAccess() }
     func setFinderEnabled(_ value: Bool) {
         store.update { $0.finderEnabled = value }; settings = store.settings
         configurationError = store.errorMessage; publish()

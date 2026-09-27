@@ -1,6 +1,7 @@
 import SwiftUI
 import BridgeCore
 import InputSourceSupport
+import BridgePlatform
 
 struct SettingsView: View {
     @ObservedObject var controller: BridgeController
@@ -18,6 +19,9 @@ struct SettingsView: View {
         Form {
             Section("WindowsMacBridge — 開發預覽版") {
                 Text(controller.summary).font(.headline).textSelection(.enabled)
+                Picker("輸入後端", selection: Binding(get: { controller.settings.inputBackend }, set: { controller.setInputBackend($0) })) {
+                    ForEach(InputBackend.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
                 Toggle("啟用 Windows 快捷鍵", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
                 Text("29 組一般快捷鍵與導覽、19 組瀏覽器規則；包含儲存、分頁、Ctrl+方向鍵、Ctrl+Home/End。")
                 Text("Terminal／IDE 的 Ctrl 快捷鍵保持原樣；Remote／VM／Game 停止所有本機動作。左 Option+E 開 Finder、左 Option+L 鎖定、Ctrl+Shift+Esc 開活動監視器。")
@@ -25,8 +29,12 @@ struct SettingsView: View {
                 Picker("鍵盤範圍", selection: Binding(get: { controller.settings.keyboardScope }, set: { controller.setKeyboardScope($0) })) {
                     ForEach(KeyboardScope.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
-                Text("尚不能完整取代 Karabiner：內建鍵盤限定、Fn／Control 與 Option／Command 整鍵交換、亮度鍵需要裝置後端，目前未啟用。選擇內建限定時會停止翻譯，不會擅自套用至所有鍵盤。")
+                Text("HID 後端提供指定鍵盤的 Fn／左 Control、Option／Command 交換與亮度增加鍵→Enter。需先執行下載包的 Install.command、核准官方 VirtualHID Driver，並授予 helper 輸入監控。此版本仍待實機驗收；EventTap 後端僅提供快捷鍵預覽。")
                     .font(.caption).foregroundStyle(.orange)
+                LabeledContent("HID Helper", value: controller.hidStatus.state)
+                LabeledContent("VirtualHID / 擷取裝置", value: "\(controller.hidStatus.driverReady ? "Ready" : "Not ready") / \(controller.hidStatus.capturedDevices)")
+                Button("在 Finder 顯示 helper（加入輸入監控）") { controller.openHelperLocation() }
+                Button("要求 helper 輸入監控權限") { controller.requestHIDListening() }
                 Toggle("Finder 檔案快捷鍵（開啟／改名／剪下與移動）", isOn: Binding(
                     get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
                 Text("只有可確認的檔案列表才啟用移動與改名；文字框維持文字操作。剪下標記於剪貼簿更新、切換 App、暫停或 5 分鐘後失效。")
@@ -86,7 +94,7 @@ struct SettingsView: View {
                 if let issue = controller.sourceStatus.issue { Text(issue).foregroundStyle(.orange).textSelection(.enabled) }
                 Text("遠端桌面、VM、Game、Disabled Profile 會暫停守護及切換快捷鍵。Secure Input 期間延後切換。")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("Windows 快捷鍵目前只在 ABC／U.S. 翻譯；唯音組字期間保持原生按鍵。切換為 ABC 後即可使用 Ctrl+C 等功能。")
+                Text("預設只在 ABC／U.S. 翻譯；開啟上方 IME 選項後，底層 ABC／U.S. 的中文來源可使用實體鍵位快捷鍵，組字相容性需依 App 驗收。")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("切換快捷鍵與延遲") {
@@ -161,6 +169,8 @@ struct SettingsView: View {
             Text("Remote connection：未偵測；App profile 只決定是否翻譯。")
                 .foregroundStyle(.secondary)
             LabeledContent("Event Tap", value: controller.status.tapActive ? "Active" : "Inactive")
+            LabeledContent("輸入後端", value: controller.settings.inputBackend.title)
+            if let rule = controller.hidStatus.lastRule { LabeledContent("HID 最近命中規則", value: rule) }
             LabeledContent("Secure Input", value: controller.status.secureInput ? "ON — suspend" : "OFF")
             LabeledContent("鍵盤範圍", value: controller.settings.keyboardScope.title)
             if let issue = controller.status.backendIssue { Text(issue).foregroundStyle(.orange) }

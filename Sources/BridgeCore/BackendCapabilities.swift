@@ -4,8 +4,8 @@ public enum KeyboardScope: String, Codable, CaseIterable, Sendable {
     case builtInAndApple834
     public var title: String {
         switch self {
-        case .allKeyboards: "所有鍵盤（快捷鍵預覽）"
-        case .builtInAndApple834: "內建或 Apple 1452/834（需要裝置後端）"
+        case .allKeyboards: "所有鍵盤（EventTap 預覽）"
+        case .builtInAndApple834: "內建或 Apple 1452/834（裝置 HID）"
         }
     }
 }
@@ -38,5 +38,11 @@ public struct BackendCapabilities: Sendable {
     }
     public var canReplaceRequestedProfile: Bool {
         deviceIdentity && selectiveCapture && modifierRemapping && fnRemapping && consumerEvents
+    }
+}
+
+public enum HIDCapturePolicy {
+    public static func requiresNativePassThrough(mode: ApplicationMode, layoutSupported: Bool) -> Bool {
+        mode == .remoteWindows || mode == .virtualMachine || mode == .game || mode == .disabled || !layoutSupported
     }
 }

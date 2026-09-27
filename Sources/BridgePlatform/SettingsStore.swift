@@ -8,9 +8,10 @@ public struct BridgeSettings: Codable, Sendable {
     public var keyboardScope: KeyboardScope = .builtInAndApple834
     public var finderEnabled = false
     public var allowIMEShortcuts = false
+    public var inputBackend: InputBackend = .deviceHID
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, enabled, overrides, keyboardScope, finderEnabled, allowIMEShortcuts
+        case schemaVersion, enabled, overrides, keyboardScope, finderEnabled, allowIMEShortcuts, inputBackend
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -21,6 +22,7 @@ public struct BridgeSettings: Codable, Sendable {
         keyboardScope = try values.decodeIfPresent(KeyboardScope.self, forKey: .keyboardScope) ?? .allKeyboards
         finderEnabled = try values.decodeIfPresent(Bool.self, forKey: .finderEnabled) ?? false
         allowIMEShortcuts = try values.decodeIfPresent(Bool.self, forKey: .allowIMEShortcuts) ?? false
+        inputBackend = try values.decodeIfPresent(InputBackend.self, forKey: .inputBackend) ?? .eventTap
     }
 }
 

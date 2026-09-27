@@ -1,0 +1,30 @@
+{
+  "Boost-1.0.txt": {
+    "source": "https://raw.githubusercontent.com/boostorg/boost/master/LICENSE_1_0.txt",
+    "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
+  },
+  "type_safe.txt": {
+    "source": "https://raw.githubusercontent.com/foonathan/type_safe/main/LICENSE",
+    "sha256": "c9b2c3b9c65bf163d4338d9f56edb0ce0846e91d7b89e1a1e35326abbc8997ae"
+  },
+  "debug_assert.txt": {
+    "source": "https://raw.githubusercontent.com/foonathan/debug_assert/master/LICENSE",
+    "sha256": "195c95c8dc2349255994fe270c623a79b058ede80e0484d3361ca394133e2306"
+  },
+  "GSL.txt": {
+    "source": "https://raw.githubusercontent.com/microsoft/GSL/main/LICENSE",
+    "sha256": "4c21dc82a1c7186ea754fd59d504c00947953a3401fe8e24eaa44109ef8e2555"
+  },
+  "nlohmann-json.txt": {
+    "source": "https://raw.githubusercontent.com/nlohmann/json/develop/LICENSE.MIT",
+    "sha256": "d64d1b4d948aa7751cfb613c02dc246aab7b358d760053e6580f01affe946906"
+  },
+  "spdlog.txt": {
+    "source": "https://raw.githubusercontent.com/gabime/spdlog/v1.x/LICENSE",
+    "sha256": "d678c20826e1392578508e1c78649a1e3c31bda05ef4388d967dbd654461b140"
+  },
+  "nod.txt": {
+    "source": "https://raw.githubusercontent.com/fr00b0/nod/master/LICENSE",
+    "sha256": "e807458b70e8e0b92fabec57c9a8cbb06cc640472508ffd051ab1869d0586194"
+  }
+}

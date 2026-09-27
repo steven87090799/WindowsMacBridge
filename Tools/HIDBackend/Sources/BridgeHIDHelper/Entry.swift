@@ -1,10 +1,25 @@
 import Foundation
 import Darwin
 import VirtualHID
+import Security
 
 @main enum BridgeHIDHelperMain {
     static func main() {
         let arguments = Array(CommandLine.arguments.dropFirst())
+        if arguments.count == 2 && arguments[0] == "--controller-pin" {
+            var code: SecStaticCode?, info: CFDictionary?
+            guard SecStaticCodeCreateWithPath(URL(fileURLWithPath: arguments[1]) as CFURL, [], &code) == errSecSuccess, let code,
+                  SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSStrictValidate | kSecCSCheckAllArchitectures), nil) == errSecSuccess,
+                  SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+                  let values = info as? [String: Any], values[kSecCodeInfoIdentifier as String] as? String == "local.WindowsMacBridge",
+                  let hash = values[kSecCodeInfoUnique as String] as? Data, hash.count == 20,
+                  let data = try? PropertyListSerialization.data(fromPropertyList: ["CDHash": hash], format: .xml, options: 0) else { exit(1) }
+            FileHandle.standardOutput.write(data); return
+        }
+        if arguments == ["--serve"] {
+            guard let service = HelperService() else { print("Root-owned installation pin unavailable; no capture started."); exit(77) }
+            service.run(); return
+        }
         if arguments == ["--self-check"] {
             var state = WMBHIDState()
             state.fn = true
@@ -35,8 +50,7 @@ import VirtualHID
             print("No physical device was seized; no non-empty keyboard report was sent.")
             exit(ready ? 0 : 1)
         }
-        print("Usage: BridgeHIDHelper --self-check | --probe-driver")
-        print("Capture/IPC installation is not available in this development helper.")
+        print("Usage: BridgeHIDHelper --self-check | --probe-driver | --serve")
         exit(64)
     }
 }

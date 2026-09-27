@@ -3,6 +3,21 @@ import Darwin
 import VirtualHID
 
 struct ReportTests {
+    @Test func vendorAndDesktopEventsArePreservedAndBounded() {
+        var state = WMBHIDState()
+        state.fn = true; state.top_case_count = 1; state.top_case_keys.0 = 8
+        state.vendor_count = 1; state.vendor_keys.0 = 0x10
+        state.desktop_count = 1; state.desktop_keys.0 = 0x81
+        var output = [UInt8](repeating: 0, count: 80)
+        #expect(wmb_encode_fn(&state, &output, output.count) == 65)
+        #expect(Array(output[1..<5]) == [3,0,8,0])
+        #expect(wmb_encode_vendor(&state, &output, output.count) == 65)
+        #expect(output[1] == 0x10)
+        #expect(wmb_encode_desktop(&state, &output, output.count) == 65)
+        #expect(output[1] == 0x81)
+        state.vendor_count = 33; #expect(!wmb_validate_state(&state))
+        state.vendor_count = 1; state.top_case_keys.0 = 3; #expect(!wmb_validate_state(&state))
+    }
     @Test func keyboardReportMatchesUSBLayoutAndPreservesBothCommandSides() {
         var state = WMBHIDState()
         state.modifiers = 0x88

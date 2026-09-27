@@ -1,3 +1,5 @@
+> 以下記錄 0.3 預覽的歷史狀態。0.4 已接上 capture／IPC／installer；目前狀態與未驗收項目以 [HIDIntegration](HIDIntegration.md) 為準。
+
 # Karabiner 替代工作與 0.3.0-preview 的界線
 
 使用者的 78 條規則全部保留為必要需求。原始設定保存於 `Tests/BridgeCoreTests/Fixtures/windows-like-mac-v2.json`，SHA256 為 `27e366cb7114f45eb3ca555326eb170eda223e50c04b6b7f2db4fc6456c6fe53`。此預覽尚不能完整取代 Karabiner。

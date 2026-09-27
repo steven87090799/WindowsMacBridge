@@ -62,3 +62,12 @@ HID helper/IPC/driver 安裝整合與 #4/#5–10/#77/Alt+Tab 仍未完成；這�
 Command Line Tools 會輸出其不存在的 Developer framework search-path 警告，但此環境的 build/test 均成功。測試腳本載入隨工具鏈附帶的 Testing macro plugin；建置／簽章成品置於本機快取，避免 Documents 同步屬性干擾簽章。
 
 這份紀錄區分單元／程序內 AppKit／打包啟動證據，不代表整個 MVP 或遠端相容性已驗收。
+# 0.4.0-preview.1 HID 整合包（2026-09-27）
+
+- 主程式 77 tests、helper 11 tests 通過；HID engine 120,000 events、codec 100,000 reports 均是離線測試。
+- release App/helper build、strict codesign、兩個 CLI self-check 通過。controller CDHash pin 產生並與 ZIP 解壓後重算結果一致；沒有連接 Driver。
+- installer shell syntax、plist、git diff whitespace 及 payload SHA256 驗證通過；在 /private/var/tmp 解壓再驗證兩個 App 簽章與 manifest。
+- ZIP SHA256：`a19ee4d63a96c26f200be420a990aa7b5bacc57896187c8c202230acc29796bc`。
+- 打包移到 Cache，避免同步資料夾重新加上 FinderInfo；installer snapshot 不複製 FinderInfo/resource fork。
+- 未執行管理員 installer、root XPC runtime 驗收、seize、Driver activation、真實 report delivery、TCC 撤權／硬體斷線／睡眠、Remote Client 或長期資源量測。App/helper ad-hoc 未公證；正式替代 gate 見 HIDIntegration。
+- Hosted CI 狀態以此 tag 所指 commit 的 Actions 為準，不以先前 0.3 的通過結果代替。

@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <IOKit/hid/IOHIDDevice.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -17,6 +18,8 @@ typedef struct {
     uint8_t consumer_count;
     uint16_t keys[32];
     uint16_t consumer_keys[32];
+    uint8_t top_case_count, vendor_count, desktop_count;
+    uint16_t top_case_keys[32], vendor_keys[32], desktop_keys[32];
 } WMBHIDState;
 
 enum {
@@ -28,10 +31,13 @@ enum {
 // Diagnostic/codec entry points never connect to the driver or emit input.
 uint64_t wmb_driver_version(void);
 uint16_t wmb_client_protocol_version(void);
+bool wmb_hid_element_is_neutral(IOHIDDeviceRef device, IOHIDElementRef element);
 bool wmb_validate_state(const WMBHIDState *state);
 size_t wmb_encode_keyboard(const WMBHIDState *state, uint8_t *buffer, size_t capacity);
 size_t wmb_encode_fn(const WMBHIDState *state, uint8_t *buffer, size_t capacity);
 size_t wmb_encode_consumer(const WMBHIDState *state, uint8_t *buffer, size_t capacity);
+size_t wmb_encode_vendor(const WMBHIDState *state, uint8_t *buffer, size_t capacity);
+size_t wmb_encode_desktop(const WMBHIDState *state, uint8_t *buffer, size_t capacity);
 
 // Exactly one client per helper process. Requires root; never prompts or escalates.
 WMBVirtualHID *wmb_virtual_hid_create(void);

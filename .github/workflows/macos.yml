@@ -6,13 +6,23 @@ on:
 permissions:
   contents: read
 jobs:
-  hid-helper-prototype:
+  hid-installer-package:
     runs-on: macos-15
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Build pinned VirtualHID client and run offline tests
         run: bash scripts/build-hid-helper.sh
+      - name: Build App and package integrated installer without installation
+        run: |
+          bash scripts/build-app.sh
+          bash scripts/package-hid-release.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WindowsMacBridge-HID-installer-development
+          path: |
+            build/download/*.zip
+            build/download/*.zip.sha256
   test-and-package:
     runs-on: macos-15
     timeout-minutes: 15

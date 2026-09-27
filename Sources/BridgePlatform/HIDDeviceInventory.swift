@@ -21,8 +21,9 @@ public enum HIDDeviceInventory {
     }
     public static func report() -> String {
         let devices = keyboards()
-        var rows = ["Backend: CGEventTap", "Complete Karabiner replacement: unavailable",
-                    "Per-device selective capture / Fn remap / consumer output: unavailable",
+        var rows = ["Available backends: CGEventTap preview / Device HID helper",
+                    "Complete Karabiner replacement: physical acceptance pending",
+                    "Device HID installation/readiness: inspect App settings; inventory does not start the helper",
                     "IOHID inventory (metadata only): \(devices.count) keyboard services"]
         rows += devices.map { "id=\($0.registryID) builtIn=\($0.builtIn) VID=\($0.vendorID) PID=\($0.productID) target=\($0.matchesRequestedScope)" }
         rows.append("Inventory is not proof of capture or event-to-device correlation. No keyboard was seized.")
