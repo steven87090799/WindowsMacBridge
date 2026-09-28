@@ -38,6 +38,24 @@ func drawBridge(in rect: NSRect, paused: Bool, menu: Bool) {
     NSGraphicsContext.restoreGraphicsState()
 }
 
+func drawMenuGlyph(paused: Bool) {
+    let ink = NSColor.black
+    let frame = NSBezierPath(roundedRect: NSRect(x: 3, y: 4, width: 26, height: 24),
+                             xRadius: 5, yRadius: 5)
+    frame.lineWidth = 2.6; ink.setStroke(); frame.stroke()
+    if paused {
+        stroke([NSPoint(x: 13, y: 11), NSPoint(x: 13, y: 21)], width: 2.8, color: ink)
+        stroke([NSPoint(x: 19, y: 11), NSPoint(x: 19, y: 21)], width: 2.8, color: ink)
+    } else {
+        stroke([NSPoint(x: 9, y: 20), NSPoint(x: 23, y: 20)], width: 2.4, color: ink)
+        stroke([NSPoint(x: 19, y: 23), NSPoint(x: 23, y: 20), NSPoint(x: 19, y: 17)],
+               width: 2.4, color: ink)
+        stroke([NSPoint(x: 23, y: 12), NSPoint(x: 9, y: 12)], width: 2.4, color: ink)
+        stroke([NSPoint(x: 13, y: 15), NSPoint(x: 9, y: 12), NSPoint(x: 13, y: 9)],
+               width: 2.4, color: ink)
+    }
+}
+
 func png(width: Int, height: Int, drawing: () -> Void) -> Data {
     let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
                                   bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
@@ -71,9 +89,7 @@ for points in [16, 32, 128, 256, 512] {
 }
 try appIcon(size: 1024).write(to: output.appendingPathComponent("AppIcon.png"))
 for paused in [false, true] {
-    let data = png(width: 56, height: 36) {
-        drawBridge(in: NSRect(x: 2, y: 2, width: 52, height: 32), paused: paused, menu: true)
-    }
+    let data = png(width: 32, height: 32) { drawMenuGlyph(paused: paused) }
     try data.write(to: output.appendingPathComponent(paused ? "MenuBarPausedIcon.png" : "MenuBarIcon.png"))
 }
 print("Generated keyboard/translation artwork in \(output.path)")

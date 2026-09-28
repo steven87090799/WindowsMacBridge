@@ -80,3 +80,10 @@ Command Line Tools 會輸出其不存在的 Developer framework search-path 警�
 - macOS 27.0 GUI smoke：四個分頁可開啟、一般／App 規則排版已檢視，套用建議預設後 IME 開關 ON、Codex 為 Default macOS。新簽章 App 尚未重新取得 TCC，Event Tap Inactive、事件計數 0；不是實體 Ctrl+C／V 驗收。
 - 關閉設定視窗後可見視窗數為 0；20.01 秒短期量測 CPU 約單核心 0.1%，RSS 162,784 → 149,552 KiB。當時未授權、tap inactive、唯音守護停用；此數據不能代表啟用後的長期 CPU、實體記憶體 footprint 或鍵盤延遲。
 - 未安裝或啟用 root helper／Driver，也未進行 HID 擷取、遠端 Client、中文組字／候選或硬體實測。App/helper 仍為 ad-hoc、未公證。HID 與完整替代驗收限制沿用前節。
+
+# 0.4.1-preview.2 精簡 Menu Bar 圖示（2026-09-28）
+
+- Menu Bar 有效／暫停圖示從 28×18 點改為 16×16 點的方形鍵位／雙向箭頭；App 圖示與快捷鍵規則未改。兩張 template PNG 是 32×32 pixel，對應 2x 顯示。App/helper build number 改為 6。
+- 本機 `bash scripts/test.sh`、helper 的 11 項測試、release App/helper 建置與 self-check 均通過；ZIP 解壓完整性、內部 payload manifest 與 strict codesign 均通過。120,000 HID 事件與 100,000 report 編碼屬離線壓力測試，沒有接管實體鍵盤。
+- 舊版 preview.1 在此機已重新取得 Accessibility／event posting／listening；診斷顯示 EventTap Active、Secure Input OFF。設定視窗關閉後，25.05 秒穩態 CPU time 差換算為單核心 0.08%，RSS 89.4 → 77.6 MiB，量測後 physical footprint 65.3 MB。另一次包含關窗後活動的 25 秒為 1.20% 單核心、RSS 97.2–97.8 MiB。這些是短期閒置量測，並非高頻輸入或長期記憶體證明。
+- 介面自動化在 TextEdit 送出 Ctrl+A 沒有增加 EventTap 計數；此輸入沒有走實體攔截路徑，不能當成 Ctrl+A 功能驗收。實體鍵盤、Codex 複製貼上、Terminal／Remote Client 穿透、中文組字／候選、Finder 與睡眠喚醒仍需逐項驗收。debug 診斷已關閉並清除。
