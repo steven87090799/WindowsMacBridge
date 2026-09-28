@@ -13,7 +13,7 @@
 | AddressSanitizer | 鍵盤／HID 核心 32 個測試通過；未發現該路徑的記憶體錯誤。不涵蓋 AppKit／WindowServer 的實際輸入。 |
 | 建置 | 主 App 與 helper 的 Release 建置及 `--self-check` 通過；安裝中仍是 preview.2，尚未包含本次修正。 |
 | 本機候選包 | `0.4.1-rc.2`（App/helper build 7）ZIP SHA-256 `0038844921b020c984376dc69c977c23f07b8d8a8888a46c713c88b2d66e01d2`；解壓後每筆 payload checksum、App/helper strict codesign 與 self-check 通過。這是未安裝的 ad-hoc 測試包，不是正式發行。 |
-| 本機 UI | Accessibility 已授權、Post/Listen 可用、EventTap Active、Secure Input OFF。四個設定分頁可開啟，Codex 規則與 AweSun 自訂 Remote 規則在 UI 中確認，設定視窗關閉後程序仍常駐且只有一份。 |
+| 本機 UI | Accessibility 已授權、Post/Listen 可用、EventTap Active、Secure Input OFF。四個設定分頁可開啟，Codex 規則與 AweSun 自訂 Remote 規則在 UI 中確認。五分鐘暫停顯示「已暫停」，手動恢復後 EventTap 仍為 Active；設定視窗關閉後程序仍常駐且只有一份。這仍不驗證實體快捷鍵。 |
 | 安全輸入 | 原始碼沒有呼叫 `EnableSecureEventInput()` 或 `DisableSecureEventInput()`；只檢查系統安全輸入並停止翻譯。真實密碼欄與切換時序尚未實測。 |
 | 裝置與其他常駐程式 | 本機有 AweSun、Parsec、Parallels；AweSun 原先漏列 Remote，已補入下一版清單。本機 VChewingGuard 仍在執行，整合 App 的 Guard 預設關閉，未嘗試同時接管輸入法。 |
 
