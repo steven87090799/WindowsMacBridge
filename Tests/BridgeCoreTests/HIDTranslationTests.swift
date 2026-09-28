@@ -50,6 +50,43 @@ struct HIDTranslationTests {
         _ = e.observe(device: 1, page: 7, usage: 0xe0, down: false)
         #expect(output(&e).isEmpty)
     }
+    @Test func releasingShortcutModifierCannotLeaveOrResurrectPlainKey() {
+        var e = engine()
+        _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)
+        _ = e.observe(device: 1, page: 7, usage: 6, down: true)
+        #expect(output(&e).modifiers == 8)
+        _ = e.observe(device: 1, page: 7, usage: 0xe0, down: false)
+        #expect(output(&e).isEmpty)
+        _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)
+        let held = output(&e)
+        #expect(held.fn && held.keyCount == 0)
+        _ = e.observe(device: 1, page: 7, usage: 6, down: false)
+        _ = e.observe(device: 1, page: 7, usage: 0xe0, down: false)
+        #expect(output(&e).isEmpty)
+    }
+    @Test func shortcutModifierFromSecondKeyboardKeepsOriginalChordUntilLastRelease() {
+        var e = engine()
+        _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)
+        _ = e.observe(device: 2, page: 7, usage: 0xe0, down: true)
+        _ = e.observe(device: 1, page: 7, usage: 6, down: true)
+        _ = e.observe(device: 1, page: 7, usage: 0xe0, down: false)
+        let held = output(&e)
+        #expect(held.modifiers == 8 && held.keyCount == 1)
+        _ = e.observe(device: 2, page: 7, usage: 0xe0, down: false)
+        #expect(output(&e).isEmpty)
+    }
+    @Test func disconnectingModifierKeyboardCannotResurrectHeldShortcut() {
+        var e = engine()
+        _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)
+        _ = e.observe(device: 2, page: 7, usage: 6, down: true)
+        #expect(output(&e).modifiers == 8)
+        e.disconnect(1)
+        #expect(output(&e).isEmpty)
+        let registered = e.register(1)
+        #expect(registered)
+        _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)
+        #expect(output(&e).keyCount == 0)
+    }
     @Test func altTabKeepsCommandUntilAltRelease() {
         var e = engine()
         _ = e.observe(device: 1, page: 7, usage: 0xe2, down: true)

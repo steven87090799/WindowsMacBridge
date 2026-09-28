@@ -7,7 +7,7 @@ public enum InputBackend: String, Codable, CaseIterable, Sendable {
     public var title: String { self == .deviceHID ? "指定鍵盤 HID 後端（需要安裝 helper）" : "CGEventTap 快捷鍵預覽" }
 }
 
-@MainActor public final class HIDBackendClient: NSObject, @preconcurrency HIDControllerProtocol {
+@MainActor public final class HIDBackendClient: NSObject, HIDControllerProtocol {
     public private(set) var status = HIDStatus()
     public var actionStatus: String { actions.status() }
     private let actions = ShortcutActionDispatcher(marker: Int64.random(in: 1...Int64.max))
@@ -15,22 +15,31 @@ public enum InputBackend: String, Codable, CaseIterable, Sendable {
     private var configuration = HIDConfiguration()
     private var generation: UInt64 = 0
     private var backendActive = false
+    private var started = false
     private var timer: Timer?
     private var inFlight = false
     private var sentAt: Double = 0, retryAt: Double = 0
     public override init() { super.init() }
     public func start() {
+        guard !started else { return }
+        started = true
+        if backendActive { startHeartbeat() }
+    }
+    private func startHeartbeat() {
+        guard timer == nil else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
     }
     public func update(_ engine: EngineConfiguration, active: Bool) {
+        let wasActive = backendActive
+        let effectiveEnabled = engine.enabled && active && engine.keyboardScope == .builtInAndApple834
         let changed = configuration.processID != engine.context.processID || configuration.bundleID != engine.context.bundleID ||
             configuration.mode != engine.context.mode || configuration.isBrowser != engine.context.isBrowser ||
-            configuration.enabled != engine.enabled ||
+            configuration.enabled != effectiveEnabled ||
             configuration.layoutSupported != engine.layoutSupported || configuration.finderEnabled != engine.finderEnabled ||
             configuration.sessionActive != engine.sessionActive || configuration.restartToken != engine.restartToken || backendActive != active
         if changed { generation &+= 1; actions.cancelPending() }
         backendActive = active
-        configuration.enabled = engine.enabled && active && engine.keyboardScope == .builtInAndApple834
+        configuration.enabled = effectiveEnabled
         configuration.sessionActive = engine.sessionActive; configuration.layoutSupported = engine.layoutSupported
         configuration.finderEnabled = engine.finderEnabled; configuration.processID = engine.context.processID
         configuration.diagnostics = engine.diagnostics
@@ -39,10 +48,17 @@ public enum InputBackend: String, Codable, CaseIterable, Sendable {
         configuration.restartToken = engine.restartToken
         _ = actions.update(context: configuration.context, enabled: configuration.enabled && !status.manualPassThrough,
                            finderEnabled: configuration.finderEnabled, epoch: generation)
-        if !active { disconnect() }
-        else { tick() }
+        if !active {
+            if wasActive || timer != nil || connection != nil {
+                timer?.invalidate(); timer = nil
+                disconnect()
+            }
+        } else if started {
+            startHeartbeat()
+            tick()
+        }
     }
-    public func stop() { timer?.invalidate(); timer = nil; backendActive = false; disconnect() }
+    public func stop() { started = false; timer?.invalidate(); timer = nil; backendActive = false; disconnect() }
     public func requestInputAccess() {
         guard backendActive, let proxy = connection?.remoteObjectProxy as? HIDHelperProtocol else { return }
         proxy.requestInputAccess { _ in }

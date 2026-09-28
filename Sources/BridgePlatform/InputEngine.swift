@@ -72,6 +72,8 @@ public final class InputEngine: @unchecked Sendable {
     private var records = [DiagnosticRecord?](repeating: nil, count: 128)
     private var recordIndex = 0
     private var recordSequence: UInt64 = 0
+    private var diagnosticRevision: UInt64 = 0
+    private var publishedDiagnosticRevision: UInt64 = .max
     private var diagnosticDeadline: TimeInterval = 0
     private var actionEpoch: UInt64 = 0
 
@@ -131,7 +133,10 @@ public final class InputEngine: @unchecked Sendable {
                 actionEpoch &+= 1
             }
             if !configuration.diagnostics {
-                for i in records.indices { records[i] = nil }
+                if diagnosticDeadline != 0 || !status.diagnostics.isEmpty {
+                    for i in records.indices { records[i] = nil }
+                    diagnosticRevision &+= 1
+                }
                 diagnosticDeadline = 0
             } else if diagnosticDeadline == 0 {
                 diagnosticDeadline = ProcessInfo.processInfo.systemUptime + 300
@@ -193,9 +198,14 @@ public final class InputEngine: @unchecked Sendable {
         status.actionStatus = actions.status()
         if diagnosticDeadline > 0 && ProcessInfo.processInfo.systemUptime >= diagnosticDeadline {
             for i in records.indices { records[i] = nil }
+            diagnosticDeadline = 0
+            diagnosticRevision &+= 1
         }
-        // Formatting and allocation are outside the callback, four times per second at most.
-        status.diagnostics = records.compactMap { $0 }.sorted { $0.id > $1.id }
+        // Build diagnostics only when the ring changes; idle ticks allocate nothing here.
+        if publishedDiagnosticRevision != diagnosticRevision {
+            status.diagnostics = records.compactMap { $0 }.sorted { $0.id > $1.id }
+            publishedDiagnosticRevision = diagnosticRevision
+        }
         mailbox.lock.lock(); mailbox.status = status; mailbox.lock.unlock()
     }
 
@@ -290,6 +300,7 @@ public final class InputEngine: @unchecked Sendable {
                     application: configuration.context.bundleID,
                     microseconds: Double(DispatchTime.now().uptimeNanoseconds - start) / 1000)
                 recordIndex = (recordIndex + 1) % records.count
+                diagnosticRevision &+= 1
             }
         }
         let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1000

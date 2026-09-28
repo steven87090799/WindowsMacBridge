@@ -7,6 +7,7 @@
     "^com\\.citrix\\..*$",
     "^com\\.teamviewer\\..*$",
     "^com\\.philandro\\.anydesk$",
+    "^com\\.aweray\\.awesun\\..*$",
     "^com\\.carriez\\.RustDesk$",
     "^com\\.p5sys\\.jump.*$",
     "^com\\.edovia\\.Screens.*$",
@@ -17,8 +18,8 @@
     "^com\\.parsec\\..*$"
   ],
   "remotePathPatterns": [
-    "^/Applications/.*(Windows App|Microsoft Remote Desktop|Parallels Desktop|VMware Fusion|VMware Remote Console|Citrix Workspace|TeamViewer|AnyDesk|RustDesk|Jump Desktop|Screens|Moonlight|NoMachine|VNC Viewer|Royal TSX|Parsec)\\.app/.*$",
-    "^/Users/[^/]+/Applications/.*(Windows App|Microsoft Remote Desktop|Parallels Desktop|VMware Fusion|VMware Remote Console|Citrix Workspace|TeamViewer|AnyDesk|RustDesk|Jump Desktop|Screens|Moonlight|NoMachine|VNC Viewer|Royal TSX|Parsec)\\.app/.*$"
+    "^/Applications/.*(Windows App|Microsoft Remote Desktop|Parallels Desktop|VMware Fusion|VMware Remote Console|Citrix Workspace|TeamViewer|AnyDesk|AweSun|RustDesk|Jump Desktop|Screens|Moonlight|NoMachine|VNC Viewer|Royal TSX|Parsec)\\.app/.*$",
+    "^/Users/[^/]+/Applications/.*(Windows App|Microsoft Remote Desktop|Parallels Desktop|VMware Fusion|VMware Remote Console|Citrix Workspace|TeamViewer|AnyDesk|AweSun|RustDesk|Jump Desktop|Screens|Moonlight|NoMachine|VNC Viewer|Royal TSX|Parsec)\\.app/.*$"
   ],
   "browserBundlePatterns": [
     "^com\\.apple\\.Safari$",
@@ -57,6 +58,7 @@
     "^com\\.citrix\\..*$",
     "^com\\.teamviewer\\..*$",
     "^com\\.philandro\\.anydesk$",
+    "^com\\.aweray\\.awesun\\..*$",
     "^com\\.carriez\\.RustDesk$",
     "^com\\.p5sys\\.jump.*$",
     "^com\\.edovia\\.Screens.*$",

@@ -68,6 +68,7 @@ public struct HIDTranslationEngine: Sendable {
         guard let i = devices.firstIndex(of: id) else { return }
         devices[i] = nil; physical[i] = 0; consumed[i] = 0
         for j in presses.indices where presses[j]?.device == id { presses[j] = nil }
+        suppressShortcutsMissingModifiers()
         reconcile()
     }
     public mutating func configure(context: ApplicationContext, layoutSupported: Bool, finderEnabled: Bool) {
@@ -93,6 +94,15 @@ public struct HIDTranslationEngine: Sendable {
         return values[Int(usage-0xe0)]
     }
     private var aggregate: UInt16 { physical.reduce(0, |) }
+    private mutating func suppressShortcutsMissingModifiers() {
+        let held = Self.flags(aggregate)
+        for i in presses.indices {
+            if let press = presses[i], !press.trigger.isEmpty,
+               !held.isSuperset(of: press.trigger) {
+                presses[i]?.suppressed = true
+            }
+        }
+    }
     private var local: Bool { context.mode == .macOS && layoutSupported && !manualPassThrough && !emergencyPaused }
     private static func flags(_ bits: UInt16) -> Modifiers {
         var result: Modifiers = []
@@ -114,7 +124,12 @@ public struct HIDTranslationEngine: Sendable {
         processed &+= 1
         if let m = Self.modifier(page: page, usage: usage) {
             if down { physical[slot] |= m.bit; if waitingForNeutral { consumed[slot] |= m.bit } }
-            else { physical[slot] &= ~m.bit; consumed[slot] &= ~m.bit }
+            else {
+                physical[slot] &= ~m.bit; consumed[slot] &= ~m.bit
+                // A shortcut must not turn into a plain held key when its input
+                // modifier is released before the key. Never resurrect it later.
+                suppressShortcutsMissingModifiers()
+            }
             reconcile(); return nil
         }
         let old = presses.firstIndex { $0?.device == device && $0?.page == page && $0?.usage == usage }
@@ -183,11 +198,9 @@ public struct HIDTranslationEngine: Sendable {
         let live = Self.flags(aggregate)
         for press in presses {
             guard let press, !press.suppressed else { continue }
-            var added = press.modifiers
-            if !press.trigger.isEmpty && !live.isSuperset(of: press.trigger.subtracting(.shift)) { added = [] }
-            if press.trigger.contains(.shift) && !live.contains(.shift) { added.remove(.shift) }
-            output.modifiers |= Self.usb(added)
-            if added.contains(.fn) { output.fn = true }
+            guard live.isSuperset(of: press.trigger) else { continue }
+            output.modifiers |= Self.usb(press.modifiers)
+            if press.modifiers.contains(.fn) { output.fn = true }
             let ok: Bool
             switch press.outputPage {
             case 7: ok = append(press.outputUsage, to: &output.keys, count: &output.keyCount)
