@@ -15,14 +15,14 @@ public struct EngineConfiguration: Sendable {
     public init() {}
 }
 
-public struct DiagnosticRecord: Sendable, Identifiable {
+public struct DiagnosticRecord: Equatable, Sendable, Identifiable {
     public let id: UInt64
     public let rule: String
     public let application: String
     public let microseconds: Double
 }
 
-public struct EngineStatus: Sendable {
+public struct EngineStatus: Equatable, Sendable {
     public var accessibility = false
     public var listenAccess = false
     public var postAccess = false

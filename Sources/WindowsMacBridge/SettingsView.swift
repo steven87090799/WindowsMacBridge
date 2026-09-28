@@ -5,6 +5,7 @@ import BridgePlatform
 
 struct SettingsView: View {
     @ObservedObject var controller: BridgeController
+
     var body: some View {
         TabView {
             general.tabItem { Label("一般與權限", systemImage: "keyboard") }
@@ -12,130 +13,151 @@ struct SettingsView: View {
             profiles.tabItem { Label("App 規則", systemImage: "app.badge") }
             diagnostics.tabItem { Label("診斷", systemImage: "waveform.path.ecg") }
         }
-        .padding(20)
-        .frame(minWidth: 690, minHeight: 530)
+        .padding(18)
+        .frame(minWidth: 730, minHeight: 600)
     }
+
+    private func explanation(_ text: String) -> some View {
+        Text(text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+    }
+
     private var general: some View {
         Form {
-            Section("WindowsMacBridge — 開發預覽版") {
+            Section("WindowsMacBridge · 0.4.1 Preview") {
                 Text(controller.summary).font(.headline).textSelection(.enabled)
-                Picker("輸入後端", selection: Binding(get: { controller.settings.inputBackend }, set: { controller.setInputBackend($0) })) {
+                explanation("新安裝已啟用 Windows 快捷鍵：本機 Ctrl+C／X／V 會轉成複製／剪下／貼上。Codex 預設適用聊天與文字輸入；Terminal、其他 IDE、遠端桌面、VM 和遊戲保留原按鍵。")
+                HStack {
+                    Button("套用建議預設") {
+                        controller.applyRecommendedPreset()
+                    }
+                    Button("完整操作說明") { controller.openUserGuide() }
+                }
+                explanation("「套用建議預設」會啟用快捷鍵及中文／唯音相容、選 EventTap／所有鍵盤、將 Codex 設為 Default macOS，並關閉 Finder 檔案加強。保留其他 App 規則、輸入法及登入設定；下方仍可逐項調整。")
+                if let notice = controller.presetNotice { Text(notice).foregroundStyle(.secondary) }
+            }
+            Section("Windows 快捷鍵") {
+                Toggle("啟用 Windows 快捷鍵", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
+                explanation("預設開啟。包含複製、貼上、復原、儲存、尋找、分頁、文字導覽與 Alt+Tab；關閉後停止 Windows 按鍵翻譯，輸入法守護由自己的開關控制。")
+                Picker("輸入方式", selection: Binding(get: { controller.settings.inputBackend }, set: { controller.setInputBackend($0) })) {
                     ForEach(InputBackend.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
-                Toggle("啟用 Windows 快捷鍵", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
-                Text("29 組一般快捷鍵與導覽、19 組瀏覽器規則；包含儲存、分頁、Ctrl+方向鍵、Ctrl+Home/End。")
-                Text("Terminal／IDE 的 Ctrl 快捷鍵保持原樣；Remote／VM／Game 停止所有本機動作。左 Option+E 開 Finder、左 Option+L 鎖定、Ctrl+Shift+Esc 開活動監視器。")
-                    .foregroundStyle(.secondary)
+                explanation("EventTap 是預設：授權後即可使用快捷鍵，適用目前的外接鍵盤，不需安裝 helper 或 Driver。HID 是進階測試方式：可交換 Fn／Control、Option／Command 與亮度鍵，但需另外安裝並核准 Driver，只支援指定鍵盤。切換方式時會同時選擇對應鍵盤範圍。")
                 Picker("鍵盤範圍", selection: Binding(get: { controller.settings.keyboardScope }, set: { controller.setKeyboardScope($0) })) {
                     ForEach(KeyboardScope.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
-                Text("HID 後端提供指定鍵盤的 Fn／左 Control、Option／Command 交換與亮度增加鍵→Enter。需先執行下載包的 Install.command、核准官方 VirtualHID Driver，並授予 helper 輸入監控。此版本仍待實機驗收；EventTap 後端僅提供快捷鍵預覽。")
-                    .font(.caption).foregroundStyle(.orange)
-                LabeledContent("HID Helper", value: controller.hidStatus.state)
-                LabeledContent("VirtualHID / 擷取裝置", value: "\(controller.hidStatus.driverReady ? "Ready" : "Not ready") / \(controller.hidStatus.capturedDevices)")
-                Button("在 Finder 顯示 helper（加入輸入監控）") { controller.openHelperLocation() }
-                Button("要求 helper 輸入監控權限") { controller.requestHIDListening() }
-                Toggle("Finder 檔案快捷鍵（開啟／改名／剪下與移動）", isOn: Binding(
-                    get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
-                Text("只有可確認的檔案列表才啟用移動與改名；文字框維持文字操作。剪下標記於剪貼簿更新、切換 App、暫停或 5 分鐘後失效。")
-                    .font(.caption).foregroundStyle(.secondary)
+                explanation("預設「所有鍵盤」，包含 USB、Bluetooth 與內建鍵盤。EventTap 無法只指定某一把鍵盤；選內建／Apple 範圍時必須使用 HID，否則停止翻譯。HID 目前只接受支援的內建鍵盤或 Apple 1452/834，不包含所有 Apple 鍵盤。")
+                explanation("不要同時在 Karabiner 套用相同映射。若系統已交換 Control／Command，程式收到的是交換後的按鍵；請依完整操作說明確認實際結果，再決定是否還原。")
+                if controller.settings.inputBackend == .deviceHID {
+                    LabeledContent("Helper 狀態", value: controller.hidStatus.state)
+                    LabeledContent("Driver／接管鍵盤數", value: "\(controller.hidStatus.driverReady ? "Ready" : "Not ready")／\(controller.hidStatus.capturedDevices)")
+                    explanation("需先執行下載包的 Install.command 並依 macOS 提示核准官方 VirtualHID。Ready 且接管數大於 0 才表示此後端有鍵盤可用；不支援的鍵盤維持原樣。此路徑仍待實體裝置驗收。")
+                    Button("在 Finder 顯示 helper") { controller.openHelperLocation() }
+                    explanation("手動加入輸入監控時，用此按鈕找到 BridgeHIDHelper.app，再到系統設定的輸入監控清單加入。尚未安裝 helper 時，請先執行 Install.command。")
+                    Button("要求 helper 輸入監控權限") { controller.requestHIDListening() }
+                    explanation("要求 macOS 允許已安裝的 helper 接收鍵盤；需由你在系統設定核准，按鈕不會自動授權。")
+                }
+                Toggle("Finder 檔案快捷鍵加強", isOn: Binding(get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
+                explanation("預設關閉。開啟後，確認焦點在檔案列表才提供開啟、改名及 Ctrl+X → Ctrl+V 移動；文字框仍使用文字操作。剪下標記在剪貼簿更新、切換 App、暫停或 5 分鐘後失效；程式無法確認 Finder 是否真的移動成功。")
             }
-            Section("登入啟動") {
-                Toggle("登入時啟動 WindowsMacBridge", isOn: Binding(
-                    get: { controller.sourceStatus.loginRegistered }, set: { controller.inputSources.setLoginEnabled($0) }))
-                LabeledContent("登入項目", value: controller.sourceStatus.loginStatus)
+            Section("登入時啟動") {
+                Toggle("登入時啟動 WindowsMacBridge", isOn: Binding(get: { controller.sourceStatus.loginRegistered }, set: { controller.inputSources.setLoginEnabled($0) }))
+                explanation("預設關閉。先將 App 放在 /Applications，再開啟此項；以後登入會自動常駐 Menu Bar，仍需 macOS 權限。關閉會移除本程式的登入註冊。")
+                LabeledContent("系統登入項目狀態", value: controller.sourceStatus.loginStatus)
                 Button("開啟登入項目設定") { controller.inputSources.openLoginSettings() }
+                explanation("若顯示待核准或啟動失敗，到系統設定檢查 WindowsMacBridge 是否被允許啟動。")
                 if let issue = controller.sourceStatus.loginIssue { Text(issue).foregroundStyle(.orange) }
             }
-            Section("權限（僅 Windows 快捷鍵需要）") {
-                LabeledContent("Accessibility", value: controller.status.accessibility ? "已授權" : "尚未授權")
-                LabeledContent("Event posting", value: controller.status.postAccess ? "可用" : "尚未授權")
-                LabeledContent("Input monitoring", value: controller.status.listenAccess ? "可用" : "尚未授權／依 tap 能力而定")
+            Section("鍵盤權限") {
+                LabeledContent("輔助使用", value: controller.status.accessibility ? "已授權" : "尚未授權")
+                explanation("允許程式攔截快捷鍵及操作 App。未授權時不進行翻譯；第一次下載不能替你自動開啟這項 macOS 權限。")
+                LabeledContent("事件輸出", value: controller.status.postAccess ? "可用" : "尚未授權")
+                explanation("表示程式能否送出翻譯後的按鍵，通常隨輔助使用授權開啟。若不可用，先確認授權的是正在執行的新版 App。")
+                LabeledContent("輸入監控", value: controller.status.listenAccess ? "可用" : "尚未授權／依系統攔截能力而定")
+                explanation("用於接收鍵盤事件。EventTap 能否建立也依系統授權而定；HID helper 需要自己的輸入監控權限。唯音守護本身不需要鍵盤權限。")
                 HStack {
-                    Button("要求 Accessibility") { controller.requestAccessibility() }
-                    Button("開啟系統設定") { controller.openPermissions() }
-                    Button("要求輸入監控") { controller.requestListening() }
+                    Button("要求輔助使用") { controller.requestAccessibility() }.help("顯示 macOS 的輔助使用授權提示。")
+                    Button("開啟權限設定") { controller.openPermissions() }.help("開啟系統設定 → 隱私權與安全性 → 輔助使用。")
+                    Button("要求 App 輸入監控") { controller.requestListening() }.help("向 macOS 要求此 App 的輸入監控權限。")
                 }
-                Text("系統設定 → 隱私權與安全性 → 輔助使用。若已授權但 tap 建立失敗，再檢查輸入監控。權限不會自動彈出或無限重試。")
-                    .font(.caption).foregroundStyle(.secondary)
+                explanation("按第一個按鈕要求授權；第二個直接開啟系統設定；第三個用於需要輸入監控的情況。更新後若顯示已核准卻不能翻譯，重新加入目前版本並重啟 App。")
             }
-            Section("輸入來源與暫停") {
-                LabeledContent("Input source", value: controller.layoutID)
-                Toggle("唯音／中文 IME 也使用實體鍵位快捷鍵", isOn: Binding(
-                    get: { controller.settings.allowIMEShortcuts }, set: { controller.setIMEShortcuts($0) }))
-                Text("IME 選項需要底層 ABC／U.S. 配置；不讀取組字文字。候選選字與各 App 組字行為仍需實機驗證。")
-                    .foregroundStyle(.secondary)
+            Section("輸入法相容性") {
+                LabeledContent("目前輸入來源", value: controller.layoutID)
+                Toggle("中文／唯音輸入法也使用實體鍵位快捷鍵", isOn: Binding(get: { controller.settings.allowIMEShortcuts }, set: { controller.setIMEShortcuts($0) }))
+                explanation("預設開啟，底層採 ABC／U.S. 的中文輸入法也可使用 Ctrl 快捷鍵。程式不讀取組字內容；候選選字與組字相容性仍需依 App 確認，遇到衝突可關閉，改成只在 ABC／U.S. 來源翻譯。其他配置維持原樣。")
+            }
+            Section("暫停與恢復") {
                 HStack {
                     Button("暫停 5 分鐘") { controller.pause(minutes: 5) }
                     Button("暫停至重啟") { controller.pause(minutes: nil) }
                     Button("恢復／重啟引擎") { controller.resume() }
                 }
-                Text("右 Option+P 切換穿透；Control+Option+Command+P 緊急暫停。穿透也暫停輸入法守護。Tap 失效或 Client 獨占輸入時，請使用 Menu Bar 暫停／結束。")
-                    .font(.caption).foregroundStyle(.secondary)
+                explanation("暫停同時停止 Windows 翻譯與輸入法守護；5 分鐘後自動恢復，或關閉重開 App 才恢復。「恢復」取消暫停、退出穿透並重新嘗試啟動引擎。Menu Bar 也提供 15 分鐘／1 小時。")
+                explanation("右 Option+P 切換原樣穿透；Control+Option+Command+P 緊急暫停。Remote／VM／Game 的 HID 模式交回鍵盤後不攔截這些熱鍵，請用 Menu Bar 暫停或結束。暫停圖示是鍵盤內的雙直線。")
             }
         }.formStyle(.grouped)
     }
+
     private var inputSources: some View {
         Form {
             Section("唯音繁體／ABC") {
                 Text(controller.sourceStatus.summary).font(.headline)
-                if controller.sourceStatus.suspension == .legacyApp {
-                    Button("結束舊版 VChewingGuard") { controller.inputSources.quitLegacyApp() }
-                }
-                Toggle("啟用輸入法守護", isOn: Binding(
-                    get: { controller.sourceStatus.enabled }, set: { controller.inputSources.setEnabled($0) }))
-                Text("啟用後優先維持唯音繁體；切至 ABC 會維持英文，直到下次切換、重新啟用或重啟 App。唯音輸入法需另行安裝。")
+                Toggle("啟用輸入法守護", isOn: Binding(get: { controller.sourceStatus.enabled }, set: { controller.inputSources.setEnabled($0) }))
+                explanation("預設關閉，不會改變你原本的輸入法。開啟後優先維持唯音繁體；手動切到 ABC 會維持英文，直到下次切換、重新啟用或重啟 App。唯音輸入法本體需另行安裝。")
                 LabeledContent("目前來源", value: controller.sourceStatus.current)
                 HStack {
                     Button("唯音繁體") { controller.inputSources.select(.vChewing) }
                     Button("ABC") { controller.inputSources.select(.abc) }
                     Button("重新偵測") { controller.inputSources.rediscover() }
                 }.disabled(controller.sourceStatus.suspension != nil)
+                explanation("前兩個按鈕立即切換輸入法；「重新偵測」用於剛安裝唯音或新增 ABC 之後。Remote、VM、Game、Disabled 或暫停期間不切換；Secure Input 期間延後切換。")
+                if controller.sourceStatus.suspension == .legacyApp {
+                    Button("結束舊版 VChewingGuard") { controller.inputSources.quitLegacyApp() }
+                    explanation("舊版與本程式不能同時守護輸入法；此按鈕正常結束舊版，之後請在登入項目停用舊版。")
+                }
                 if let issue = controller.sourceStatus.issue { Text(issue).foregroundStyle(.orange).textSelection(.enabled) }
-                Text("遠端桌面、VM、Game、Disabled Profile 會暫停守護及切換快捷鍵。Secure Input 期間延後切換。")
-                    .font(.caption).foregroundStyle(.secondary)
-                Text("預設只在 ABC／U.S. 翻譯；開啟上方 IME 選項後，底層 ABC／U.S. 的中文來源可使用實體鍵位快捷鍵，組字相容性需依 App 驗收。")
-                    .font(.caption).foregroundStyle(.secondary)
             }
-            Section("切換快捷鍵與延遲") {
-                Toggle("啟用唯音／ABC 切換快捷鍵", isOn: Binding(
-                    get: { controller.sourceStatus.hotkeyEnabled }, set: { controller.inputSources.setHotkeyEnabled($0) }))
-                Picker("快捷鍵", selection: Binding(get: { controller.sourceStatus.preset }, set: { controller.inputSources.setPreset($0) })) {
+            Section("輸入法切換快捷鍵") {
+                Toggle("啟用唯音／ABC 切換快捷鍵", isOn: Binding(get: { controller.sourceStatus.hotkeyEnabled }, set: { controller.inputSources.setHotkeyEnabled($0) }))
+                explanation("預設關閉。開啟後按所選組合在唯音繁體與 ABC 之間切換；Remote／VM／Game／Disabled 與暫停時不註冊此快捷鍵。")
+                Picker("快捷鍵組合", selection: Binding(get: { controller.sourceStatus.preset }, set: { controller.inputSources.setPreset($0) })) {
                     ForEach(HotkeyPreset.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
+                explanation("預設 Control+Option+Command+Space。⌃ 是 Control、⌥ 是 Option、⌘ 是 Command、⇧ 是 Shift。若組合與 macOS 或其他 App 衝突，改選另一個；註冊失敗時嘗試保留原來的組合。")
                 LabeledContent("快捷鍵註冊", value: controller.sourceStatus.hotkeyRegistered ? "已註冊" : "未註冊／暫停")
-                Stepper("修正延遲：\(controller.sourceStatus.debounceMilliseconds) ms", value: Binding(
-                    get: { controller.sourceStatus.debounceMilliseconds }, set: { controller.inputSources.setDebounce($0) }), in: 200...1200, step: 50)
-                Stepper("啟動等待：\(controller.sourceStatus.startupDelayMilliseconds) ms", value: Binding(
-                    get: { controller.sourceStatus.startupDelayMilliseconds }, set: { controller.inputSources.setStartupDelay($0) }), in: 0...5000, step: 250)
+                explanation("「已註冊」才表示快捷鍵能使用；未註冊可能是功能未開啟、目前 App 使用穿透，或組合被占用。")
             }
-            Section("整合與診斷") {
-                Button("匯入舊版 VChewingGuard 偏好") { controller.inputSources.importLegacyPreferences() }
-                    .disabled(!controller.sourceStatus.canImportLegacy)
-                Text("匯入延遲與快捷鍵選擇。請結束舊版 App，並在系統登入項目停用 VChewingGuard；此 App 使用單一登入項目。")
-                    .font(.caption).foregroundStyle(.secondary)
+            Section("守護等待時間") {
+                Stepper("修正延遲：\(controller.sourceStatus.debounceMilliseconds) ms", value: Binding(get: { controller.sourceStatus.debounceMilliseconds }, set: { controller.inputSources.setDebounce($0) }), in: 200...1200, step: 50)
+                explanation("預設 400 ms，範圍 200–1200 ms。輸入來源變化後等待多久才重新確認／修正；較短反應快，較長可減少與 App 切換輸入法互相干擾。只影響守護，不增加鍵盤翻譯延遲。")
+                Stepper("啟動等待：\(controller.sourceStatus.startupDelayMilliseconds) ms", value: Binding(get: { controller.sourceStatus.startupDelayMilliseconds }, set: { controller.inputSources.setStartupDelay($0) }), in: 0...5000, step: 250)
+                explanation("預設 1500 ms，範圍 0–5000 ms。App 啟動後先等待輸入法服務準備，再開始守護。登入時來源偵測不穩，可增加等待；Windows 快捷鍵不受此值影響。")
+            }
+            Section("舊版整合與來源診斷") {
+                Button("匯入舊版 VChewingGuard 偏好") { controller.inputSources.importLegacyPreferences() }.disabled(!controller.sourceStatus.canImportLegacy)
+                explanation("只匯入延遲與快捷鍵組合；不匯入啟用狀態、登入項目或歷史紀錄。找不到有效舊設定時按鈕停用。匯入後仍由你決定是否啟用守護。")
                 if let message = controller.sourceStatus.migrationMessage { Text(message) }
                 DisclosureGroup("輸入來源與守護診斷") {
                     Button("更新診斷") { controller.refreshSourceDiagnostics() }
+                    explanation("重新讀取已安裝的輸入來源與最近切換結果，用於排查唯音／ABC 找不到或切換失敗；不會產生鍵盤紀錄。")
                     Text(controller.sourceStatus.traditional).textSelection(.enabled)
                     Text(controller.sourceStatus.abc).textSelection(.enabled)
                     Text(controller.sourceDiagnostics).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                     Text(controller.sourceLog).font(.system(.caption2, design: .monospaced)).textSelection(.enabled)
                 }
-                Text("守護日誌僅含來源 ID、切換結果與狀態，最多兩個約 512 KiB 檔案；不記錄按鍵或輸入內容。")
-                    .font(.caption).foregroundStyle(.secondary)
+                explanation("守護日誌只含來源 ID、切換結果與狀態；最多兩個約 512 KiB 檔案，不保存輸入文字。")
             }
         }.formStyle(.grouped)
     }
+
     private var profiles: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("App → Profile").font(.title2)
-            Text("以 bundle ID 判定整個 App，不猜遠端連線或 IDE terminal focus。瀏覽器內遠端桌面請將整個專用瀏覽器設成 Remote。")
-                .foregroundStyle(.secondary)
+            Text("App 規則").font(.title2)
+            explanation("規則依 App 的 bundle ID 套用到整個 App。Codex 新安裝預設 Default macOS，適合聊天與文字輸入；若使用內建終端機，改成 IDE 或移除規則，避免 Ctrl+C 被當成複製。")
             if let app = controller.targetApp {
                 HStack {
                     VStack(alignment: .leading) {
-                        Text("最近的 App：\(app.displayName)")
+                        Text("最近使用：\(app.displayName)")
                         Text(app.bundleID).font(.caption).textSelection(.enabled)
                     }
                     Spacer()
@@ -143,54 +165,87 @@ struct SettingsView: View {
                         ForEach(ApplicationMode.allCases, id: \.self) { mode in
                             Button(mode.title) { controller.assign(mode, bundleID: app.bundleID) }
                         }
-                    }
+                    }.help("立即儲存最近使用 App 的模式；不需重啟。")
                 }
             }
-            Button("選擇 App…") { controller.chooseApplication() }
+            Button("選擇其他 App…") { controller.chooseApplication() }
+            explanation("選取 .app 後先加入 Disabled／原樣通過，再用下方選單指定模式。「移除」會刪除自訂規則並恢復內建判定，包含 Codex 的 IDE 保護。")
             List(controller.settings.overrides.keys.sorted(), id: \.self) { id in
-                HStack {
-                    Text(id).textSelection(.enabled)
-                    Spacer()
-                    Picker("Profile", selection: Binding(get: { controller.settings.overrides[id] ?? .disabled },
-                                                         set: { controller.assign($0, bundleID: id) })) {
-                        ForEach(ApplicationMode.allCases, id: \.self) { Text($0.title).tag($0) }
-                    }.labelsHidden().frame(width: 245)
-                    Button("重設") { controller.removeOverride(id) }
-                }
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(id).font(.callout).textSelection(.enabled)
+                        Spacer()
+                        Picker("Profile", selection: Binding(get: { controller.settings.overrides[id] ?? .disabled }, set: { controller.assign($0, bundleID: id) })) {
+                            ForEach(ApplicationMode.allCases, id: \.self) { Text($0.title).tag($0) }
+                        }.labelsHidden().frame(width: 255)
+                        Button("移除") { controller.removeOverride(id) }.help("移除此 App 的自訂規則，恢復內建保護判定。")
+                    }
+                    Text(profileExplanation(controller.settings.overrides[id] ?? .disabled)).font(.caption).foregroundStyle(.secondary)
+                }.padding(.vertical, 4)
+            }.frame(minHeight: 130)
+            DisclosureGroup("各 Profile 的用途") {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(ApplicationMode.allCases, id: \.self) { mode in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(mode.title).font(.callout.weight(.medium))
+                                Text(profileExplanation(mode)).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }.frame(maxHeight: 190)
             }
-            Text("手動選 Default macOS 會覆寫內建保護。IDE 的內嵌 Terminal 與遠端 Client 請保留 Pass-through。")
-                .font(.caption).foregroundStyle(.secondary)
+            explanation("瀏覽器中的遠端分頁無法可靠自動辨識；可使用專用瀏覽器並指定 Remote。遠端 Client 的 Alt+Tab／Ctrl+Alt+Delete／剪貼簿轉送能力需在 Client 自己設定。")
         }.padding()
     }
+
+    private func profileExplanation(_ mode: ApplicationMode) -> String {
+        switch mode {
+        case .macOS: "本機翻譯：將 Windows 快捷鍵轉為 macOS 操作；手動指定會覆寫此 App 原本的 Terminal／IDE 等保護。"
+        case .terminal: "保留 Unix 的 Ctrl+C／D／Z 等操作。HID 整個鍵盤原樣通過；EventTap 保留 Ctrl 與文字快捷鍵，仍提供部分本機系統動作。"
+        case .ide: "保留編輯器、除錯器與內嵌 Terminal 的原生 Ctrl 操作；若只用聊天／文字且需要 Ctrl+C／V，可改為 Default macOS。"
+        case .remoteWindows: "讓遠端 Client 收到原按鍵，停止本機翻譯、系統動作與輸入法守護；不判斷是否已連線，也不替 Client 設定轉送。"
+        case .virtualMachine: "讓 VM 接收原按鍵，停止本機翻譯與輸入法切換；VM 是否捕捉 Alt+Tab 由虛擬機軟體控制。"
+        case .game: "讓遊戲接收原按鍵，停止本機翻譯及輸入法切換，避免改動遊戲控制。"
+        case .disabled: "此 App 不套用任何本機翻譯或輸入法守護，適用未知或希望完全維持原生行為的 App。"
+        }
+    }
+
     private var diagnostics: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("\(controller.context.displayName) · \(controller.context.mode.title)").font(.headline)
-            Text(controller.context.bundleID).textSelection(.enabled)
-            Text("Remote connection：未偵測；App profile 只決定是否翻譯。")
-                .foregroundStyle(.secondary)
-            LabeledContent("Event Tap", value: controller.status.tapActive ? "Active" : "Inactive")
-            LabeledContent("輸入後端", value: controller.settings.inputBackend.title)
-            if let rule = controller.hidStatus.lastRule { LabeledContent("HID 最近命中規則", value: rule) }
-            LabeledContent("Secure Input", value: controller.status.secureInput ? "ON — suspend" : "OFF")
-            LabeledContent("鍵盤範圍", value: controller.settings.keyboardScope.title)
-            if let issue = controller.status.backendIssue { Text(issue).foregroundStyle(.orange) }
-            if !controller.status.actionStatus.isEmpty { Text(controller.status.actionStatus) }
-            LabeledContent("Processed / translated", value: "\(controller.status.processed) / \(controller.status.translated)")
-            LabeledContent("最大觀測處理時間", value: String(format: "%.2f µs", controller.status.maxMicroseconds))
-            Text("此時間不含完整 OS／App 延遲，不代表端到端驗收。")
-                .font(.caption).foregroundStyle(.secondary)
-            Toggle("短期規則診斷（5 分鐘，僅記憶體，最多 128 筆）",
-                   isOn: Binding(get: { controller.diagnosticsEnabled }, set: { controller.setDiagnostics($0) }))
-            List(controller.status.diagnostics) { record in
-                HStack {
-                    Text(record.rule)
-                    Text(record.application).foregroundStyle(.secondary)
-                    Spacer()
-                    Text(String(format: "%.2f µs", record.microseconds)).monospacedDigit()
-                }
+        Form {
+            Section("目前判定") {
+                Text("\(controller.context.displayName) · \(controller.context.mode.title)").font(.headline)
+                Text(controller.context.bundleID).textSelection(.enabled)
+                explanation("這是目前前景 App 與實際套用的模式；Remote 表示按 App 規則穿透，不表示已確認遠端連線。開啟此設定視窗時，WindowsMacBridge 自己會保持穿透。")
+                LabeledContent("輸入方式", value: controller.settings.inputBackend.title)
+                LabeledContent("Event Tap", value: controller.status.tapActive ? "Active" : "Inactive")
+                explanation("EventTap 模式要看到 Active 才能攔截快捷鍵。HID 模式不使用 EventTap，請回一般頁查看 Helper／Driver 與接管數。")
+                LabeledContent("Secure Input", value: controller.status.secureInput ? "ON — 已停止翻譯" : "OFF")
+                explanation("macOS 的密碼或安全輸入環境啟用時，程式尊重安全邊界並停止翻譯；離開後等待按鍵放開再恢復。")
+                LabeledContent("鍵盤範圍", value: controller.settings.keyboardScope.title)
+                if let issue = controller.status.backendIssue { Text(issue).foregroundStyle(.orange) }
+                if let rule = controller.hidStatus.lastRule { LabeledContent("HID 最近命中規則", value: rule) }
+                if !controller.status.actionStatus.isEmpty { Text(controller.status.actionStatus) }
             }
-            Text("不讀取輸入文字或剪貼簿內容、不寫按鍵紀錄、不上傳。Finder 只使用剪貼簿版本及類型；普通打字不產生逐鍵診斷。")
-                .font(.caption).foregroundStyle(.secondary)
-        }.padding()
+            Section("處理計數與延遲") {
+                LabeledContent("處理事件／翻譯事件", value: "\(controller.status.processed)／\(controller.status.translated)")
+                explanation("處理數包含引擎接收到的事件，翻譯數是實際套用規則的事件。數字不含輸入文字；在穿透 App 中增加處理數但沒有翻譯屬正常。")
+                LabeledContent("最大觀測處理時間", value: String(format: "%.2f µs", controller.status.maxMicroseconds))
+                explanation("只量測引擎 callback 的最大處理時間，1 ms = 1000 µs；不包含完整 macOS／App／遠端網路延遲，也不等於端到端速度。")
+            }
+            Section("短期規則診斷") {
+                Toggle("啟用 5 分鐘診斷", isOn: Binding(get: { controller.diagnosticsEnabled }, set: { controller.setDiagnostics($0) }))
+                explanation("預設關閉。開啟後最多 128 筆規則 ID、App 與處理時間只存於記憶體，5 分鐘後自動關閉；關閉時清除。普通打字不會逐鍵記錄。HID 模式只提供計數與最近命中規則。")
+                ForEach(controller.status.diagnostics) { record in
+                    HStack {
+                        Text(record.rule)
+                        Text(record.application).foregroundStyle(.secondary)
+                        Spacer()
+                        Text(String(format: "%.2f µs", record.microseconds)).monospacedDigit()
+                    }
+                }
+                explanation("所有鍵盤處理留在本機。不讀取或保存輸入文字、密碼、剪貼簿內容，也不上傳事件；Finder 只讀取剪貼簿版本與類型。")
+            }
+        }.formStyle(.grouped)
     }
 }

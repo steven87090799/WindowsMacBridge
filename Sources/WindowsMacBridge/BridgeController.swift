@@ -21,6 +21,7 @@ import HIDProtocol
     @Published var pausedUntilRestart = false
     @Published var diagnosticsEnabled = false
     @Published var configurationError: String?
+    @Published var presetNotice: String?
     @Published var targetApp: ApplicationContext?
     @Published var hidStatus = HIDStatus()
     private let engine = InputEngine()
@@ -73,7 +74,7 @@ import HIDProtocol
     func start() {
         inputSources.onChange = { [weak self] status in
             guard let self else { return }
-            sourceStatus = status
+            if sourceStatus != status { sourceStatus = status }
             refreshLayout()
             onStatusChange?()
         }
@@ -118,17 +119,20 @@ import HIDProtocol
     }
     private func tick() {
         let previousPassThrough = status.manualPassThrough
-        status = engine.snapshot()
+        var next = engine.snapshot()
         if settings.inputBackend == .deviceHID {
-            hidStatus = hid.status
-            status.manualPassThrough = hidStatus.manualPassThrough
-            status.emergencyPaused = hidStatus.emergencyPaused
-            status.secureInput = hidStatus.secureInput
-            status.processed = hidStatus.processed; status.translated = hidStatus.translated
-            status.maxMicroseconds = hidStatus.maxMicroseconds
-            status.actionStatus = hid.actionStatus
-            status.backendIssue = nil
+            if hidStatus != hid.status { hidStatus = hid.status }
+            next.manualPassThrough = hidStatus.manualPassThrough
+            next.emergencyPaused = hidStatus.emergencyPaused
+            next.secureInput = hidStatus.secureInput
+            next.processed = hidStatus.processed; next.translated = hidStatus.translated
+            next.maxMicroseconds = hidStatus.maxMicroseconds
+            next.actionStatus = hid.actionStatus
+            next.backendIssue = nil
         }
+        // Publishing identical snapshots wakes SwiftUI even when no window is visible.
+        let changed = status != next
+        if changed { status = next }
         if previousPassThrough != status.manualPassThrough {
             inputSources.updateProtection(sourceSuspension(for: context))
         }
@@ -138,7 +142,7 @@ import HIDProtocol
             pausedUntilRestart = true; pauseUntil = nil; publish()
         }
         lastEmergency = status.emergencyPaused
-        onStatusChange?()
+        if changed { onStatusChange?() }
     }
     private func refreshLayout() {
         let current = KeyboardLayoutResolver.current(allowIME: settings.allowIMEShortcuts)
@@ -199,6 +203,14 @@ import HIDProtocol
         configurationError = store.errorMessage
         if value { resume() } else { publish() }
     }
+    func applyRecommendedPreset() {
+        store.applyRecommendedPreset()
+        settings = store.settings; configurationError = store.errorMessage
+        if let error = store.errorMessage { presetNotice = error; publish(); return }
+        refreshApplication()
+        resume()
+        presetNotice = "已套用建議預設並恢復引擎。"
+    }
     func setKeyboardScope(_ value: KeyboardScope) {
         store.update { $0.keyboardScope = value }; settings = store.settings
         configurationError = store.errorMessage; publish()
@@ -214,6 +226,11 @@ import HIDProtocol
         NSWorkspace.shared.selectFile(HIDService.root + "/BridgeHIDHelper.app", inFileViewerRootedAtPath: HIDService.root)
     }
     func requestHIDListening() { hid.requestInputAccess() }
+    func openUserGuide() {
+        if let url = Bundle.main.url(forResource: "UserGuide", withExtension: "md") {
+            NSWorkspace.shared.open(url)
+        }
+    }
     func setFinderEnabled(_ value: Bool) {
         store.update { $0.finderEnabled = value }; settings = store.settings
         configurationError = store.errorMessage; publish()
@@ -251,7 +268,8 @@ import HIDProtocol
         panel.canChooseFiles = true; panel.canChooseDirectories = false
         panel.allowedContentTypes = [.applicationBundle]
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
-        panel.prompt = "加入原樣通過清單"
+        panel.prompt = "加入 App 規則"
+        panel.message = "加入後先使用原樣通過；回到 App 規則頁選擇要套用的 Profile。"
         if panel.runModal() == .OK, let url = panel.url, let id = Bundle(url: url)?.bundleIdentifier {
             assign(.disabled, bundleID: id)
         }

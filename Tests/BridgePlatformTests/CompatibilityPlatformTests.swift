@@ -33,7 +33,7 @@ struct CompatibilityPlatformTests {
         #expect(!KeyboardLayoutResolver.supports(sourceID: "unknown", asciiLayoutID: "com.apple.keylayout.ABC", allowIME: true))
         #expect(!KeyboardLayoutResolver.supports(sourceID: "com.apple.inputmethod.TCIM", asciiLayoutID: "com.apple.keylayout.Dvorak", allowIME: true))
     }
-    @Test func legacySettingsDecodeAndNewScopeFailsClosed() throws {
+    @Test func legacySettingsDecodeAndNewScopeRoundTrips() throws {
         let old = Data(#"{"schemaVersion":1,"enabled":true,"overrides":{"com.apple.Terminal":"terminal"}}"#.utf8)
         let settings = try JSONDecoder().decode(BridgeSettings.self, from: old)
         #expect(settings.enabled)
@@ -41,8 +41,8 @@ struct CompatibilityPlatformTests {
         #expect(!settings.finderEnabled)
         #expect(!settings.allowIMEShortcuts)
         let fresh = BridgeSettings()
-        #expect(fresh.keyboardScope == .builtInAndApple834)
-        #expect(!fresh.enabled)
+        #expect(fresh.keyboardScope == .allKeyboards)
+        #expect(fresh.enabled)
         let restored = try JSONDecoder().decode(BridgeSettings.self, from: JSONEncoder().encode(fresh))
         #expect(restored.keyboardScope == fresh.keyboardScope)
     }

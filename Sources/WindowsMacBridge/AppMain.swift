@@ -4,25 +4,37 @@ import SwiftUI
 import BridgePlatform
 import InputSourceSupport
 
-@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     private var controller: BridgeController!
     private var item: NSStatusItem!
     private var settingsWindow: NSWindow?
+    private var lastTooltip: String?
+    private var lastActive: Bool?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         installMainMenu()
         controller = BridgeController()
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.title = "W唯"
+        item.button?.title = ""
+        item.button?.image = BrandAssets.active
+        item.button?.setAccessibilityLabel("WindowsMacBridge")
         let menu = NSMenu(); menu.autoenablesItems = false; menu.delegate = self; item.menu = menu
         controller.onStatusChange = { [weak self] in
             guard let self else { return }
-            item.button?.toolTip = controller.summary + " · " + controller.sourceStatus.summary
-            item.button?.title = controller.settings.enabled && !controller.paused && !controller.status.emergencyPaused ? "W唯" : (controller.sourceStatus.enabled ? "唯" : "WⅡ")
+            updateStatusItem()
         }
         controller.start()
         if !AXIsProcessTrusted() || !controller.settings.enabled { showSettings() }
+    }
+    private func updateStatusItem() {
+        let tooltip = controller.summary + " · " + controller.sourceStatus.summary
+        if tooltip != lastTooltip { item.button?.toolTip = tooltip; lastTooltip = tooltip }
+        let active = controller.settings.enabled && !controller.paused && !controller.status.emergencyPaused
+        if active != lastActive {
+            item.button?.image = active ? BrandAssets.active : BrandAssets.paused
+            lastActive = active
+        }
     }
     func applicationWillTerminate(_ notification: Notification) { controller?.stop() }
     private func installMainMenu() {
@@ -52,6 +64,13 @@ import InputSourceSupport
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showSettings(); return true
+    }
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === settingsWindow else { return }
+        // A hidden NSHostingView still observes @Published values and performs layout.
+        window.contentView = nil
+        window.delegate = nil
+        settingsWindow = nil
     }
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
@@ -100,12 +119,13 @@ import InputSourceSupport
     @objc private func quit() { NSApp.terminate(nil) }
     @objc private func showSettings() {
         if settingsWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 620),
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 840, height: 740),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
                                   backing: .buffered, defer: false)
             window.title = "WindowsMacBridge"
             window.contentView = NSHostingView(rootView: SettingsView(controller: controller))
             window.isReleasedWhenClosed = false
+            window.delegate = self
             window.center(); settingsWindow = window
         }
         settingsWindow?.makeKeyAndOrderFront(nil)
@@ -118,7 +138,8 @@ import InputSourceSupport
         if CommandLine.arguments.contains("--self-check") {
             do {
                 let registry = try ApplicationRegistry()
-                print("WindowsMacBridge 0.4.0 HID preview: bundled registry loaded (\(registry.entries.count) entries); no event tap or capture started.")
+                let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development"
+                print("WindowsMacBridge \(version): bundled registry loaded (\(registry.entries.count) entries); no event tap or capture started.")
             } catch {
                 print("WindowsMacBridge self-check failed: registry unavailable.")
                 exit(1)

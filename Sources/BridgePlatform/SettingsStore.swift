@@ -1,15 +1,23 @@
 import Foundation
 import BridgeCore
 
-public struct BridgeSettings: Codable, Sendable {
+public struct BridgeSettings: Codable, Equatable, Sendable {
     public var schemaVersion = 1
-    public var enabled = false
-    public var overrides: [String: ApplicationMode] = [:]
-    public var keyboardScope: KeyboardScope = .builtInAndApple834
+    public var enabled = true
+    // This preset is for chat/text use. Remove it to restore Codex's IDE protection.
+    public var overrides: [String: ApplicationMode] = ["com.openai.codex": .macOS]
+    public var keyboardScope: KeyboardScope = .allKeyboards
     public var finderEnabled = false
-    public var allowIMEShortcuts = false
-    public var inputBackend: InputBackend = .deviceHID
+    public var allowIMEShortcuts = true
+    public var inputBackend: InputBackend = .eventTap
     public init() {}
+    public static var safeFallback: Self {
+        var settings = Self()
+        settings.enabled = false
+        settings.overrides = [:]
+        settings.allowIMEShortcuts = false
+        return settings
+    }
     private enum CodingKeys: String, CodingKey {
         case schemaVersion, enabled, overrides, keyboardScope, finderEnabled, allowIMEShortcuts, inputBackend
     }
@@ -18,7 +26,7 @@ public struct BridgeSettings: Codable, Sendable {
         schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
         enabled = try values.decode(Bool.self, forKey: .enabled)
         overrides = try values.decode([String: ApplicationMode].self, forKey: .overrides)
-        // Existing global-shortcut users retain their scope. New installs request device isolation.
+        // Stored preferences, including explicit pass-through overrides, always win.
         keyboardScope = try values.decodeIfPresent(KeyboardScope.self, forKey: .keyboardScope) ?? .allKeyboards
         finderEnabled = try values.decodeIfPresent(Bool.self, forKey: .finderEnabled) ?? false
         allowIMEShortcuts = try values.decodeIfPresent(Bool.self, forKey: .allowIMEShortcuts) ?? false
@@ -38,7 +46,7 @@ public struct BridgeSettings: Codable, Sendable {
                 guard loaded.schemaVersion == 1 else { throw CocoaError(.coderReadCorrupt) }
                 settings = loaded
             } catch {
-                settings = BridgeSettings()
+                settings = .safeFallback
                 errorMessage = "設定無法讀取，已使用停用的安全預設；原資料未覆寫。"
             }
         } else { settings = BridgeSettings() }
@@ -51,5 +59,14 @@ public struct BridgeSettings: Codable, Sendable {
             defaults.set(data, forKey: "bridge.settings.v1")
             settings = next; errorMessage = nil
         } catch { errorMessage = "設定儲存失敗。" }
+    }
+    /// Preserve app-specific choices; reapply only the shortcut preset and Codex chat rule.
+    public func applyRecommendedPreset() {
+        update {
+            let existingOverrides = $0.overrides
+            $0 = BridgeSettings()
+            $0.overrides.merge(existingOverrides) { _, existing in existing }
+            $0.overrides["com.openai.codex"] = .macOS
+        }
     }
 }

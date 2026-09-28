@@ -1,10 +1,18 @@
 # WindowsMacBridge
 
-Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.4.0 HID 整合測試版，尚待實機驗收。** macOS 14+；支援裝置 HID 後端與 CGEventTap 快捷鍵預覽。
+Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.4.1 設定與圖示測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
 
 主專案是這個 repository；`vchewing-input-helper` 已移入 `InputSourceCore` 與 `InputSourceSupport`，不需同時執行兩個 App。[整合與遷移](Docs/ProjectIntegration.md)。
 
-## 0.4 HID 整合測試版
+## 0.4.1 快速開始
+
+新安裝預設啟用 Windows 快捷鍵、EventTap／所有鍵盤、底層 ABC／U.S. 的中文／唯音快捷鍵，以及 Codex 的聊天／文字 Profile。Terminal、其他 IDE、Remote、VM、Game 保留原按鍵；Finder 加強、唯音守護、切換快捷鍵及登入啟動預設關閉。更新保留已存設定，可從一般頁按「套用建議預設」。
+
+App 改用黑色鍵盤／雙向箭頭圖示，Menu Bar 不再顯示文字；暫停以雙直線表示。所有設定提供可見說明，另附 [完整操作說明](Resources/UserGuide.md)。設定視窗關閉會釋放 SwiftUI 內容，狀態沒變時不重新發布快照。
+
+解壓、將 App 放進應用程式、開啟並授予輔助使用，即可測一般快捷鍵；**一般 EventTap 使用不需 Install.command 或 Driver**。Codex 預設針對不用內建終端機的用法；若要使用終端機，改回 IDE 或移除該規則。
+
+## 進階 HID 整合測試
 
 App 已接上驗證身分的 XPC、指定 IOHIDDevice 擷取與官方 VirtualHID 輸出。下載包包含 App、helper、官方已公證的 Driver 套件、安裝／停止／移除工具。App/helper 仍是未公證的 ad-hoc 開發版，尚待實體鍵盤與遠端驗收，不能宣稱完整替代完成。
 
@@ -13,7 +21,7 @@ App 已接上驗證身分的 XPC、指定 IOHIDDevice 擷取與官方 VirtualHID
 - Terminal／IDE／Remote／VM／Game／Disabled 的 HID 事件原樣通過；保留右 Option+P 與緊急暫停。不同 descriptor、Caps Lock／Globe／IME、Remote Client 仍需逐項驗收。
 - 與唯音／ABC 輸入法守護整合；CGEventTap 預覽後端可另選，兩個後端不會同時翻譯。
 
-安裝與實機檢查：[READ-ME-FIRST](Resources/Installer/READ-ME-FIRST.md)。接線、授權與驗收邊界：[HIDIntegration](Docs/HIDIntegration.md)。原始 78 規則與 upstream 研究：[KarabinerReplacement](Docs/KarabinerReplacement.md)。新安裝預設停用，不會在下載／建置時接管鍵盤。
+安裝與實機檢查：[READ-ME-FIRST](Resources/Installer/READ-ME-FIRST.md)。接線、授權與驗收邊界：[HIDIntegration](Docs/HIDIntegration.md)。原始 78 規則與 upstream 研究：[KarabinerReplacement](Docs/KarabinerReplacement.md)。下載／建置不會啟動引擎；HID 需使用者另行安裝及選擇，不能宣稱完整取代 Karabiner。
 
 ## 建置與執行
 
@@ -36,7 +44,7 @@ open "$(cat build/APP_PATH.txt)"
 "$(cat build/APP_PATH.txt)/Contents/MacOS/WindowsMacBridge" --diagnose-backend
 ```
 
-Windows 快捷鍵、唯音守護、輸入法切換键預設停用。唯音功能使用 TIS 與 Carbon，不需要 Accessibility，且需先安裝唯音。若 VChewingGuard 還在執行，輸入法頁會顯示衝突，可從頁面正常結束舊版，並於系統設定停用舊登入項目。
+Windows 快捷鍵預設啟用；唯音守護、輸入法切換鍵預設停用。唯音功能使用 TIS 與 Carbon，不需要 Accessibility，且需先安裝唯音。若 VChewingGuard 還在執行，輸入法頁會顯示衝突，可從頁面正常結束舊版，並於系統設定停用舊登入項目。
 
 Windows 翻譯需於 **系統設定 → 隱私權與安全性 → 輔助使用** 授權 `.app`；Input Monitoring 有獨立診斷，不會反覆要求權限。打包預設 ad-hoc 簽署，未公證；固定路徑和正式 Developer ID 簽署仍是正式發佈要求。
 

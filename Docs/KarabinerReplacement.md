@@ -14,7 +14,7 @@
 - #3：集中增加 Remote bundle regex、executable path fallback、瀏覽器與 IDE 排除清單；使用者明確 override 仍有優先權。
 - 唯音／其他中文 IME 可選擇實體快捷鍵模式，要求底層 ASCII layout 為 ABC/U.S.。尚未驗證組字中的行為，預設關閉，不宣稱可判斷 composition。
 
-這些是「所有鍵盤的快捷鍵預覽」，並非原 JSON 的裝置範圍等價。新安裝預設選擇使用者要求的內建鍵盤範圍；由於後端尚不具備該能力，引擎停止翻譯並顯示原因。既有 v0.2 使用者保留原全鍵盤範圍。預覽全鍵盤功能需由設定明確選擇。
+這些是「所有鍵盤的快捷鍵預覽」，並非原 JSON 的裝置範圍等價。0.4.1 新安裝預設啟用 EventTap／所有鍵盤，配合目前可用的外接鍵盤與 Codex 聊天用途；原有設定保留。內建限定、Fn／modifier／consumer 的替代仍需另裝並選 HID，不能把 EventTap 當成完整替代。
 
 ## 尚未連接到 macOS 的必要功能
 

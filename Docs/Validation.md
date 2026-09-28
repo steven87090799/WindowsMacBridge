@@ -71,3 +71,12 @@ Command Line Tools 會輸出其不存在的 Developer framework search-path 警�
 - 打包移到 Cache，避免同步資料夾重新加上 FinderInfo；installer snapshot 不複製 FinderInfo/resource fork。
 - 未執行管理員 installer、root XPC runtime 驗收、seize、Driver activation、真實 report delivery、TCC 撤權／硬體斷線／睡眠、Remote Client 或長期資源量測。App/helper ad-hoc 未公證；正式替代 gate 見 HIDIntegration。
 - Hosted CI 狀態以此 tag 所指 commit 的 Actions 為準，不以先前 0.3 的通過結果代替。
+
+# 0.4.1-preview.1 設定與圖示包（2026-09-28）
+
+- 主程式 82 tests、helper 11 tests 通過。新安裝啟用 EventTap／所有鍵盤、Codex macOS override 與底層 ABC／U.S. 的 IME 快捷鍵；Terminal／其他 IDE／Remote／VM 保持保護。舊設定及手動移除 Codex override 保留；損壞或未知 schema 安全停用且不覆寫原資料。
+- release App/helper、CLI self-check、strict codesign、plist、shell syntax 與 git diff whitespace 通過。解壓 ZIP 的 payload SHA256、controller pin、版本、ICNS／兩個 Menu Bar template 圖示及 UserGuide 檔案皆驗證通過。
+- ZIP SHA256：`4b3d2cec978f3594a5ad9dba8ae86504f2678a3ed0b50492eea2869c8b51961e`；大小 5,024,406 bytes。
+- macOS 27.0 GUI smoke：四個分頁可開啟、一般／App 規則排版已檢視，套用建議預設後 IME 開關 ON、Codex 為 Default macOS。新簽章 App 尚未重新取得 TCC，Event Tap Inactive、事件計數 0；不是實體 Ctrl+C／V 驗收。
+- 關閉設定視窗後可見視窗數為 0；20.01 秒短期量測 CPU 約單核心 0.1%，RSS 162,784 → 149,552 KiB。當時未授權、tap inactive、唯音守護停用；此數據不能代表啟用後的長期 CPU、實體記憶體 footprint 或鍵盤延遲。
+- 未安裝或啟用 root helper／Driver，也未進行 HID 擷取、遠端 Client、中文組字／候選或硬體實測。App/helper 仍為 ad-hoc、未公證。HID 與完整替代驗收限制沿用前節。

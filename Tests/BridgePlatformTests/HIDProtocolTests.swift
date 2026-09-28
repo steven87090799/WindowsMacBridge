@@ -5,10 +5,11 @@ import BridgePlatform
 import HIDProtocol
 
 struct HIDProtocolTests {
-    @Test func newInstallIsDisabledHIDAndLegacySettingsPreserveEventTap() throws {
+    @Test func newInstallUsesChatPresetAndLegacySettingsPreserveEventTap() throws {
         let settings = BridgeSettings()
-        #expect(!settings.enabled); #expect(settings.inputBackend == .deviceHID)
-        #expect(settings.keyboardScope == .builtInAndApple834)
+        #expect(settings.enabled); #expect(settings.inputBackend == .eventTap)
+        #expect(settings.keyboardScope == .allKeyboards)
+        #expect(settings.overrides["com.openai.codex"] == .macOS)
         let legacy = Data(#"{"schemaVersion":1,"enabled":true,"overrides":{}}"#.utf8)
         let decoded = try JSONDecoder().decode(BridgeSettings.self, from: legacy)
         #expect(decoded.inputBackend == .eventTap); #expect(decoded.keyboardScope == .allKeyboards)

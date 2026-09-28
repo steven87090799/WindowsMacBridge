@@ -1,18 +1,27 @@
-# WindowsMacBridge 0.4.0 HID 整合測試版
+# WindowsMacBridge 0.4.1 設定與圖示測試版
 
 macOS 14+、Apple Silicon。唯音／ABC 守護與 Windows 快捷鍵在同一個 Menu Bar App。
 
 這個包已接上 App → 驗證身分的 XPC → 指定裝置擷取 → VirtualHID 輸出管線。**仍是待實機驗收的開發版，不能宣稱已完整取代 Karabiner。** App/helper 是 ad-hoc 簽章、未公證；只有包內原廠 VirtualHID 套件有 Developer ID 與 Apple 公證。請保留 Karabiner 安裝，先停用其相同映射再測試。
 
-## 安裝
+## 一般快捷鍵：最快開始
+
+1. 解壓 ZIP、結束舊版，將 `WindowsMacBridge.app` 放進「應用程式」並開啟。
+2. 在一般頁要求輔助使用，依 macOS 提示核准目前 App；權限不能由下載包自動套用。
+3. 新安裝預設啟用 EventTap／所有鍵盤，Codex 的聊天與文字輸入使用 Default macOS。舊設定會保留，要套用這組設定請按「套用建議預設」。
+4. 先在測試文件確認 Ctrl+C／X／V，再測 Codex。新版預設也開啟底層 ABC／U.S. 的中文／唯音快捷鍵；Terminal／Remote／VM／Game 保持穿透，Finder 檔案加強仍需另行開啟。
+
+普通快捷鍵不需執行 Install.command，不需 root helper 或 Driver。每個設定已有說明，完整操作及預設值見包內 `UserGuide.md`，設定頁也可開啟。只有需要 Fn／Control、Option／Command 與亮度鍵映射時，才進行下方進階安裝。
+
+## 進階 HID 安裝（選用）
 
 1. 解壓 ZIP；先從 Menu Bar 結束舊 WindowsMacBridge。完整資料夾保持在一起，不只拖出 App。
 2. 執行 `Install.command`，macOS 會要求管理員授權，安裝 App、root helper 與官方 VirtualHID 8.6.0。已有不同共用 Driver 版本時會停止，不會降版。開發版若被 Gatekeeper 阻擋，請使用系統提供的「仍要打開」；安裝器不關閉 Gatekeeper／SIP。
 3. 依官方 Manager／macOS 提示核准 Driver；系統要求重啟時先重啟。需要再要求啟用，可執行 `ActivateDriver.command`。
 4. App 設定 → 一般與權限：選「指定鍵盤 HID 後端」，要求 App 的輔助使用、helper 的輸入監控。若需手動加入：系統設定 → 隱私權與安全性 → 輸入監控 → `+`，用 ⌘⇧G 選擇 `/Library/Application Support/WindowsMacBridge/BridgeHIDHelper.app`。更新後若權限失效，移除舊授權再加入新版本。
-5. 確認 Helper／VirtualHID 顯示 Ready、啟用 Windows 快捷鍵，放開所有按鍵。Finder／中文 IME 功能需各別開啟。唯音輸入法本體仍需另行安裝。
+5. 確認 Helper／VirtualHID 顯示 Ready、啟用 Windows 快捷鍵，放開所有按鍵。Finder 功能需另行開啟；中文 IME 設定保留你的選擇，新安裝為開啟。唯音輸入法本體仍需另行安裝。
 
-新安裝預設不擷取鍵盤。既有設定保留原先 EventTap 後端，請明確切到 HID。未 Ready、未授權、裝置描述不支援、Secure Input、失去前景 session 或控制 App 心跳逾時，均停止擷取。沒有適用鍵盤時會顯示原因，不會套用到所有外接鍵盤。
+新安裝預設 EventTap，不擷取實體裝置；既有設定保留。HID 需明確選擇且僅支援指定鍵盤。未 Ready、未授權、裝置描述不支援、Secure Input、失去前景 session 或控制 App 心跳逾時，均停止擷取。沒有適用鍵盤時會顯示原因，不會套用到所有外接鍵盤。
 
 ## 本版行為
 
@@ -22,7 +31,7 @@ macOS 14+、Apple Silicon。唯音／ABC 守護與 Windows 快捷鍵在同一個
 - 本機切入遠端若正按住按鍵，先釋放舊虛擬輸出並交回實體鍵盤。返回本機時等所有實體鍵放開才再次接管；不把舊的 Command 持有搬進遠端。前景通知與鍵盤仍非原子同步。
 - 手動穿透涵蓋 Fn、consumer 與所有本機動作。Menu Bar 暫停／結束會釋放擷取。
 - Finder 剪下只記住剪貼簿 changeCount／類型，不讀取內容，移動仍由 Finder 執行；不能確認移動成功。
-- 不保存普通打字、剪貼簿、密碼、OTP；不網路上傳鍵盤資料。HID 診斷只顯示計數、最大 callback 處理时间及最近命中規則 ID；不是逐鍵紀錄。
+- 不保存普通打字、剪貼簿、密碼、OTP；不網路上傳鍵盤資料。HID 診斷只顯示計數、最大 callback 處理時間及最近命中規則 ID；不是逐鍵紀錄。
 
 ## 停止與移除
 
@@ -36,7 +45,7 @@ macOS 14+、Apple Silicon。唯音／ABC 守護與 Windows 快捷鍵在同一個
 
 另外測 Fn／Globe 與輸入法切換、亮度增加鍵、Caps Lock 中文切換、中文組字、外接鍵盤不受影響、睡眠／喚醒、拔除／重連、撤權、helper／App 強制結束、按住修飾鍵切入遠端。ANSI／ISO／JIS、Bluetooth、複合 consumer 服務、driver 接管時的 Caps Lock 狀態／LED、端到端延遲與長期 CPU／記憶體均未完成實機驗收。
 
-本版已通過 77 項主程式與 11 項 helper 離線測試；含 120,000 次 HID 引擎事件與 100,000 次 report 編碼。測試並未實際安裝 root 服務、接管你的键盤或量測長期背景資源。
+本版已通過 82 項主程式與 11 項 helper 離線測試；含新安裝預設、舊設定保留、損壞設定安全停用、120,000 次 HID 引擎事件與 100,000 次 report 編碼。離線測試不代表實體接管或長期背景驗收。
 
 官方 SDK / Driver：
 https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice/tree/ba98de7fae2d529b9debe82890765dc66246f4ff

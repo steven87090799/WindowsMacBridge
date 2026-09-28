@@ -9,12 +9,16 @@ bridge_sdk="$bridge_root/Tools/HIDBackend/SDK"
 task_root="$bridge_root"
 source "$bridge_root/scripts/build-environment.sh"
 # Signed bundles stay outside file-provider/synced folders which may reattach FinderInfo.
-bridge_output="$task_scratch/Artifacts/Packages/WindowsMacBridge-0.4.0-preview.1-macos-arm64"
+bridge_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$bridge_app/Contents/Info.plist")"
+bridge_release="${BRIDGE_RELEASE_VERSION:-$bridge_version-preview.1}"
+[[ "$bridge_release" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]] || { echo 'Invalid release version.' >&2; exit 1; }
+bridge_output="$task_scratch/Artifacts/Packages/WindowsMacBridge-$bridge_release-macos-arm64"
 [[ ! -e "$bridge_output" ]] || { echo 'Package output exists; use a fresh version/path.' >&2; exit 1; }
 mkdir -p "$bridge_output/Driver" "$bridge_output/BridgeHIDHelper.app/Contents/MacOS" "$bridge_output/Licenses"
 ditto --noextattr --norsrc "$bridge_app" "$bridge_output/WindowsMacBridge.app"
 cp "$bridge_helper" "$bridge_output/BridgeHIDHelper.app/Contents/MacOS/BridgeHIDHelper"
 cp Resources/Installer/HIDHelper-Info.plist "$bridge_output/BridgeHIDHelper.app/Contents/Info.plist"
+cp Resources/UserGuide.md "$bridge_output/UserGuide.md"
 ditto Resources/Licenses "$bridge_output/Licenses"
 # Keep SDK/vendor header copyright and license notices with distributed binaries.
 ditto "$bridge_sdk/include" "$bridge_output/Licenses/SDKHeaders"

@@ -39,7 +39,7 @@ public struct HIDConfiguration: Codable, Sendable {
         .init(processID: processID, bundleID: bundleID, mode: mode, isBrowser: isBrowser)
     }
 }
-public struct HIDStatus: Codable, Sendable {
+public struct HIDStatus: Codable, Equatable, Sendable {
     public var version = HIDService.protocolVersion
     public var state = "未連線"
     public var driverReady = false

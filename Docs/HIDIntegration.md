@@ -19,7 +19,7 @@ WindowsMacBridge Menu Bar / 唯音協調器 (console user)
 
 主 App 不需要 root 執行。下載包含固定版官方 Driver/daemon package；自己的 helper 使用 root launchd。官方套件的 install、activation、daemon 必須依 [原廠使用流程](https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice/tree/ba98de7fae2d529b9debe82890765dc66246f4ff#usage) 完成。若已有不同共用 package 版本，安裝器停止，不降版。
 
-`InputBackend.deviceHID` 是新設定預設，enabled=false。舊設定缺少後端欄位時保留 EventTap。HID 僅支援指定鍵盤範圍；不能因找不到目標退回全鍵盤。選 HID 時 EventTap 的翻譯與控制均 disabled。未啟用不建立 VirtualHID client；helper 可回報 metadata/status。
+0.4.1 新設定預設 `InputBackend.eventTap`、enabled=true、allKeyboards，並為 Codex 聊天／文字預設 macOS override；權限未授予仍不翻譯，損壞設定使用停用 fallback。所有已存設定保留，舊設定缺少後端欄位時保留 EventTap。HID 僅支援指定鍵盤範圍；不能因找不到目標退回全鍵盤。選 HID 時 EventTap 的翻譯與控制均 disabled。未啟用不建立 VirtualHID client；helper 可回報 metadata/status。
 
 ## 類別責任與 IPC
 
