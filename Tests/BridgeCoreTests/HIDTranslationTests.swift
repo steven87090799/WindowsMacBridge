@@ -87,6 +87,53 @@ struct HIDTranslationTests {
         _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)
         #expect(output(&e).keyCount == 0)
     }
+    @Test func interleavedTwoKeyboardTransitionsEventuallyReleaseEverything() {
+        var e = engine()
+        let usages: [UInt16] = [0xe0, 0xe1, 0xe2, 6, 25, 0x2b]
+        var held = Array(repeating: Array(repeating: false, count: usages.count), count: 2)
+        var seed: UInt64 = 0x0ddc0ffeebadf00d
+        func random() -> UInt64 {
+            seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return seed
+        }
+        var report = HIDOutput()
+        for step in 0..<100_000 {
+            let choice = random() % 100
+            if choice < 85 {
+                let device = Int(random() % 2), key = Int(random() % UInt64(usages.count))
+                held[device][key].toggle()
+                _ = e.observe(device: UInt64(device + 1), page: 7, usage: usages[key], down: held[device][key])
+            } else if choice < 92 {
+                let mode: ApplicationMode = random() & 1 == 0 ? .macOS : .remoteWindows
+                e.configure(context: .init(processID: mode == .macOS ? 10 : 20, mode: mode),
+                            layoutSupported: true, finderEnabled: false)
+            } else if choice < 97 {
+                let device = Int(random() % 2)
+                e.disconnect(UInt64(device + 1))
+                held[device] = Array(repeating: false, count: usages.count)
+                let registered = e.register(UInt64(device + 1))
+                #expect(registered)
+            } else {
+                e.restart()
+            }
+            let rendered = e.render(into: &report)
+            #expect(rendered)
+            if step % 251 == 0 {
+                #expect(report.keyCount <= 32)
+                let keys = Array(report.keys.prefix(report.keyCount))
+                #expect(Set(keys).count == keys.count)
+            }
+        }
+        for device in 0..<2 {
+            for key in usages.indices where held[device][key] {
+                _ = e.observe(device: UInt64(device + 1), page: 7, usage: usages[key], down: false)
+            }
+        }
+        let rendered = e.render(into: &report)
+        #expect(rendered)
+        #expect(report.isEmpty)
+        #expect(!e.faulted)
+    }
     @Test func altTabKeepsCommandUntilAltRelease() {
         var e = engine()
         _ = e.observe(device: 1, page: 7, usage: 0xe2, down: true)
