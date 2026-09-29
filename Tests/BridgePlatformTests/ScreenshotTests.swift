@@ -200,7 +200,8 @@ struct ScreenshotShortcutTests {
         #expect(pasteboard.data(forType: NSPasteboard.PasteboardType("public.png")) == data)
         #expect(NSImage(pasteboard: pasteboard) != nil)
         #expect(pasteboard.data(forType: NSPasteboard.PasteboardType("public.png")) != nil)
-        #expect(pasteboard.data(forType: .tiff) != nil)
+        // AppKit can synthesize TIFF on request; this item only stores one PNG payload.
+        #expect(pasteboard.pasteboardItems?.first?.types == [NSPasteboard.PasteboardType("public.png")])
         let changeCount = pasteboard.changeCount
         #expect(ScreenshotClipboard.copyImage(at: path.appendingPathExtension("missing"), to: pasteboard) == .unreadableImage)
         #expect(pasteboard.changeCount == changeCount)
@@ -218,6 +219,26 @@ struct ScreenshotShortcutTests {
         defer { pasteboard.releaseGlobally() }
         #expect(ScreenshotClipboard.copyImage(at: path, to: pasteboard) == .success)
         #expect(pasteboard.data(forType: NSPasteboard.PasteboardType("public.png")) != nil)
+    }
+
+    @Test func tiffAndPdfScreenshotFormatsStillProducePasteablePNG() throws {
+        let image = NSImage(size: NSSize(width: 8, height: 8))
+        image.lockFocus()
+        NSColor.blue.setFill()
+        NSRect(x: 0, y: 0, width: 8, height: 8).fill()
+        image.unlockFocus()
+        let tiff = try #require(image.tiffRepresentation)
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 8, height: 8))
+        let pdf = view.dataWithPDF(inside: view.bounds)
+        for (suffix, data) in [("tiff", tiff), ("pdf", pdf)] {
+            let path = FileManager.default.temporaryDirectory.appendingPathComponent("BridgeScreenshot-\(UUID().uuidString).\(suffix)")
+            defer { try? FileManager.default.removeItem(at: path) }
+            try data.write(to: path)
+            let pasteboard = NSPasteboard(name: .init("BridgeScreenshot-\(UUID().uuidString)"))
+            defer { pasteboard.releaseGlobally() }
+            #expect(ScreenshotClipboard.copyImage(at: path, to: pasteboard) == .success, "format: \(suffix)")
+            #expect(NSImage(pasteboard: pasteboard) != nil, "format: \(suffix)")
+        }
     }
 
     @Test func backgroundImagePreparationPublishesOnlyImmutableImageData() async throws {

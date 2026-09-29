@@ -23,9 +23,9 @@
 | #4 | 未完成 | Event Tap 沒有單一實體鍵盤身分，不能以 keyboardType 代替 VID/PID |
 | #5–10 | 核心 ledger 已測試；沒有硬體輸入／輸出接線 | Fn/左 Ctrl、左右 Option/Command 交換需要裝置後端與虛擬 HID |
 | #77 | 未完成 | consumer brightness usage 不在現有 Event Tap 的普通 key pipeline |
-| Alt+Tab | 未完成 | 原設定透過整鍵 Option/Command 交換產生；不能用孤立 Tab 改 flags 取代完整持有行為 |
+| Alt+Tab | 使用 macOS 原生切換器 | 實體 Alt 須輸出 Command；HID 本機模式依 Win 鍵配置映射修飾鍵並持有至放開。EventTap 不再攔截 Tab |
 
-`HIDDeviceInventory` 僅列出裝置 metadata，沒有 open/seize 或 input callback。`HIDModifierLedger`、`HIDCaptureGate` 是可測試的後端核心，不是假裝存在的 DriverKit adapter。`BackendCapabilities.eventTap.canReplaceRequestedProfile` 必定為 false。
+此段是 0.4.1 的歷史盤點；目前 helper 已有指定裝置 open／seize、VirtualHID 輸出與實際使用的 `HIDTranslationEngine`。未被執行路徑引用的舊 `HIDModifierLedger`／`HIDCaptureGate` 樣板已移除。`BackendCapabilities.eventTap.canReplaceRequestedProfile` 仍為 false。
 
 ## Finder 狀態與執行限制
 

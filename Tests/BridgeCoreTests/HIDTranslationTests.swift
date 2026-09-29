@@ -12,7 +12,7 @@ struct HIDTranslationTests {
         }
     }
     @Test func everyGeneralAndBrowserRuleProducesItsCompiledHIDOutput() {
-        for (rules, browser) in [(WindowsCompatibilityRules.general, false), (WindowsCompatibilityRules.browser, true)] {
+        for (rules, browser) in [(WindowsCompatibilityRules.general, false), (WindowsCompatibilityRules.browserCommandAlt, true)] {
             for rule in rules {
                 var e = engine(browser: browser)
                 for (flag, usage): (Modifiers, UInt16) in [(.control,0xe0),(.command,0xe3),(.option,0xe2),(.shift,0xe1)] {
@@ -31,24 +31,44 @@ struct HIDTranslationTests {
             }
         }
     }
-    private func engine(_ mode: ApplicationMode = .macOS, browser: Bool = false) -> HIDTranslationEngine {
-        var e = HIDTranslationEngine(); _ = e.register(1); _ = e.register(2)
-        e.configure(context: .init(processID: 10, bundleID: "test", mode: mode, isBrowser: browser), layoutSupported: true, finderEnabled: true)
+    private func engine(_ mode: ApplicationMode = .macOS, browser: Bool = false,
+                        windowsKeyModifier: WindowsKeyModifier = .option,
+                        builtIn: Bool = false, fnSwap: Bool = false) -> HIDTranslationEngine {
+        var e = HIDTranslationEngine(); _ = e.register(1, builtIn: builtIn); _ = e.register(2)
+        e.configure(context: .init(processID: 10, bundleID: "test", mode: mode, isBrowser: browser),
+                    layoutSupported: true, finderEnabled: true,
+                    windowsKeyModifier: windowsKeyModifier, macBookFnControlSwap: fnSwap)
         return e
     }
     private func output(_ e: inout HIDTranslationEngine) -> HIDOutput {
         var out = HIDOutput(); let ok = e.render(into: &out); #expect(ok); return out
     }
-    @Test func physicalControlCopyConsumesSwappedFnAndPairsRelease() {
+    @Test func externalControlCopyKeepsPlainControlUntilShortcut() {
         var e = engine()
         _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)
-        #expect(output(&e).fn)
+        #expect(output(&e).modifiers == 1)
         _ = e.observe(device: 1, page: 7, usage: 6, down: true)
         let down = output(&e); #expect(!down.fn); #expect(down.modifiers == 8); #expect(down.keys[0] == 6)
         _ = e.observe(device: 1, page: 7, usage: 6, down: false)
         #expect(output(&e).isEmpty)
         _ = e.observe(device: 1, page: 7, usage: 0xe0, down: false)
         #expect(output(&e).isEmpty)
+    }
+    @Test func macBookFnControlSwapAffectsOnlyTheBuiltInDevice() {
+        var e = engine(windowsKeyModifier: .command, builtIn: true, fnSwap: true)
+        _ = e.observe(device: 1, page: 0xff, usage: 3, down: true)
+        #expect(output(&e).modifiers == 1) // Built-in Fn becomes left Control.
+        _ = e.observe(device: 1, page: 7, usage: 6, down: true)
+        #expect(output(&e).modifiers == 8) // Fn+C becomes macOS Command+C.
+        _ = e.observe(device: 1, page: 7, usage: 6, down: false)
+        _ = e.observe(device: 1, page: 0xff, usage: 3, down: false)
+        #expect(output(&e).isEmpty)
+        _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)
+        #expect(output(&e).fn) // Built-in left Control becomes Fn.
+        _ = e.observe(device: 1, page: 7, usage: 0xe0, down: false)
+        _ = e.observe(device: 2, page: 7, usage: 0xe0, down: true)
+        let external = output(&e)
+        #expect(external.modifiers == 1 && !external.fn)
     }
     @Test func releasingShortcutModifierCannotLeaveOrResurrectPlainKey() {
         var e = engine()
@@ -59,7 +79,7 @@ struct HIDTranslationTests {
         #expect(output(&e).isEmpty)
         _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)
         let held = output(&e)
-        #expect(held.fn && held.keyCount == 0)
+        #expect(held.modifiers == 1 && held.keyCount == 0)
         _ = e.observe(device: 1, page: 7, usage: 6, down: false)
         _ = e.observe(device: 1, page: 7, usage: 0xe0, down: false)
         #expect(output(&e).isEmpty)
@@ -134,17 +154,60 @@ struct HIDTranslationTests {
         #expect(report.isEmpty)
         #expect(!e.faulted)
     }
-    @Test func altTabKeepsCommandUntilAltRelease() {
-        var e = engine()
-        _ = e.observe(device: 1, page: 7, usage: 0xe2, down: true)
-        for _ in 0..<4 {
-            _ = e.observe(device: 1, page: 7, usage: 0x2b, down: true)
-            #expect(output(&e).modifiers == 8)
-            _ = e.observe(device: 1, page: 7, usage: 0x2b, down: false)
-            #expect(output(&e).modifiers == 8)
+    @Test func nativeAppSwitcherUsesPhysicalAltForBothLayouts() {
+        for selected in WindowsKeyModifier.allCases {
+            var e = engine(windowsKeyModifier: selected)
+            let altUsage: UInt16 = selected == .option ? 0xe3 : 0xe2
+            _ = e.observe(device: 1, page: 7, usage: altUsage, down: true)
+            for _ in 0..<4 {
+                _ = e.observe(device: 1, page: 7, usage: 0x2b, down: true)
+                #expect(output(&e).modifiers == 8)
+                _ = e.observe(device: 1, page: 7, usage: 0x2b, down: false)
+                #expect(output(&e).modifiers == 8)
+            }
+            _ = e.observe(device: 1, page: 7, usage: altUsage, down: false)
+            #expect(output(&e).isEmpty)
         }
-        _ = e.observe(device: 1, page: 7, usage: 0xe2, down: false)
-        #expect(output(&e).isEmpty)
+    }
+    @Test func hidWinActionsAndAltF4FollowTheSelectedPhysicalModifier() {
+        for selected in WindowsKeyModifier.allCases {
+            var e = engine(windowsKeyModifier: selected)
+            let winUsage: UInt16 = selected == .option ? 0xe2 : 0xe3
+            let altUsage: UInt16 = selected == .option ? 0xe3 : 0xe2
+            _ = e.observe(device: 1, page: 7, usage: winUsage, down: true)
+            #expect(e.observe(device: 1, page: 7, usage: 8, down: true) == .system(.openFinder))
+            _ = e.observe(device: 1, page: 7, usage: 8, down: false)
+            _ = e.observe(device: 1, page: 7, usage: winUsage, down: false)
+            e.configure(context: .init(processID: 10, bundleID: "test", mode: .macOS),
+                        layoutSupported: true, finderEnabled: true, altF4Enabled: true,
+                        windowsKeyModifier: selected)
+            _ = e.observe(device: 1, page: 7, usage: altUsage, down: true)
+            #expect(e.observe(device: 1, page: 7, usage: 0x3d, down: true) == .window(.close))
+            _ = e.observe(device: 1, page: 7, usage: 0x3d, down: false)
+            _ = e.observe(device: 1, page: 7, usage: altUsage, down: false)
+            #expect(output(&e).isEmpty)
+        }
+    }
+    @Test func hidOptionalTextAndFinderDeleteRespectTheirToggles() {
+        var e = engine()
+        e.configure(context: .init(processID: 10, bundleID: "test", mode: .macOS),
+                    layoutSupported: true, finderEnabled: false, textNavigationEnabled: false)
+        _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)
+        _ = e.observe(device: 1, page: 7, usage: 0x50, down: true) // Ctrl+Left
+        #expect(e.lastRuleID == nil)
+        #expect(output(&e).modifiers == 1)
+        _ = e.observe(device: 1, page: 7, usage: 0x50, down: false)
+        _ = e.observe(device: 1, page: 7, usage: 0xe0, down: false)
+        e.configure(context: .init(processID: 10, bundleID: "com.apple.finder", mode: .macOS),
+                    layoutSupported: true, finderEnabled: true, finderPermanentDeleteEnabled: false)
+        _ = e.observe(device: 1, page: 7, usage: 0xe1, down: true)
+        #expect(e.observe(device: 1, page: 7, usage: 0x4c, down: true) == nil) // Shift+Delete
+        _ = e.observe(device: 1, page: 7, usage: 0x4c, down: false)
+        _ = e.observe(device: 1, page: 7, usage: 0xe1, down: false)
+        e.configure(context: .init(processID: 10, bundleID: "com.apple.finder", mode: .macOS),
+                    layoutSupported: true, finderEnabled: true, finderPermanentDeleteEnabled: true)
+        _ = e.observe(device: 1, page: 7, usage: 0xe1, down: true)
+        #expect(e.observe(device: 1, page: 7, usage: 0x4c, down: true) == .finder(.permanentDelete))
     }
     @Test func protectedProfilesPreserveCtrlFnAltAndBrightness() {
         for mode: ApplicationMode in [.terminal,.remoteWindows,.virtualMachine,.game,.ide,.disabled] {
@@ -175,7 +238,7 @@ struct HIDTranslationTests {
             _ = e.observe(device: device, page: 7, usage: 4, down: true)
         }
         e.disconnect(1)
-        let out = output(&e); #expect(out.keyCount == 1); #expect(out.modifiers == 8)
+        let out = output(&e); #expect(out.keyCount == 1); #expect(out.modifiers == 4)
         e.disconnect(2); #expect(output(&e).isEmpty)
     }
     @Test func brightnessAndManualToggleArePairedWithoutRecursion() {

@@ -3,7 +3,7 @@ import IOKit
 import BridgeCore
 
 public struct BridgeSettings: Codable, Equatable, Sendable {
-    public var schemaVersion = 3
+    public var schemaVersion = 4
     public var enabled = true
     // This preset is for chat/text use. Remove it to restore Codex's IDE protection.
     public var overrides: [String: ApplicationMode] = ["com.openai.codex": .macOS]
@@ -16,8 +16,6 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     public var winRunEnabled = false
     public var winSettingsEnabled = false
     public var winTaskViewEnabled = false
-    public var windowSwitcherEnabled = false
-    public var windowThumbnailsEnabled = false
     public var finderPermanentDeleteEnabled = false
     public var textNavigationEnabled = true
     public var altF4Enabled = false
@@ -34,7 +32,7 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     }
     private enum CodingKeys: String, CodingKey {
         case schemaVersion, enabled, overrides, keyboardScope, finderEnabled, allowIMEShortcuts, inputBackend, screenshotAutoCopy
-        case windowSwitcherEnabled, windowThumbnailsEnabled, finderPermanentDeleteEnabled, textNavigationEnabled, altF4Enabled, altF4QuitLastWindow
+        case finderPermanentDeleteEnabled, textNavigationEnabled, altF4Enabled, altF4QuitLastWindow
         case macBookFnControlSwap, windowsKeyModifier, winRunEnabled, winSettingsEnabled, winTaskViewEnabled
     }
     public init(from decoder: Decoder) throws {
@@ -52,8 +50,6 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         winRunEnabled = try values.decodeIfPresent(Bool.self, forKey: .winRunEnabled) ?? false
         winSettingsEnabled = try values.decodeIfPresent(Bool.self, forKey: .winSettingsEnabled) ?? false
         winTaskViewEnabled = try values.decodeIfPresent(Bool.self, forKey: .winTaskViewEnabled) ?? false
-        windowSwitcherEnabled = try values.decodeIfPresent(Bool.self, forKey: .windowSwitcherEnabled) ?? false
-        windowThumbnailsEnabled = try values.decodeIfPresent(Bool.self, forKey: .windowThumbnailsEnabled) ?? false
         finderPermanentDeleteEnabled = try values.decodeIfPresent(Bool.self, forKey: .finderPermanentDeleteEnabled) ?? false
         textNavigationEnabled = try values.decodeIfPresent(Bool.self, forKey: .textNavigationEnabled) ?? true
         altF4Enabled = try values.decodeIfPresent(Bool.self, forKey: .altF4Enabled) ?? false
@@ -80,9 +76,9 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         if let data = defaults.data(forKey: "bridge.settings.v1") {
             do {
                 let loaded = try JSONDecoder().decode(BridgeSettings.self, from: data)
-                guard (1...3).contains(loaded.schemaVersion) else { throw CocoaError(.coderReadCorrupt) }
+                guard (1...4).contains(loaded.schemaVersion) else { throw CocoaError(.coderReadCorrupt) }
                 settings = loaded
-                settings.schemaVersion = 3
+                settings.schemaVersion = 4
                 // Older files without these fields get host defaults. A stored
                 // false is an explicit choice and must never be overwritten.
                 if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -119,8 +115,6 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
             $0.winRunEnabled = preserved.winRunEnabled
             $0.winSettingsEnabled = preserved.winSettingsEnabled
             $0.winTaskViewEnabled = preserved.winTaskViewEnabled
-            $0.windowSwitcherEnabled = preserved.windowSwitcherEnabled
-            $0.windowThumbnailsEnabled = preserved.windowThumbnailsEnabled
             $0.finderPermanentDeleteEnabled = preserved.finderPermanentDeleteEnabled
             $0.textNavigationEnabled = preserved.textNavigationEnabled
             $0.altF4Enabled = preserved.altF4Enabled

@@ -67,7 +67,7 @@ struct SettingsView: View {
                         controller.openPermissionSettings(.listening)
                     }
                     permissionRow("螢幕錄製", granted: controller.permissions.screenRecording,
-                                  detail: "選用：只有視窗縮圖需要") {
+                                  detail: "截圖儲存與剪貼簿功能的選用授權") {
                         controller.openPermissionSettings(.screenRecording)
                     }
                     permissionRow("Finder 擴充功能", granted: controller.permissions.finderExtension,
@@ -155,13 +155,13 @@ struct SettingsView: View {
                     Text("Option (⌥)：這把鍵盤的 Win 送出 Option").tag(WindowsKeyModifier.option)
                     Text("Command (⌘)：這把鍵盤的 Win 送出 Command").tag(WindowsKeyModifier.command)
                 }
-                explanation("Mac mini 預設 Option，MacBook 預設 Command；舊設定缺少此欄時依本機機型選擇。這項選擇讓 Win 專用操作和 Alt+Tab／Alt+F4／瀏覽器上一頁、下一頁依實際輸入判斷，不交換整把鍵盤；Ctrl 文字操作不受影響。通用控制換用不同來源鍵盤時，EventTap 無法辨識來源，必要時在接收端切換。")
+                explanation("Mac mini 預設 Option，MacBook 預設 Command；舊設定缺少此欄時依本機機型選擇。這項選擇讓 Win 專用操作和 Alt+F4／瀏覽器上一頁、下一頁依實際輸入判斷，不交換整把鍵盤；Alt+Tab 交由 macOS 原生按鍵決定。Ctrl 文字操作不受影響。通用控制換用不同來源鍵盤時，EventTap 無法辨識來源，必要時在接收端切換。")
                 explanation("本機自動翻譯；Terminal、IDE、Remote／VM／Game 依 App 規則保留原按鍵。")
                 DisclosureGroup("進階：輸入方式與指定鍵盤") {
                     Picker("輸入方式", selection: Binding(get: { controller.settings.inputBackend }, set: { controller.setInputBackend($0) })) {
                         ForEach(InputBackend.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
-                    explanation("EventTap 是預設：授權後即可使用快捷鍵。下方 MacBook Fn／Ctrl 交換可用原生 API，不需 Driver。HID 是進階測試方式：另外交換 Option／Command 與亮度鍵，需安裝並核准 Driver，只支援指定鍵盤。切換方式時會同時選擇對應鍵盤範圍。")
+                    explanation("EventTap 是預設：授權後即可使用快捷鍵。下方 MacBook Fn／Ctrl 交換可用原生 API，不需 Driver。HID 是進階測試方式：只接管指定鍵盤；依 Win 鍵選擇處理 Option／Command，內建鍵盤依下方開關處理 Fn／Ctrl，另支援亮度鍵。需安裝並核准 Driver。")
                     Picker("鍵盤範圍", selection: Binding(get: { controller.settings.keyboardScope }, set: { controller.setKeyboardScope($0) })) {
                         ForEach(KeyboardScope.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
@@ -180,9 +180,8 @@ struct SettingsView: View {
                 }
                 Toggle("MacBook 內建鍵盤：交換 Fn／地球鍵與左 Ctrl", isOn: Binding(
                     get: { controller.settings.macBookFnControlSwap }, set: { controller.setMacBookFnControlSwap($0) }))
-                    .disabled(controller.settings.inputBackend == .deviceHID)
-                explanation("MacBook 新安裝預設開啟，Mac mini 預設關閉；舊設定中明確關閉會保留。Fn 變成 Ctrl、原左 Ctrl 變成 Fn；右 Ctrl、Win／Command、Alt／Option 及外接鍵盤保持原樣。按鍵來源由內建鍵盤的 HID 服務辨識，不靠目前連接哪把鍵盤猜測；外接鍵盤和通用控制虛擬鍵盤不套用交換。退出 App 或關閉時還原；請先放開按鍵再切換。HID 後端已有自己的交換，不會疊加。")
-                explanation("通用控制：在鍵盤實際所在的 MacBook 開啟。接收端不交換虛擬鍵盤，避免交換兩次；Mac mini 的外接鍵盤操作 MacBook 時仍保持外接排列。兩臺 Mac 的跨機修飾鍵結果需實測。Fn／Ctrl 是實體位置交換，Terminal／Remote 等 Profile 仍照原規則處理交換後的 Ctrl。")
+                explanation("MacBook 新安裝預設開啟，Mac mini 預設關閉；舊設定中明確關閉會保留。Fn 變成 Ctrl、原左 Ctrl 變成 Fn；右 Ctrl 及外接鍵盤保持原樣。EventTap 使用內建鍵盤的原生 HID 服務；進階 HID 後端只在其接管的內建鍵盤服務上套用相同交換，不會疊加。退出 App 或關閉時還原；請先放開按鍵再切換。")
+                explanation("通用控制：在鍵盤實際所在的 MacBook 開啟。接收端不交換虛擬鍵盤，避免交換兩次；Mac mini 的外接鍵盤操作 MacBook 時仍保持外接排列。兩臺 Mac 的跨機修飾鍵結果需實測。EventTap 的 Fn／Ctrl 原生交換作用於本機內建鍵盤；HID 的 Remote／VM／Game Profile 會釋放鍵盤，維持原生穿透。")
                 LabeledContent("MacBook 鍵盤模式", value: controller.macBookKeyboardStatus.summary)
                 Button("重新檢查鍵盤模式") { controller.refreshMacBookKeyboard() }
                 if let issue = controller.macBookKeyboardStatus.issue { Text(issue).foregroundStyle(.orange) }
@@ -198,20 +197,21 @@ struct SettingsView: View {
                 Toggle("最後一個視窗改為退出 App", isOn: Binding(get: { controller.settings.altF4QuitLastWindow }, set: { controller.setAltF4QuitLastWindow($0) }))
                     .disabled(!controller.settings.altF4Enabled)
                 explanation("使用 App 原生關閉／退出快捷鍵；未儲存文件仍由 App 自己確認。")
-                Toggle("Alt+Tab 逐視窗切換", isOn: Binding(get: { controller.settings.windowSwitcherEnabled }, set: { controller.setWindowSwitcherEnabled($0) }))
-                explanation("只在 Default macOS Profile 攔截；按住 Alt 用 Tab／Shift+Tab 選擇，放開 Alt 切換。顯示 App 圖示與視窗名稱，包含最小化視窗。")
+                explanation("Alt+Tab 交由 macOS 原生 App 切換器處理（依鍵盤映射可能顯示為 ⌘Tab）；同一 App 的視窗可用 ⌘` 切換。")
                 Toggle("Win+R 開啟 Spotlight 搜尋", isOn: Binding(get: { controller.settings.winRunEnabled }, set: { controller.setWinRunEnabled($0) }))
                 Toggle("Win+I 開啟系統設定", isOn: Binding(get: { controller.settings.winSettingsEnabled }, set: { controller.setWinSettingsEnabled($0) }))
                 Toggle("Win+Tab 開啟 Mission Control", isOn: Binding(get: { controller.settings.winTaskViewEnabled }, set: { controller.setWinTaskViewEnabled($0) }))
                 explanation("這三項預設關閉，各自選用；僅在 Default macOS Profile 的 EventTap 後端生效。Win+R 使用 macOS ⌘Space，Win+Tab 使用 ⌃↑；若你已改過系統快捷鍵，結果會跟隨 macOS 設定。")
-                Toggle("顯示視窗縮圖（需螢幕錄製權限）", isOn: Binding(get: { controller.settings.windowThumbnailsEnabled }, set: { controller.setWindowThumbnailsEnabled($0) }))
-                    .disabled(!controller.settings.windowSwitcherEnabled)
-                explanation("逐視窗切換、視窗縮圖、Alt+F4 與新增 Finder／文字鍵位使用 EventTap；進階 HID 後端保留原有實體鍵位規則。")
+                explanation("Alt+F4 與 Finder／文字鍵位使用 EventTap；進階 HID 後端的鍵位規則另外顯示。")
             }
             Section("截圖") {
                 Toggle("截圖自動複製（Shift+Win+S）", isOn: Binding(
                     get: { controller.settings.screenshotAutoCopy },
                     set: { controller.setScreenshotAutoCopy($0) }))
+                    .disabled(controller.settings.inputBackend == .deviceHID)
+                if controller.settings.inputBackend == .deviceHID {
+                    explanation("HID 模式暫停此截圖攔截：虛擬鍵盤與未接管的外接鍵盤可能送出不同 Win 修飾鍵，Event Tap 無法分辨來源；切回 EventTap 會依保存的開關恢復。")
+                }
                 explanation("使用上方所選的 Windows 鍵位置。若實體 Alt+Shift+S 觸發截圖，代表此處選錯了映射。")
                 explanation("框選完成後存檔並複製 PNG 圖片供 ⌘V 貼上。Ctrl+Shift+S 不會觸發截圖。原本的 ⇧⌘4 交由 macOS 處理；Esc 取消時不改剪貼簿。")
                 LabeledContent("截圖狀態", value: controller.screenshotStatus.lastResult)
@@ -390,7 +390,7 @@ struct SettingsView: View {
         case .macOS: "本機翻譯：將 Windows 快捷鍵轉為 macOS 操作；手動指定會覆寫此 App 原本的 Terminal／IDE 等保護。"
         case .terminal: "保留 Unix 的 Ctrl+C／D／Z 等操作。HID 整個鍵盤原樣通過；EventTap 保留 Ctrl 與文字快捷鍵，仍提供部分本機系統動作。"
         case .ide: "保留編輯器、除錯器與內嵌 Terminal 的原生 Ctrl 操作；若只用聊天／文字且需要 Ctrl+C／V，可改為 Default macOS。"
-        case .remoteWindows: "讓遠端 Client 收到原按鍵，停止本機翻譯、系統動作與輸入法守護；不判斷是否已連線，也不替 Client 設定轉送。"
+        case .remoteWindows: "讓遠端 Client 收到原按鍵，停止本機翻譯、系統動作與輸入法守護。Windows 或 Mac 目標都適用；本 App 無法從 Client 的前景程序判斷連線目標，也不替 Client 設定轉送。"
         case .virtualMachine: "讓 VM 接收原按鍵，停止本機翻譯與輸入法切換；VM 是否捕捉 Alt+Tab 由虛擬機軟體控制。"
         case .game: "讓遊戲接收原按鍵，停止本機翻譯及輸入法切換，避免改動遊戲控制。"
         case .disabled: "此 App 不套用任何本機翻譯或輸入法守護，適用未知或希望完全維持原生行為的 App。"
@@ -413,12 +413,8 @@ struct SettingsView: View {
                 explanation("這是目前前景 App 與實際套用的模式；Remote 表示按 App 規則穿透，不表示已確認遠端連線。開啟此設定視窗時，WindowsMacBridge 自己會保持穿透。")
                 LabeledContent("輸入方式", value: controller.settings.inputBackend.title)
                 LabeledContent("Event Tap", value: controller.status.tapActive ? "Active" : "Inactive")
-                LabeledContent("逐視窗 Alt+Tab", value: controller.settings.windowSwitcherEnabled ? (controller.status.tapActive ? "啟用" : "等待 Event Tap") : "關閉")
                 LabeledContent("Finder Mode／右鍵擴充", value: "\(controller.settings.finderEnabled ? "啟用" : "關閉")／\(controller.finderExtensionEnabled ? "已核准" : "待核准")")
                 LabeledContent("文字游標／Alt+F4", value: "\(controller.settings.textNavigationEnabled ? "啟用" : "關閉")／\(controller.settings.altF4Enabled ? "啟用" : "關閉")")
-                if controller.settings.windowThumbnailsEnabled {
-                    LabeledContent("視窗縮圖螢幕錄製", value: controller.screenRecordingGranted ? "已授權" : "待授權")
-                }
                 LabeledContent("截圖 Event Tap", value: controller.screenshotStatus.tapActive ? "Active" : "Inactive")
                 LabeledContent("截圖最近結果", value: controller.screenshotStatus.lastResult)
                 Text(controller.screenshotLogPath).font(.caption).textSelection(.enabled)

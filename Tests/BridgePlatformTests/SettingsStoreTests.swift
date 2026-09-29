@@ -26,6 +26,8 @@ import BridgePlatform
         #expect(registry.mode(for: "com.apple.Terminal", overrides: settings.overrides) == .terminal)
         #expect(registry.mode(for: "com.microsoft.VSCode", overrides: settings.overrides) == .ide)
         #expect(registry.mode(for: "com.microsoft.rdc.macos", overrides: settings.overrides) == .remoteWindows)
+        #expect(registry.mode(for: "com.edovia.Screens", overrides: settings.overrides) == .remoteWindows)
+        #expect(ApplicationMode.remoteWindows.title == "Remote Session — Pass-through")
         #expect(registry.mode(for: "com.utmapp.UTM", overrides: settings.overrides) == .virtualMachine)
     }
 
@@ -129,12 +131,12 @@ import BridgePlatform
         let legacy = Data(#"{"schemaVersion":1,"enabled":false,"overrides":{"example.remote":"remoteWindows"},"finderEnabled":true,"allowIMEShortcuts":false,"screenshotAutoCopy":false}"#.utf8)
         defaults.set(legacy, forKey: "bridge.settings.v1")
         let store = SettingsStore(defaults: defaults)
-        #expect(store.settings.schemaVersion == 3)
+        #expect(store.settings.schemaVersion == 4)
         #expect(!store.settings.enabled && store.settings.finderEnabled)
         #expect(store.settings.overrides["example.remote"] == .remoteWindows)
         #expect(!store.settings.screenshotAutoCopy && !store.settings.allowIMEShortcuts)
         #expect(store.settings.windowsKeyModifier == .option)
-        #expect(store.settings.textNavigationEnabled && !store.settings.windowSwitcherEnabled)
+        #expect(store.settings.textNavigationEnabled)
         store.update { $0.altF4Enabled = true }
         #expect(SettingsStore(defaults: defaults).settings.altF4Enabled)
     }
@@ -148,11 +150,27 @@ import BridgePlatform
         object.removeValue(forKey: "macBookFnControlSwap")
         defaults.set(try JSONSerialization.data(withJSONObject: object), forKey: "bridge.settings.v1")
         let store = SettingsStore(defaults: defaults)
-        #expect(store.settings.schemaVersion == 3 && !store.settings.macBookFnControlSwap)
+        #expect(store.settings.schemaVersion == 4 && !store.settings.macBookFnControlSwap)
         #expect(!store.settings.screenshotAutoCopy && store.settings.overrides == old.overrides)
         store.update { $0.macBookFnControlSwap = true }
         store.applyRecommendedPreset()
         #expect(SettingsStore(defaults: defaults).settings.macBookFnControlSwap)
         #expect(!store.settings.screenshotAutoCopy && store.settings.overrides["my.remote"] == .remoteWindows)
+    }
+    @Test func removedSwitcherPreferencesDoNotEraseOtherSchemaThreeChoices() throws {
+        let (name, defaults) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let legacy = Data(#"{"schemaVersion":3,"enabled":true,"overrides":{"custom.remote":"remoteWindows"},"screenshotAutoCopy":false,"finderEnabled":true,"altF4Enabled":true,"windowSwitcherEnabled":true,"windowThumbnailsEnabled":true}"#.utf8)
+        defaults.set(legacy, forKey: "bridge.settings.v1")
+        let store = SettingsStore(defaults: defaults, portableHost: false)
+        #expect(store.settings.schemaVersion == 4)
+        #expect(store.settings.finderEnabled && store.settings.altF4Enabled)
+        #expect(!store.settings.screenshotAutoCopy)
+        #expect(store.settings.overrides["custom.remote"] == .remoteWindows)
+        store.update { $0.textNavigationEnabled = false }
+        let data = try #require(defaults.data(forKey: "bridge.settings.v1"))
+        let migrated = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(migrated["windowSwitcherEnabled"] == nil)
+        #expect(migrated["windowThumbnailsEnabled"] == nil)
     }
 }

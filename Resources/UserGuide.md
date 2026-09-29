@@ -1,4 +1,4 @@
-# WindowsMacBridge 0.5.12 — 操作說明
+# WindowsMacBridge 0.5.13 — 操作說明
 
 截圖尚在框選或圖片轉換時，關閉開關會取消該次自動複製；即使馬上重開，也不會複製上一輪圖片。已儲存的圖片保留。原生框選仍可按 Esc 取消；同一時間只接受一輪截圖。截圖 Event Tap 在 60 秒內第三次停用時停止自動重試並顯示錯誤，放開按鍵後重開截圖開關即可重新檢查。
 
@@ -30,7 +30,7 @@ Finder 右鍵路徑選單需要 App 正在執行及 Finder Mode 已開啟。設�
 | Terminal／其他 IDE | 原樣通過 | 保護 Unix 與內嵌終端機 Ctrl 快捷鍵 |
 | Remote／VM／Game | 原樣通過 | 不在本機翻譯或切換輸入法 |
 | Finder 加強 | 關 | 尚未開啟檔案開啟、改名、剪下移動 |
-| Alt+Tab 逐視窗／縮圖 | 關／關 | 開啟後按視窗 MRU 選擇；縮圖另需螢幕錄製權限 |
+| 視窗切換 | macOS 原生 | `⌘Tab` 逐 App；`⌘\`` 切換同一 App 的視窗 |
 | Windows 文字游標 | 開 | 保留舊版 Ctrl 文字導覽並新增 Home／End |
 | Alt+F4／最後視窗退出 | 關／關 | 使用 App 原生關閉／退出確認 |
 | Windows 鍵位置 | Mac mini Option／MacBook Command | 依這把鍵盤實際送出的修飾鍵調整；Alt 專用操作用另一鍵 |
@@ -50,13 +50,13 @@ Finder 右鍵路徑選單需要 App 正在執行及 Finder Mode 已開啟。設�
 
 通用控制兩種方向都能使用同一份設定：只在來源 MacBook 交換實體內建鍵盤，另一臺收到的虛擬服務不會再次交換；外接鍵盤操控 MacBook 時仍保持外接排列。實際跨機 Ctrl／Fn、中文組字及睡眠恢復需按驗收指南測試，未測之前不視為已驗收。
 
-這個原生選項不需安裝 HID。進階 HID 有自己的整組交換，選 HID 時此選項會暫停並還原原生交換。Terminal、Remote／VM／Game 的快捷鍵翻譯仍照原 Profile；使用者選擇的 Fn／Ctrl 實體位置交換仍適用。Windows 翻譯暫停不會取消此獨立的鍵盤排列設定。
+這個原生選項不需安裝 HID。選進階 HID 時，先還原原生交換，再由 helper 只在接管的內建鍵盤服務依同一開關交換；外接鍵盤不交換 Fn／Ctrl。Remote／VM／Game 的 HID 模式會交還實體鍵盤，該情境的 Fn／Ctrl 交換需實體驗收，不能只靠離線測試推定。EventTap 模式的獨立原生交換仍不隨 Windows 翻譯暫停而取消。
 
 關閉或正常退出還原本程式的交換，其他映射保留。系統或其他工具已占用 Fn／Ctrl 時顯示衝突，先在對應工具還原這把內建鍵盤，再按「重新檢查鍵盤模式」。強制終止可能留下暫存映射，重新開啟可依還原紀錄恢復；重新開機清除暫存映射。App 的登入啟動依保存的開關重新套用，若待核准，按授權清單的登入項目前往系統設定。診斷紀錄為 `~/Library/Logs/WindowsMacBridge/KeyboardMapping.log`。
 
 ## 授權清單
 
-每列顯示權限名稱、用途、綠勾／紅叉及取得狀態；缺少時可一鍵前往系統設定。清單包含輔助使用、事件輸出、App 輸入監控、螢幕錄製、Finder 擴充功能和登入啟動。HID 模式另列 helper 的輸入監控。螢幕錄製僅視窗縮圖需要，Finder 擴充功能僅右鍵路徑選單需要。
+每列顯示權限名稱、用途、綠勾／紅叉及取得狀態；缺少時可一鍵前往系統設定。清單包含輔助使用、事件輸出、App 輸入監控、螢幕錄製、Finder 擴充功能和登入啟動。HID 模式另列 helper 的輸入監控。螢幕錄製保留作截圖相關權限診斷；Finder 擴充功能僅右鍵路徑選單需要。
 
 App 啟動、開啟設定及返回前景時會重新檢查，也可按「重新檢查」。狀態來自目前 App 的原生 API；系統的同名舊項目顯示開啟，不代表新版已取得權限。若輔助使用仍是紅叉，請在「輔助使用」或「裝置控制和資料取用」重新加入 /Applications 中的目前版本。
 
@@ -65,12 +65,12 @@ App 啟動、開啟設定及返回前景時會重新檢查，也可按「重新�
 ## 一般
 
 - **Windows 快捷鍵**：開啟後翻譯既有 29 組一般規則與 19 組瀏覽器規則，涵蓋複製、貼上、復原、儲存、分頁與文字導覽；關閉不會連帶關閉輸入法守護。
-- **EventTap**：全鍵盤的快捷鍵翻譯。選配 Alt+Tab 逐視窗切換以 Accessibility 維護 MRU；按住 Alt 選擇、放開才切換，Alt+Shift+Tab 反向。預設只顯示圖示與標題；縮圖另需螢幕錄製授權。不能可靠辨識每次按鍵來自哪一把鍵盤，也不提供 Fn／Control 交換或 consumer 亮度鍵映射。
-- **HID**：進階裝置測試後端，需要另裝 root helper 與官方 VirtualHID Driver。僅支援符合描述的內建鍵盤或 Apple VID 1452/PID 834；Logitech 等未支援裝置不會被接管。切換輸入方式會選擇對應範圍。
+- **EventTap**：全鍵盤的快捷鍵翻譯。自製 Alt+Tab 視窗切換器已移除，Tab 不再被本 App 攔截；若實體 Alt 在這把鍵盤上送出 Command，Alt+Tab 直接使用 macOS 原生逐 App 切換器。不能可靠辨識每次按鍵來自哪一把鍵盤，也不提供 Fn／Control 交換或 consumer 亮度鍵映射。
+- **HID**：進階裝置測試後端，需要另裝 root helper 與官方 VirtualHID Driver。僅支援符合描述的內建鍵盤或 Apple VID 1452/PID 834；Logitech 等未支援裝置不會被接管。依目前 Win 鍵位置配置 Option／Command，內建鍵盤依同一 Fn／Ctrl 開關配置，Finder／文字／Alt+F4／Win+R/I/Tab 開關會傳給 helper。切換輸入方式會選擇對應範圍。
 - **鍵盤範圍**：EventTap 使用所有鍵盤，HID 使用指定範圍。EventTap 選內建限定時停止翻譯，避免錯誤地套用到全部鍵盤。
 - **Finder 加強**：確認在檔案列表才啟用開啟、改名、刪除與 Ctrl+X／V 移動。Ctrl+X 先執行 Copy 並記住剪下狀態，Ctrl+V 再交由 Finder 的 Move 執行。剪貼簿更新、切換 App、暫停或 5 分鐘後取消標記；不保證 Move 已成功。Shift+Delete 必須另外啟用並逐次確認。右鍵路徑選單由 Finder Sync 提供，請在系統的 Finder 擴充功能設定啟用；「顯示目前資料夾路徑」子選單優先顯示選取項目的完整 POSIX 路徑，並有「複製此路徑」。只有按下複製才寫入剪貼簿。
 - **Windows 文字游標／Alt+F4**：Ctrl+方向鍵按單字移動，Home／End 到行首行尾，Ctrl+Home／End 到文件邊界，Shift 組合選取。Alt+F4 送出原生關閉視窗，選配最後一個主要視窗時送出原生退出 App，未儲存內容仍由 App 確認。
-- **Windows 鍵位置**：EventTap 收到這把鍵盤的 Win 為 Option 時選 Option，收到 Command 時選 Command。截圖、Win+E／Win+L 和選配 Win+R／I／Tab 使用此鍵；Alt+Tab／Alt+F4／瀏覽器上一頁、下一頁使用另一鍵。不更改 Ctrl、macOS 系統修飾鍵或其他 App 鍵位。MacBook 內建 Command 通常應選 Command；通用控制換用來源鍵盤時可能要在接收端切換。進階 HID 後端尚未採用此選擇。
+- **Windows 鍵位置**：EventTap 收到這把鍵盤的 Win 為 Option 時選 Option，收到 Command 時選 Command。截圖、Win+E／Win+L 和選配 Win+R／I／Tab 使用此鍵；Alt+F4／瀏覽器上一頁、下一頁使用另一鍵。Alt+Tab 由 macOS 原生鍵位決定。EventTap 不更改 Ctrl、macOS 系統修飾鍵或其他 App 鍵位。HID 模式會在接管的裝置上依此選擇輸出適合原生 `⌘Tab` 的 Alt；截圖攔截在 HID 模式暫停，以免另一把未接管鍵盤的 Alt+Shift+S 誤觸。
 - **Win+R／Win+I／Win+Tab**：各自預設關閉、獨立選用，依序對應 Spotlight（⌘Space）、系統設定及 Mission Control（⌃↑）。只有本機 Default macOS Profile 的 EventTap 後端攔截；若 macOS 系統快捷鍵已改動，Spotlight／Mission Control 需依系統設定調整。
 - **截圖自動複製**：預設開啟。`Shift+Win+S` 使用上述 Win 鍵位置進入 macOS 框選；完成時存檔並複製 PNG 圖片供 `⌘V`，Esc 取消不改剪貼簿。`Ctrl+Shift+S` 不會觸發截圖，仍依 App Profile 保留另存新檔翻譯或原樣通過。原本的 `⇧⌘4` 保持系統原樣；關閉時移除截圖攔截。Remote／VM／Game 等保護 Profile 原樣通過。
 - **登入啟動**：先將 App 放進 /Applications。截圖自動複製會註冊登入項目；若系統顯示待核准，按「開啟登入項目設定」檢查。關閉截圖功能時只移除它新增的註冊。
@@ -108,14 +108,14 @@ EventTap 不攔截滑鼠，不翻譯無修飾鍵 F／Escape 或原生 Control+Co
 | Default macOS | 本機 Windows 快捷鍵翻譯；手動選擇會覆寫原本保護 |
 | Terminal | Ctrl+C／D／Z 等 shell 意義維持原樣；HID 整個鍵盤穿透，EventTap 仍保留部分本機系統動作 |
 | IDE | 保護編輯器、除錯器與內嵌 Terminal 的原生 Ctrl 操作 |
-| Remote Windows | 整個遠端 Client 原樣通過，停止本機動作及輸入法切換 |
+| Remote Session | 整個遠端 Client 原樣通過，停止本機動作及輸入法切換；Windows／Mac 目標皆適用 |
 | Virtual Machine | VM 原樣通過；輸入捕捉由 VM 控制 |
 | Game | 遊戲原樣通過，停止本機動作及輸入法切換 |
 | Disabled | 不套用本機翻譯或輸入法守護 |
 
 **Codex 已依「只用聊天與文字輸入」預設 Default macOS。** 如果改用內建終端機，改成 IDE 或移除 Codex 規則，避免 Ctrl+C 變成 Copy。移除此規則後不會因下次重啟重新加入；「套用建議預設」才會再加入。
 
-Remote Profile 是按前景 App 判定，不猜測是否連線、遠端系統或 IDE 裡的焦點。瀏覽器的遠端分頁無法可靠辨識，可使用專用瀏覽器並指定 Remote。Alt+Tab、Ctrl+Alt+Delete、剪貼簿是否送到遠端，由各 Client 決定，不保證所有 Client 相同。
+Remote Profile 是按前景 App 判定，不猜測是否連線、遠端系統或 IDE 裡的焦點；無論連至 Windows 或 Mac，都先讓 Client 收到原始按鍵。設定檔中的 `remoteWindows` 是為保留舊版設定而留下的內部代碼，介面顯示 Remote Session。瀏覽器的遠端分頁無法可靠辨識，可使用專用瀏覽器並指定 Remote。Alt+Tab、Ctrl+Alt+Delete、剪貼簿是否送到遠端，由各 Client 決定，不保證所有 Client 相同。
 
 ## 唯音與輸入法
 

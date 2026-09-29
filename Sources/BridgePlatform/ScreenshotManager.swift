@@ -2,6 +2,7 @@ import AppKit
 import ApplicationServices
 import Carbon
 import Foundation
+import ImageIO
 import BridgeCore
 
 private struct TapResult: @unchecked Sendable {
@@ -14,7 +15,6 @@ public enum ScreenshotClipboardResult: Equatable, Sendable {
 
 public struct ScreenshotImagePayload: Sendable {
     let png: Data
-    let tiff: Data
 }
 
 public enum ScreenshotImagePreparation {
@@ -22,18 +22,56 @@ public enum ScreenshotImagePreparation {
     /// leaves the pool; AppKit UI and Clipboard remain on the main actor.
     public static func prepare(at url: URL) -> ScreenshotImagePayload? {
         autoreleasepool {
-            guard let image = NSImage(contentsOf: url), let tiff = image.tiffRepresentation else { return nil }
-            let png: Data
+            if url.pathExtension.lowercased() == "pdf" {
+                return preparePDF(at: url)
+            }
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  CGImageSourceGetCount(source) > 0,
+                  CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete else { return nil }
             if url.pathExtension.lowercased() == "png",
                let original = try? Data(contentsOf: url, options: .mappedIfSafe),
                original.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]) {
-                png = original
-            } else {
-                guard let encoded = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return nil }
-                png = encoded
+                return ScreenshotImagePayload(png: original)
             }
-            return ScreenshotImagePayload(png: png, tiff: tiff)
+            guard let encoded = CFDataCreateMutable(kCFAllocatorDefault, 0),
+                  let destination = CGImageDestinationCreateWithData(encoded, "public.png" as CFString, 1, nil) else {
+                return nil
+            }
+            CGImageDestinationAddImageFromSource(destination, source, 0, nil)
+            guard CGImageDestinationFinalize(destination) else { return nil }
+            return ScreenshotImagePayload(png: encoded as Data)
         }
+    }
+
+    private static func preparePDF(at url: URL) -> ScreenshotImagePayload? {
+        guard let document = CGPDFDocument(url as CFURL),
+              let page = document.page(at: 1) else { return nil }
+        let bounds = page.getBoxRect(.mediaBox).standardized
+        guard bounds.width.isFinite, bounds.height.isFinite,
+              bounds.width > 0, bounds.height > 0,
+              (bounds.width * bounds.height).isFinite else { return nil }
+        // PDF is an uncommon screenshot format. Bound its bitmap so a malformed
+        // or enormous document cannot cause an unbounded allocation.
+        let scale = min(1, 8_192 / max(bounds.width, bounds.height),
+                        sqrt(32_000_000 / (bounds.width * bounds.height)))
+        let width = max(1, Int(ceil(bounds.width * scale)))
+        let height = max(1, Int(ceil(bounds.height * scale)))
+        guard let context = CGContext(data: nil, width: width, height: height,
+                                      bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.concatenate(page.getDrawingTransform(.mediaBox,
+            rect: CGRect(x: 0, y: 0, width: width, height: height),
+            rotate: 0, preserveAspectRatio: true))
+        context.drawPDFPage(page)
+        guard let image = context.makeImage(),
+              let encoded = CFDataCreateMutable(kCFAllocatorDefault, 0),
+              let destination = CGImageDestinationCreateWithData(encoded, "public.png" as CFString, 1, nil) else {
+            return nil
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return ScreenshotImagePayload(png: encoded as Data)
     }
 }
 
@@ -44,8 +82,7 @@ public enum ScreenshotImagePreparation {
     }
     public static func write(_ payload: ScreenshotImagePayload, to pasteboard: NSPasteboard) -> ScreenshotClipboardResult {
         let item = NSPasteboardItem()
-        guard item.setData(payload.png, forType: NSPasteboard.PasteboardType("public.png")),
-              item.setData(payload.tiff, forType: .tiff) else { return .writeFailed }
+        guard item.setData(payload.png, forType: NSPasteboard.PasteboardType("public.png")) else { return .writeFailed }
         pasteboard.clearContents()
         return pasteboard.writeObjects([item]) ? .success : .writeFailed
     }

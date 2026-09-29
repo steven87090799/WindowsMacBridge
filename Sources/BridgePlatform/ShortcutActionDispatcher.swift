@@ -24,14 +24,11 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     private var finderEnabled = false
     private var finderPermanentDeleteEnabled = false
     private var altF4QuitLastWindow = false
-    private var windowThumbnailsEnabled = false
-    private var windowSwitcherEnabled = false
     private var epoch: UInt64 = 0
     private var message = ""
     private let marker: Int64
     @MainActor private var cut = FinderCutState()
     @MainActor private var cutGeneration: UInt64 = .max
-    @MainActor private var switcher: WindowSwitcher?
 
     public init(marker: Int64) { self.marker = marker }
 
@@ -41,48 +38,24 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
         generation &+= 1
         if disable { enabled = false }
         lock.unlock()
-        Task { @MainActor [self] in switcher?.cancel() }
-    }
-    /// Keyboard callback fallback: schedule cancellation without waiting on a lock.
-    public func cancelSwitcherFromCallback() {
-        Task { @MainActor [self] in
-            cancelPending()
-            switcher?.cancel()
-        }
     }
 
     @discardableResult public func update(context: ApplicationContext, enabled: Bool,
                                          finderEnabled: Bool = false,
                                          finderPermanentDeleteEnabled: Bool = false,
-                                         windowSwitcherEnabled: Bool = false,
-                                         windowThumbnailsEnabled: Bool = false,
                                          altF4QuitLastWindow: Bool = false,
                                          epoch: UInt64 = 0) -> Bool {
         guard lock.try() else { return false }
-        let switcherChanged = self.windowSwitcherEnabled != windowSwitcherEnabled
         if self.context != context || self.enabled != enabled || self.finderEnabled != finderEnabled ||
             self.finderPermanentDeleteEnabled != finderPermanentDeleteEnabled ||
-            switcherChanged ||
-            self.windowThumbnailsEnabled != windowThumbnailsEnabled ||
             self.altF4QuitLastWindow != altF4QuitLastWindow || self.epoch != epoch {
             generation &+= 1
             self.context = context; self.enabled = enabled
             self.finderEnabled = finderEnabled
             self.finderPermanentDeleteEnabled = finderPermanentDeleteEnabled
-            self.windowSwitcherEnabled = windowSwitcherEnabled
-            self.windowThumbnailsEnabled = windowThumbnailsEnabled
             self.altF4QuitLastWindow = altF4QuitLastWindow; self.epoch = epoch
         }
         lock.unlock()
-        if switcherChanged {
-            Task { @MainActor [self] in
-                if windowSwitcherEnabled {
-                    let current = switcher ?? WindowSwitcher()
-                    switcher = current
-                    current.startObserving()
-                } else { switcher?.stopObserving() }
-            }
-        }
         return true
     }
     public func status() -> String {
@@ -222,18 +195,26 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
 
     @MainActor private func performWindow(_ action: WindowAction, request: Request) {
         guard request.context.mode == .macOS else { return }
-        let switcher = self.switcher ?? WindowSwitcher()
-        self.switcher = switcher
-        switcher.thumbnailsEnabled = windowThumbnailsEnabled
         switch action {
-        case .advance(let reverse): switcher.advance(reverse: reverse); report(switcher.status)
-        case .commit: switcher.commit(); report(switcher.status)
         case .close:
-            let quit = altF4QuitLastWindow && switcher.standardWindowCount(pid: request.context.processID) == 1
+            let quit = altF4QuitLastWindow && Self.standardWindowCount(pid: request.context.processID) == 1
             if emit(quit ? 12 : 13, .command, request: request) {
                 report(quit ? "已送出原生結束 App 請求。" : "已送出原生關閉視窗請求。")
             }
         }
+    }
+    /// Queried only for an Alt+F4 action when the optional last-window mode is on.
+    @MainActor private static func standardWindowCount(pid: Int32) -> Int {
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.08)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
+              let windows = value as? [AXUIElement] else { return 0 }
+        return windows.filter { window in
+            var subrole: CFTypeRef?
+            return AXUIElementCopyAttributeValue(window, kAXSubroleAttribute as CFString, &subrole) == .success &&
+                (subrole as? String) == (kAXStandardWindowSubrole as String)
+        }.count
     }
     /// Complete key pairs, private source, marker and target PID. No global held modifiers.
     @MainActor private func emit(_ key: UInt16, _ modifiers: Modifiers, request: Request,

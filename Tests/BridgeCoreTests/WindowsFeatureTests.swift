@@ -3,6 +3,21 @@ import Testing
 @testable import BridgeCore
 
 struct WindowsFeatureTests {
+    @Test func tabIsNeverTranslatedByTheRemovedSwitcher() {
+        for selected in WindowsKeyModifier.allCases {
+            var value = KeyboardEventProcessor()
+            value.configure(context: .init(processID: 12, bundleID: "test", mode: .macOS),
+                            enabled: true, layoutSupported: true, windowsKeyModifier: selected)
+            value.reconcileNeutralHardware()
+            let alt = selected.altFlag
+            let side: ModifierSide = selected == .option ? .leftCommand : .leftOption
+            let key: UInt16 = selected == .option ? 55 : 58
+            _ = value.process(.init(.flagsChanged, keyCode: key, modifiers: alt,
+                                    modifierSide: side, modifierDown: true))
+            #expect(value.process(.init(.down, keyCode: 48, modifiers: alt)) == .passThrough)
+            #expect(value.process(.init(.up, keyCode: 48, modifiers: alt)) == .passThrough)
+        }
+    }
     @Test func finderPathsPreferSelectedWithoutTouchingClipboard() {
         let target = URL(fileURLWithPath: "/Users/test/Documents")
         let selected = [URL(fileURLWithPath: "/Users/test/Documents/a.txt"),
@@ -15,59 +30,6 @@ struct WindowsFeatureTests {
         #expect(FinderPathSelection.displayed(selectedURLs: selected, targetedURL: target) == selected[0].path)
         #expect(FinderPathSelection.displayed(selectedURLs: [], targetedURL: target) == target.path)
         #expect(FinderPathSelection.selected([]) == nil)
-    }
-    @Test func windowCycleCommitsOnlyOnReleaseAndReverses() {
-        var cycle = WindowCycle()
-        #expect(cycle.selectedIndex == nil)
-        cycle.advance(count: 4, reverse: false)
-        #expect(cycle.selectedIndex == 1)
-        cycle.advance(count: 4, reverse: true)
-        #expect(cycle.selectedIndex == 0)
-        cycle.advance(count: 4, reverse: true)
-        #expect(cycle.selectedIndex == 3)
-        #expect(cycle.commit() == 3)
-        #expect(cycle.selectedIndex == nil)
-        cycle.advance(count: 1, reverse: false)
-        #expect(cycle.commit() == 0)
-    }
-    @Test func focusedWindowHistoryIsPerWindowAndBounded() {
-        var history = WindowHistory()
-        history.record("10:a"); history.record("10:b"); history.record("20:c")
-        #expect(history.rank(of: "20:c") == 0)
-        #expect(history.rank(of: "10:b") == 1)
-        history.record("10:a")
-        #expect(history.rank(of: "10:a") == 0)
-        history.remove(processID: 10)
-        #expect(history.rank(of: "10:a") == Int.max)
-        for id in 0..<300 { history.record("30:\(id)") }
-        #expect(history.rank(of: "30:0") == Int.max)
-        #expect(history.rank(of: "30:299") == 0)
-    }
-    @Test func windowSwitchPolicyProtectsRemoteTerminalIDEAndGame() {
-        for mode in ApplicationMode.allCases {
-            #expect(WindowSwitchPolicy.intercepts(mode: mode, enabled: true, layoutSupported: true,
-                                                  inputReady: true, manualPassThrough: false,
-                                                  emergencyPaused: false) == (mode == .macOS))
-        }
-        #expect(!WindowSwitchPolicy.intercepts(mode: .macOS, enabled: true, layoutSupported: true,
-                                               inputReady: true,
-                                               manualPassThrough: true, emergencyPaused: false))
-        #expect(!WindowSwitchPolicy.intercepts(mode: .macOS, enabled: false, layoutSupported: true,
-                                               inputReady: true,
-                                               manualPassThrough: false, emergencyPaused: false))
-        #expect(!WindowSwitchPolicy.intercepts(mode: .macOS, enabled: true, layoutSupported: true,
-                                               inputReady: false,
-                                               manualPassThrough: false, emergencyPaused: false))
-    }
-    @Test func altTabUsesPhysicalAltForBothKeyboardLayouts() {
-        for selected in WindowsKeyModifier.allCases {
-            #expect(WindowSwitchPolicy.cycleDirection(modifiers: selected.altFlag,
-                                                      windowsKeyModifier: selected) == false)
-            #expect(WindowSwitchPolicy.cycleDirection(modifiers: [selected.altFlag, .shift],
-                                                      windowsKeyModifier: selected) == true)
-            #expect(WindowSwitchPolicy.cycleDirection(modifiers: selected.flag,
-                                                      windowsKeyModifier: selected) == nil)
-        }
     }
     private func processor(mode: ApplicationMode = .macOS, finder: Bool = false,
                            text: Bool = true, permanentDelete: Bool = false,

@@ -1,4 +1,6 @@
-# 0.5.12 保護與一般使用者情境檢查
+# 0.5.13 保護與一般使用者情境檢查
+
+0.5.13 移除自製 Alt+Tab 逐視窗切換器及其常駐視窗觀察器。實體 Alt 若映射為 Command，Alt+Tab 使用 macOS 原生逐 App 切換器；若映射為 Option，須按實際 Command+Tab。HID 接管的本機鍵盤依所選 Win 鍵位置輸出原生 Command+Tab，Remote／VM／Game 保持原樣。這個原生功能不逐一列出同一 App 的所有視窗；同一 App 可使用 Command+反引號切換。截圖圖片只發佈 PNG，PDF 以有上限的 bitmap 轉碼，避免同時保留 PNG 和 TIFF payload。
 
 0.5.12 的 MacBook 新安裝會依主機型態預設開啟 Fn／左 Ctrl 交換。它使用 Apple 的逐 HID 鍵盤服務映射，只在本機實體內建鍵盤服務寫入並讀回驗證；外接鍵盤、Mac mini 和通用控制虛擬鍵盤均不修改。使用者明確關閉的舊設定不被升級覆蓋。這讓內建和外接鍵盤交替輸入時不必為 Fn 交換手動切換；EventTap 的 Win／Alt 訊號仍是整臺 Mac 的設定，兩把鍵盤若送出不同修飾鍵，需分別校準或切換，不能由 Quartz 事件可靠推得來源裝置。依據 [Apple TN2450](https://developer.apple.com/library/archive/technotes/tn2450/) 的逐服務映射與重啟清除特性。
 
@@ -12,7 +14,7 @@
 
 - 截圖生命週期有獨立 token：關閉／重開／退出不會使上一輪截圖重新取得剪貼簿寫入資格。單一截圖保留至原生工具或圖片 worker 結束，不疊開多個框選。圖片檔保留。
 - 截圖 Tap 恢復沿用核心 RecoveryPolicy，60 秒內第三次停用停止自動重試；主執行緒重建工作合併，錯誤在設定可見。無新增長期計時輪詢。
-- 圖片轉換移出主執行緒，NSImage／bitmap 不跨執行緒共享；只回傳不可變 PNG／TIFF Data，局部 autorelease pool 釋放暫存物件。PNG 不再二次編碼。依據 Apple [Thread Safety Summary](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/Multithreading/ThreadSafetySummary/ThreadSafetySummary.html)。
+- 圖片轉換移出主執行緒，NSImage／bitmap 不跨執行緒共享；只回傳不可變 PNG Data，局部 autorelease pool 釋放暫存物件。PNG 不再二次編碼。依據 Apple [Thread Safety Summary](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/Multithreading/ThreadSafetySummary/ThreadSafetySummary.html)。
 - 保留既有權限與 Secure Input 檢查頻率，輸入與 UI 計時器加入 tolerance 以便系統合併喚醒；輸入檢查每輪建立局部 autorelease pool，UI timer 直接在主 actor 執行，移除每輪額外 Task。依據 Apple [Minimize Timer Usage](https://developer.apple.com/library/archive/documentation/Performance/Conceptual/power_efficiency_guidelines_osx/Timers.html)。
 - Fn／Ctrl 關閉且無還原紀錄時不列舉服務，Mac mini 不註冊內建鍵盤通知；手動檢查可以重新註冊失敗的通知，無重試輪詢。畸形／Boolean／小數映射拒絕套用。
 - 統計遷移完成後不再讀取舊 App 的偏好 domain，保留使用者要求的統計接續、去重及 MIT 聲明。
@@ -40,7 +42,7 @@
 | 強制終止後 Fn 暫存映射還在 | 同 boot 重啟還原紀錄；重新開機清除原生暫存映射 | 強制終止不能保證即刻還原，需重開或重啟 |
 | Finder 文字欄誤刪／剪下過期 | 焦點只讀 role／parent，未知不猜；move 有期限且檢查 Clipboard 版本 | Finder 各檢視、焦點競態、原生確認 |
 | Alt+F4 有未儲存文件 | 原生 Cmd+W／Q，保留 App 確認，最後視窗退出模式預設關閉 | App 特殊／輔助視窗的主要視窗判定 |
-| 最小化、多螢幕 Alt+Tab | 視窗獨立 MRU，放開 Alt 才切換；縮圖選配 | Spaces／全螢幕、App AX 支援不完整 |
+| Alt+Tab 交替出現兩種介面 | 移除自製切換器，交由 macOS 原生 Command+Tab；不再常駐觀察其他 App 視窗 | 原生逐 App 切換器與逐視窗 MRU 不等價，實體 Alt 必須輸出 Command |
 | RAM 看起來很高 | RSS 與 physical footprint 分開；不把全機 swap 歸因 App | 長期同版本背景樣本與輸入負載，短樣本不足 |
 
 ## 建議下一步的實用功能（尚未實作）
