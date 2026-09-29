@@ -30,8 +30,19 @@ final class FinderSync: FIFinderSync {
         let selectedItem = item("複製選取項目完整路徑", #selector(copySelected(_:)))
         selectedItem.isEnabled = !selected.isEmpty
         menu.addItem(selectedItem)
-        let displayItem = item("顯示目前資料夾路徑", #selector(showPath(_:)))
-        displayItem.isEnabled = folder != nil || !selected.isEmpty
+        let displayPath = FinderPathSelection.displayed(selectedURLs: selected,
+            targetedURL: FIFinderSyncController.default().targetedURL(),
+            itemTarget: menuKind == .contextualMenuForItems)
+        let displayItem = NSMenuItem(title: "顯示目前資料夾路徑", action: nil, keyEquivalent: "")
+        displayItem.isEnabled = displayPath != nil
+        if let displayPath {
+            let pathMenu = NSMenu(title: "完整 POSIX 路徑")
+            let pathItem = NSMenuItem(title: displayPath, action: nil, keyEquivalent: "")
+            pathItem.isEnabled = false
+            pathMenu.addItem(pathItem)
+            pathMenu.addItem(item("複製此路徑", #selector(copyDisplayed(_:))))
+            displayItem.submenu = pathMenu
+        }
         menu.addItem(displayItem)
         return menu
     }
@@ -66,16 +77,10 @@ final class FinderSync: FIFinderSync {
     @objc private func copySelected(_ sender: Any?) {
         copy(FinderPathSelection.selected(selectedURLs))
     }
-    @objc private func showPath(_ sender: Any?) {
-        guard let path = FinderPathSelection.displayed(selectedURLs: selectedURLs,
-                                                       targetedURL: FIFinderSyncController.default().targetedURL(),
-                                                       itemTarget: currentKind == .contextualMenuForItems) else { return }
-        let alert = NSAlert()
-        alert.messageText = "完整 POSIX 路徑"
-        alert.informativeText = path
-        alert.addButton(withTitle: "複製")
-        alert.addButton(withTitle: "關閉")
-        if alert.runModal() == .alertFirstButtonReturn { copy(path) }
+    @objc private func copyDisplayed(_ sender: Any?) {
+        copy(FinderPathSelection.displayed(selectedURLs: selectedURLs,
+            targetedURL: FIFinderSyncController.default().targetedURL(),
+            itemTarget: currentKind == .contextualMenuForItems))
     }
     private func copy(_ path: String?) {
         guard let path else { return }

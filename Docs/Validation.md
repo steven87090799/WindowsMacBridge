@@ -5,6 +5,7 @@
 - 改為原生 DistributedNotificationCenter 的版本化 Boolean object 字串，userInfo 永遠為 nil。Host 保存設定，擴充功能只記憶本次收到的狀態；初始化、觀察資料夾與開選單時才請求。Host 合併同一回合的回覆工作且停止時使舊 generation 失效，沒有計時輪詢。移除無法驗證的 App Group entitlement，保留 extension App Sandbox；不讀取或傳送任何路徑、Clipboard 或文件內容。
 - 新回歸包含嚴格字串／版本解碼與私有測試 namespace，以及真正的原生通知接收、變更、請求回覆、停止及 nil userInfo。測試 namespace 不影響正在執行的 App 或 Finder。這是原生通知的程序內測試，實際 sandboxed extension 的 UI 結果另記於 release／PR。
 - 使用者完成系統本人驗證後，0.5.4 的六項原生授權／啟用、Event Tap Active 與截圖攔截正常已確認；新版 identity 的授權與效能不沿用此結果。新版完整 build、Hosted CI、Finder UI 與資源 CSV 的結果記於 release／PR。
+- 0.5.5 首次實機右鍵測試已看到三個路徑選單項目；「複製選取項目完整路徑」在 Finder 真實選單動作後，剪貼簿由 changeCount 93 增為 94，文字精確等於測試檔完整 POSIX 路徑。「顯示目前資料夾路徑」的 NSAlert 動作在 Finder Sync 產生例外，改為原生子選單顯示路徑與「複製此路徑」。擴充功能不需要也不傳送路徑給主 App；新版子選單須以更新後實機確認。
 
 以下保留歷史版本結果。
 

@@ -30,7 +30,7 @@ Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macO
 
 - Alt+Tab 在 EventTap 的 Default macOS Profile 中列出每個視窗的 App 圖示和標題，包含最小化視窗；Alt+Shift+Tab 反向，放開 Alt 才啟用。啟用後以 Accessibility 視窗焦點通知維護 MRU，首次啟用時未觀察到的舊歷史以視窗目前的前後順序補足。選配縮圖在開啟且取得螢幕錄製權限後，才使用 ScreenCaptureKit 按需擷取最多 12 個視窗。無權限時仍可用圖示和標題切換。
 - Finder Mode 的 Ctrl+X／Ctrl+V 透過 Finder 原生複製與 `⌥⌘V` 移動；Enter、F2、Delete、Backspace、Ctrl+Shift+N、Ctrl+L 分別開啟、改名、移到垃圾桶、上一層、新增資料夾、前往資料夾。Shift+Delete 必須另行啟用，每次顯示確認，再交給 Finder 處理。文字欄位及未知焦點採保守處理。
-- Finder 右鍵路徑選單由內含的 Finder Sync 擴充功能提供，使用 Finder 的 selected/targeted URL。可複製目前資料夾或選取項目的 POSIX 路徑，也可顯示路徑後按「複製」。只在按下複製時才寫入剪貼簿。首次安裝請到「系統設定 → 一般 → 登入項目與擴充功能 → Finder」啟用 WindowsMacBridge Finder；Finder Mode 關閉時選單不顯示。
+- Finder 右鍵路徑選單由內含的 Finder Sync 擴充功能提供，使用 Finder 的 selected/targeted URL。可複製目前資料夾或選取項目的 POSIX 路徑；「顯示目前資料夾路徑」子選單優先顯示所選項目的完整路徑，並提供「複製此路徑」。只有按下複製才寫入剪貼簿。首次安裝請到「系統設定 → 一般 → 登入項目與擴充功能 → Finder」啟用 WindowsMacBridge Finder；Finder Mode 關閉時選單不顯示。
 - Windows 文字游標提供 Ctrl+左右方向鍵按單字移動、Ctrl+Backspace／Delete 按單字刪除、Home／End 行首行尾、Ctrl+Home／End 文件首尾，並支援 Shift 選取組合。Alt+F4 發出 App 原生 `⌘W`；選配最後一個主要視窗時發出 `⌘Q`，保留 App 的未儲存內容確認。
 
 這些新動作只在本機 Default macOS Profile 啟用；Terminal、IDE、Remote、VM、Game 維持原樣通過。鍵盤 callback 只處理有界狀態並將 AX、Finder、AppKit 工作送到最多 16 筆的動作佇列。視窗 MRU 用通知更新，縮圖只在顯示切換器時擷取，沒有新增加的長期輪詢。HID 後端保留既有實體鍵位交換語意；新視窗切換器只適用 EventTap。授權頁顯示實際取得的權限，缺少時可直接開啟對應系統設定，仍須由使用者在 macOS 核准。

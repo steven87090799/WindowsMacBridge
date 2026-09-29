@@ -53,7 +53,7 @@ App 啟動、開啟設定及返回前景時會重新檢查，也可按「重新�
 - **EventTap**：全鍵盤的快捷鍵翻譯。選配 Alt+Tab 逐視窗切換以 Accessibility 維護 MRU；按住 Alt 選擇、放開才切換，Alt+Shift+Tab 反向。預設只顯示圖示與標題；縮圖另需螢幕錄製授權。不能可靠辨識每次按鍵來自哪一把鍵盤，也不提供 Fn／Control 交換或 consumer 亮度鍵映射。
 - **HID**：進階裝置測試後端，需要另裝 root helper 與官方 VirtualHID Driver。僅支援符合描述的內建鍵盤或 Apple VID 1452/PID 834；Logitech 等未支援裝置不會被接管。切換輸入方式會選擇對應範圍。
 - **鍵盤範圍**：EventTap 使用所有鍵盤，HID 使用指定範圍。EventTap 選內建限定時停止翻譯，避免錯誤地套用到全部鍵盤。
-- **Finder 加強**：確認在檔案列表才啟用開啟、改名、刪除與 Ctrl+X／V 移動。Ctrl+X 先執行 Copy 並記住剪下狀態，Ctrl+V 再交由 Finder 的 Move 執行。剪貼簿更新、切換 App、暫停或 5 分鐘後取消標記；不保證 Move 已成功。Shift+Delete 必須另外啟用並逐次確認。右鍵路徑選單由 Finder Sync 提供，請在系統的 Finder 擴充功能設定啟用；只有按「複製」才寫入剪貼簿。
+- **Finder 加強**：確認在檔案列表才啟用開啟、改名、刪除與 Ctrl+X／V 移動。Ctrl+X 先執行 Copy 並記住剪下狀態，Ctrl+V 再交由 Finder 的 Move 執行。剪貼簿更新、切換 App、暫停或 5 分鐘後取消標記；不保證 Move 已成功。Shift+Delete 必須另外啟用並逐次確認。右鍵路徑選單由 Finder Sync 提供，請在系統的 Finder 擴充功能設定啟用；「顯示目前資料夾路徑」子選單優先顯示選取項目的完整 POSIX 路徑，並有「複製此路徑」。只有按下複製才寫入剪貼簿。
 - **Windows 文字游標／Alt+F4**：Ctrl+方向鍵按單字移動，Home／End 到行首行尾，Ctrl+Home／End 到文件邊界，Shift 組合選取。Alt+F4 送出原生關閉視窗，選配最後一個主要視窗時送出原生退出 App，未儲存內容仍由 App 確認。
 - **截圖自動複製**：預設開啟。`⇧⌘4` 仍使用 macOS 框選；完成時存檔並複製圖片供 `⌘V`，Esc 取消不改剪貼簿。關閉時移除截圖攔截。
 - **登入啟動**：先將 App 放進 /Applications。截圖自動複製會註冊登入項目；若系統顯示待核准，按「開啟登入項目設定」檢查。關閉截圖功能時只移除它新增的註冊。
