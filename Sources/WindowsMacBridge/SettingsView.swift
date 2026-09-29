@@ -51,40 +51,42 @@ struct SettingsView: View {
                 Button("重新檢查") { controller.refreshPermissions() }
             }
             explanation("綠色勾勾表示已取得；紅色叉叉表示尚未取得。按「前往開啟」即可到對應系統設定。")
-            List {
-                permissionRow("輔助使用", granted: controller.permissions.accessibility,
-                              detail: "鍵盤翻譯、截圖及視窗操作") {
-                    controller.requestAccessibility(); controller.openPermissions()
-                }
-                permissionRow("事件輸出", granted: controller.permissions.posting,
-                              detail: "送出翻譯後的按鍵；與輔助使用共用授權頁") {
-                    controller.openPermissions()
-                }
-                permissionRow("輸入監控", granted: controller.permissions.listening,
-                              detail: "允許此 App 接收鍵盤事件") {
-                    controller.requestListening(); controller.openInputMonitoring()
-                }
-                permissionRow("螢幕錄製", granted: controller.permissions.screenRecording,
-                              detail: "選用：只有視窗縮圖需要") {
-                    controller.requestScreenRecording(); controller.openScreenRecording()
-                }
-                permissionRow("Finder 擴充功能", granted: controller.permissions.finderExtension,
-                              detail: "選用：Finder 右鍵路徑選單", enabledLabel: "已啟用", disabledLabel: "未啟用") {
-                    controller.openFinderExtensionSettings()
-                }
-                permissionRow("登入時啟動", granted: controller.permissions.loginItem,
-                              detail: "重新登入或開機後繼續執行", enabledLabel: "已核准", disabledLabel: "未核准") {
-                    controller.inputSources.setLoginEnabled(true)
-                    controller.inputSources.openLoginSettings()
-                }
-                if controller.settings.inputBackend == .deviceHID {
-                    permissionRow("HID helper 輸入監控", granted: controller.hidStatus.permissions,
-                                  detail: "進階 HID 後端需要 helper 自己的授權") {
-                        controller.requestHIDListening(); controller.openInputMonitoring()
+            ScrollView {
+                VStack(spacing: 0) {
+                    permissionRow("輔助使用", granted: controller.permissions.accessibility,
+                                  detail: "鍵盤翻譯、截圖及視窗操作") {
+                        controller.requestAccessibility(); controller.openPermissions()
+                    }
+                    permissionRow("事件輸出", granted: controller.permissions.posting,
+                                  detail: "送出翻譯後的按鍵；與輔助使用共用授權頁") {
+                        controller.openPermissions()
+                    }
+                    permissionRow("輸入監控", granted: controller.permissions.listening,
+                                  detail: "允許此 App 接收鍵盤事件") {
+                        controller.requestListening(); controller.openInputMonitoring()
+                    }
+                    permissionRow("螢幕錄製", granted: controller.permissions.screenRecording,
+                                  detail: "選用：只有視窗縮圖需要") {
+                        controller.requestScreenRecording(); controller.openScreenRecording()
+                    }
+                    permissionRow("Finder 擴充功能", granted: controller.permissions.finderExtension,
+                                  detail: "選用：Finder 右鍵路徑選單", enabledLabel: "已啟用", disabledLabel: "未啟用") {
+                        controller.openFinderExtensionSettings()
+                    }
+                    permissionRow("登入時啟動", granted: controller.permissions.loginItem,
+                                  detail: "重新登入或開機後繼續執行", enabledLabel: "已核准", disabledLabel: "未核准") {
+                        controller.inputSources.setLoginEnabled(true)
+                        controller.inputSources.openLoginSettings()
+                    }
+                    if controller.settings.inputBackend == .deviceHID {
+                        permissionRow("HID helper 輸入監控", granted: controller.hidStatus.permissions,
+                                      detail: "進階 HID 後端需要 helper 自己的授權") {
+                            controller.requestHIDListening(); controller.openInputMonitoring()
+                        }
                     }
                 }
             }
-            .listStyle(.inset)
+            .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
             HStack {
                 Text("WindowsMacBridge \(AppBuildInfo.current.versionLabel)")
                 Spacer()
@@ -102,23 +104,30 @@ struct SettingsView: View {
     private func permissionRow(_ title: String, granted: Bool, detail: String,
                                enabledLabel: String = "已取得", disabledLabel: String = "未取得",
                                action: @escaping () -> Void) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: granted ? "checkmark.circle.fill" : "xmark.circle.fill")
-                .font(.title2).foregroundStyle(granted ? Color.green : Color.red)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).fontWeight(.medium)
-                Text(detail).font(.caption).foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: granted ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .font(.title2).foregroundStyle(granted ? Color.green : Color.red)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).fontWeight(.medium)
+                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(granted ? enabledLabel : disabledLabel)
+                    .font(.callout).foregroundStyle(granted ? Color.green : Color.red)
+                if !granted {
+                    Button("前往開啟", action: action)
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel("前往開啟\(title)")
+                }
             }
-            Spacer()
-            Text(granted ? enabledLabel : disabledLabel)
-                .font(.callout).foregroundStyle(granted ? Color.green : Color.red)
-            if !granted {
-                Button("前往開啟", action: action)
-                    .accessibilityLabel("前往開啟\(title)")
-            }
+            .padding(.vertical, 10)
+            Divider()
         }
-        .padding(.vertical, 7)
+        .padding(.horizontal, 16)
+        // Keep each action exposed to VoiceOver and keyboard navigation.
+        .accessibilityElement(children: .contain)
     }
 
     private var general: some View {

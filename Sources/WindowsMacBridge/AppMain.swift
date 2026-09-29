@@ -168,6 +168,7 @@ import InputSourceSupport
         }
         if CommandLine.arguments.contains("--diagnose-permissions") {
             print("\(AppBuildInfo.current.diagnosticText)\n\(PermissionStatus.current().diagnosticText)")
+            print("CLI permission checks may use the launching terminal's TCC identity. The running App's permission page is authoritative for that App.")
             return
         }
         if CommandLine.arguments.contains("--diagnose-input-sources") {
