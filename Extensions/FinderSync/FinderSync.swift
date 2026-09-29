@@ -67,6 +67,7 @@ final class FinderSync: FIFinderSync {
 
     private var folderPath: String? {
         FinderPathSelection.folder(targetedURL: FIFinderSyncController.default().targetedURL(),
+                                   selectedURLs: selectedURLs,
                                    itemTarget: currentKind == .contextualMenuForItems)
     }
     private var selectedURLs: [URL] {

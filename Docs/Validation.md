@@ -6,6 +6,7 @@
 - 新回歸包含嚴格字串／版本解碼與私有測試 namespace，以及真正的原生通知接收、變更、請求回覆、停止及 nil userInfo。測試 namespace 不影響正在執行的 App 或 Finder。這是原生通知的程序內測試，實際 sandboxed extension 的 UI 結果另記於 release／PR。
 - 使用者完成系統本人驗證後，0.5.4 的六項原生授權／啟用、Event Tap Active 與截圖攔截正常已確認；新版 identity 的授權與效能不沿用此結果。新版完整 build、Hosted CI、Finder UI 與資源 CSV 的結果記於 release／PR。
 - 0.5.5 首次實機右鍵測試已看到三個路徑選單項目；「複製選取項目完整路徑」在 Finder 真實選單動作後，剪貼簿由 changeCount 93 增為 94，文字精確等於測試檔完整 POSIX 路徑。「顯示目前資料夾路徑」的 NSAlert 動作在 Finder Sync 產生例外，改為原生子選單顯示路徑與「複製此路徑」。擴充功能不需要也不傳送路徑給主 App；新版子選單須以更新後實機確認。
+- 0.5.5 build 16 實機確認：子選單顯示所選檔案完整 POSIX 路徑，展開與 Esc 關閉前後 Clipboard changeCount 均為 96；按「複製此路徑」後由 95 增至 96，文字為精確完整路徑，且沒有再見 Finder Sync action exception。「複製目前資料夾路徑」同次測試卻多退一層；Finder 在檔案右鍵時將目前資料夾傳作 targetedURL，修正為優先採用 selectedItemURLs 第一項的父資料夾，並新增回歸。build 17 須再實機驗證。
 
 以下保留歷史版本結果。
 

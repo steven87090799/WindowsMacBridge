@@ -2,7 +2,10 @@ import Foundation
 
 /// Pure path selection shared by the app tests and the Finder Sync extension.
 public enum FinderPathSelection {
-    public static func folder(targetedURL: URL?, itemTarget: Bool = false) -> String? {
+    public static func folder(targetedURL: URL?, selectedURLs: [URL] = [], itemTarget: Bool = false) -> String? {
+        if itemTarget, let selected = selectedURLs.first(where: \.isFileURL) {
+            return selected.deletingLastPathComponent().path
+        }
         guard let targetedURL, targetedURL.isFileURL else { return nil }
         return itemTarget ? targetedURL.deletingLastPathComponent().path : targetedURL.path
     }

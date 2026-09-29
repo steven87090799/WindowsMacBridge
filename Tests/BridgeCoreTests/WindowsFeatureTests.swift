@@ -9,6 +9,8 @@ struct WindowsFeatureTests {
                         URL(fileURLWithPath: "/Users/test/Documents/b.txt")]
         #expect(FinderPathSelection.folder(targetedURL: target) == "/Users/test/Documents")
         #expect(FinderPathSelection.folder(targetedURL: selected[0], itemTarget: true) == target.path)
+        // Finder may report the containing folder as targetedURL for an item menu.
+        #expect(FinderPathSelection.folder(targetedURL: target, selectedURLs: selected, itemTarget: true) == target.path)
         #expect(FinderPathSelection.selected(selected) == "/Users/test/Documents/a.txt\n/Users/test/Documents/b.txt")
         #expect(FinderPathSelection.displayed(selectedURLs: selected, targetedURL: target) == selected[0].path)
         #expect(FinderPathSelection.displayed(selectedURLs: [], targetedURL: target) == target.path)
