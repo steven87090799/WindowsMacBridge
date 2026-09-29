@@ -36,6 +36,13 @@ public struct WindowHistory: Sendable {
 }
 
 public enum WindowSwitchPolicy {
+    public static func cycleDirection(modifiers: Modifiers,
+                                      windowsKeyModifier: WindowsKeyModifier) -> Bool? {
+        let alt = windowsKeyModifier.altFlag
+        if modifiers == alt { return false }
+        if modifiers == [alt, .shift] { return true }
+        return nil
+    }
     public static func intercepts(mode: ApplicationMode, enabled: Bool,
                                   layoutSupported: Bool, inputReady: Bool,
                                   manualPassThrough: Bool,

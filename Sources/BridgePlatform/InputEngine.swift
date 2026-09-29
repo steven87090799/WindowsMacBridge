@@ -18,6 +18,10 @@ public struct EngineConfiguration: Sendable {
     public var windowThumbnailsEnabled = false
     public var altF4Enabled = false
     public var altF4QuitLastWindow = false
+    public var windowsKeyModifier: WindowsKeyModifier = .option
+    public var winRunEnabled = false
+    public var winSettingsEnabled = false
+    public var winTaskViewEnabled = false
     public init() {}
 }
 
@@ -106,6 +110,10 @@ public final class InputEngine: @unchecked Sendable {
             previous.windowThumbnailsEnabled != configuration.windowThumbnailsEnabled ||
             previous.altF4Enabled != configuration.altF4Enabled ||
             previous.altF4QuitLastWindow != configuration.altF4QuitLastWindow ||
+            previous.windowsKeyModifier != configuration.windowsKeyModifier ||
+            previous.winRunEnabled != configuration.winRunEnabled ||
+            previous.winSettingsEnabled != configuration.winSettingsEnabled ||
+            previous.winTaskViewEnabled != configuration.winTaskViewEnabled ||
             previous.restartToken != configuration.restartToken
         mailbox.configuration = configuration; mailbox.revision &+= 1
         mailbox.lock.unlock()
@@ -173,7 +181,11 @@ public final class InputEngine: @unchecked Sendable {
                             controlsEnabled: active, finderEnabled: configuration.finderEnabled,
                             finderPermanentDeleteEnabled: configuration.finderPermanentDeleteEnabled,
                             textNavigationEnabled: configuration.textNavigationEnabled,
-                            altF4Enabled: configuration.altF4Enabled)
+                            altF4Enabled: configuration.altF4Enabled,
+                            windowsKeyModifier: configuration.windowsKeyModifier,
+                            winRunEnabled: configuration.winRunEnabled,
+                            winSettingsEnabled: configuration.winSettingsEnabled,
+                            winTaskViewEnabled: configuration.winTaskViewEnabled)
         if !actions.update(context: configuration.context,
                            enabled: active && configuration.layoutSupported && !processor.manualPassThrough,
                            finderEnabled: configuration.finderEnabled,
@@ -309,7 +321,8 @@ public final class InputEngine: @unchecked Sendable {
             altTabHeld = false
             return nil
         }
-        if key == 48 && phase == .down && altTabHeld && !flags.contains(.option) {
+        let altFlag = configuration.windowsKeyModifier.altFlag
+        if key == 48 && phase == .down && altTabHeld && !flags.contains(altFlag) {
             return nil
         }
         if WindowSwitchPolicy.intercepts(mode: configuration.context.mode,
@@ -319,13 +332,15 @@ public final class InputEngine: @unchecked Sendable {
                                          manualPassThrough: processor.manualPassThrough,
                                          emergencyPaused: status.emergencyPaused) {
             if key == 48 && (phase == .down || phase == .up) {
-                if phase == .down && flags == .option || phase == .down && flags == [.option, .shift] {
-                    if actions.submit(.window(.advance(reverse: flags.contains(.shift))), context: configuration.context) {
+                if phase == .down,
+                   let reverse = WindowSwitchPolicy.cycleDirection(modifiers: flags,
+                                                                   windowsKeyModifier: configuration.windowsKeyModifier) {
+                    if actions.submit(.window(.advance(reverse: reverse)), context: configuration.context) {
                         altTabHeld = true; altTabActive = true; return nil
                     }
                 }
             }
-            if phase == .flagsChanged && altTabActive && !flags.contains(.option) {
+            if phase == .flagsChanged && altTabActive && !flags.contains(altFlag) {
                 altTabActive = false
                 if !actions.submit(.window(.commit), context: configuration.context) {
                     actions.cancelSwitcherFromCallback()

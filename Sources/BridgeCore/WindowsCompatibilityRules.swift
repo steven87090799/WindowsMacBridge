@@ -3,6 +3,8 @@
 public enum WindowsCompatibilityRules {
     public static let altF4 = ShortcutRule(id: "windows.altF4", input: .init(keyCode: 118, modifiers: .option),
                                            output: .init(keyCode: 13, modifiers: .command), action: .window(.close))
+    public static let altF4Command = ShortcutRule(id: "windows.altF4", input: .init(keyCode: 118, modifiers: .command),
+                                                  output: .init(keyCode: 13, modifiers: .command), action: .window(.close))
     public static let general: [ShortcutRule] = [
         ShortcutRule(id: "windows.copy", input: .init(keyCode: 8, modifiers: [.control]), output: .init(keyCode: 8, modifiers: [.command])), // #13
         ShortcutRule(id: "windows.paste", input: .init(keyCode: 9, modifiers: [.control]), output: .init(keyCode: 9, modifiers: [.command])), // #14
@@ -55,6 +57,11 @@ public enum WindowsCompatibilityRules {
         ShortcutRule(id: "karabiner.59", input: .init(keyCode: 28, modifiers: [.control]), output: .init(keyCode: 28, modifiers: [.command])), // #59
         ShortcutRule(id: "karabiner.60", input: .init(keyCode: 25, modifiers: [.control]), output: .init(keyCode: 25, modifiers: [.command])), // #60
     ]
+    public static let browserCommandAlt: [ShortcutRule] = browser.map { rule in
+        guard rule.input.modifiers == .option else { return rule }
+        return ShortcutRule(id: rule.id, input: .init(keyCode: rule.input.keyCode, modifiers: .command),
+                            output: rule.output, action: rule.action)
+    }
     public static let finder: [ShortcutRule] = [
         ShortcutRule(id: "karabiner.61", input: .init(keyCode: 8, modifiers: [.control]), output: .init(keyCode: 8, modifiers: [.command]), action: .finder(.copy)), // #61
         ShortcutRule(id: "karabiner.62", input: .init(keyCode: 7, modifiers: [.control]), output: .init(keyCode: 8, modifiers: [.command]), action: .finder(.cut)), // #62
@@ -72,6 +79,11 @@ public enum WindowsCompatibilityRules {
         ShortcutRule(id: "karabiner.75", input: .init(keyCode: 120, modifiers: []), output: .init(keyCode: 36, modifiers: []), action: .finder(.rename)), // #75
         ShortcutRule(id: "karabiner.76", input: .init(keyCode: 51, modifiers: [.fn]), output: .init(keyCode: 51, modifiers: [.command]), action: .finder(.trash)), // #76
     ]
+    public static let finderCommandAlt: [ShortcutRule] = finder.map { rule in
+        guard rule.input.modifiers == .option else { return rule }
+        return ShortcutRule(id: rule.id, input: .init(keyCode: rule.input.keyCode, modifiers: .command),
+                            output: rule.output, action: rule.action)
+    }
     public static let finderExtras: [ShortcutRule] = [
         ShortcutRule(id: "finder.delete", input: .init(keyCode: 117, modifiers: []), output: .init(keyCode: 51, modifiers: [.command]), action: .finder(.trash)),
         ShortcutRule(id: "finder.permanentDelete", input: .init(keyCode: 117, modifiers: [.shift]), output: .init(keyCode: 51, modifiers: [.command, .option]), action: .finder(.permanentDelete)),
@@ -88,4 +100,21 @@ public enum WindowsCompatibilityRules {
         ShortcutRule(id: "karabiner.12", input: .init(keyCode: 14, modifiers: [.option]), output: .init(keyCode: 14, modifiers: [.option]), action: .system(.openFinder)), // #12
         ShortcutRule(id: "karabiner.78", input: .init(keyCode: 53, modifiers: [.control, .shift]), output: .init(keyCode: 53, modifiers: [.control, .shift]), action: .system(.activityMonitor)), // #78
     ]
+    public static let systemCommand: [ShortcutRule] = system.map { rule in
+        guard rule.input.modifiers == .option else { return rule }
+        return ShortcutRule(id: rule.id, input: .init(keyCode: rule.input.keyCode, modifiers: .command),
+                            output: rule.output, action: rule.action)
+    }
+    public static let systemExtras: [ShortcutRule] = [
+        ShortcutRule(id: "windows.winR", input: .init(keyCode: 15, modifiers: .option),
+                     output: .init(keyCode: 49, modifiers: .command)), // Spotlight as a Run/search equivalent.
+        ShortcutRule(id: "windows.winI", input: .init(keyCode: 34, modifiers: .option),
+                     output: .init(keyCode: 34, modifiers: .option), action: .system(.openSettings)),
+        ShortcutRule(id: "windows.winTab", input: .init(keyCode: 48, modifiers: .option),
+                     output: .init(keyCode: 126, modifiers: .control)), // Mission Control, not an app-level Cmd-Tab.
+    ]
+    public static let systemExtrasCommand: [ShortcutRule] = systemExtras.map { rule in
+        ShortcutRule(id: rule.id, input: .init(keyCode: rule.input.keyCode, modifiers: .command),
+                     output: rule.output, action: rule.action)
+    }
 }

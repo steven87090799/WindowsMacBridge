@@ -18,6 +18,8 @@ import BridgePlatform
         #expect(settings.keyboardScope == .allKeyboards)
         #expect(!settings.finderEnabled && settings.allowIMEShortcuts)
         #expect(settings.screenshotAutoCopy)
+        #expect(settings.windowsKeyModifier == .option)
+        #expect(!settings.winRunEnabled && !settings.winSettingsEnabled && !settings.winTaskViewEnabled)
         #expect(KeyboardLayoutResolver.supports(sourceID: "org.atelierInmu.inputmethod.vChewing.IMECHT", asciiLayoutID: "com.apple.keylayout.ABC", allowIME: settings.allowIMEShortcuts))
         let registry = try ApplicationRegistry()
         #expect(registry.mode(for: "com.openai.codex", overrides: settings.overrides) == .macOS)
@@ -84,6 +86,22 @@ import BridgePlatform
         #expect(!store.settings.screenshotAutoCopy)
         store.update { $0.screenshotAutoCopy = true }
         #expect(SettingsStore(defaults: defaults).settings.screenshotAutoCopy)
+        store.update { $0.windowsKeyModifier = .command }
+        store.update { $0.winRunEnabled = true; $0.winSettingsEnabled = true; $0.winTaskViewEnabled = true }
+        store.applyRecommendedPreset()
+        #expect(SettingsStore(defaults: defaults).settings.windowsKeyModifier == .command)
+        #expect(store.settings.winRunEnabled && store.settings.winSettingsEnabled && store.settings.winTaskViewEnabled)
+    }
+
+    @Test func macBookMigrationUsesCommandButExplicitKeyboardChoiceWins() throws {
+        let (name, defaults) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let previous = Data(#"{"schemaVersion":3,"enabled":true,"overrides":{},"screenshotAutoCopy":true}"#.utf8)
+        defaults.set(previous, forKey: "bridge.settings.v1")
+        let migrated = SettingsStore(defaults: defaults, portableHost: true)
+        #expect(migrated.settings.windowsKeyModifier == .command)
+        migrated.update { $0.windowsKeyModifier = .option }
+        #expect(SettingsStore(defaults: defaults, portableHost: true).settings.windowsKeyModifier == .option)
     }
 
     @Test func removingBundledCodexRuleRestoresTerminalProtection() throws {
@@ -101,6 +119,7 @@ import BridgePlatform
         #expect(!store.settings.enabled && store.settings.finderEnabled)
         #expect(store.settings.overrides["example.remote"] == .remoteWindows)
         #expect(!store.settings.screenshotAutoCopy && !store.settings.allowIMEShortcuts)
+        #expect(store.settings.windowsKeyModifier == .option)
         #expect(store.settings.textNavigationEnabled && !store.settings.windowSwitcherEnabled)
         store.update { $0.altF4Enabled = true }
         #expect(SettingsStore(defaults: defaults).settings.altF4Enabled)

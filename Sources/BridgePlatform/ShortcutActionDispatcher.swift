@@ -129,7 +129,12 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
             if cutGeneration != request.generation { cut.cancel(); cutGeneration = request.generation }
             switch request.action {
             case .system(let action):
-                let bundle = action == .openFinder ? "com.apple.finder" : "com.apple.ActivityMonitor"
+                let bundle: String
+                switch action {
+                case .openFinder: bundle = "com.apple.finder"
+                case .openSettings: bundle = "com.apple.systempreferences"
+                case .activityMonitor: bundle = "com.apple.ActivityMonitor"
+                }
                 if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) {
                     do { _ = try await NSWorkspace.shared.openApplication(at: url, configuration: .init()) }
                     catch { report("系統 App 開啟失敗。") }

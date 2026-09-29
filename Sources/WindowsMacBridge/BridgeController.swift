@@ -123,6 +123,7 @@ import FinderSync
         inputSources.start()
         screenshot.onChange = { [weak self] status in self?.screenshotStatus = status }
         screenshot.onPeriodicCheck = { [weak self] in self?.verifyScreenshotConfiguration() }
+        screenshot.setWindowsKeyModifier(settings.windowsKeyModifier)
         screenshot.start(enabled: settings.screenshotAutoCopy)
         if settings.screenshotAutoCopy { ensureScreenshotLogin() }
         if settings.macBookFnControlSwap { ensureMacBookLogin() }
@@ -213,6 +214,8 @@ import FinderSync
     }
     private func refreshApplication() {
         context = currentApplicationContext()
+        screenshot.setContextMode(context.mode,
+                                  ownAppForeground: context.processID == ProcessInfo.processInfo.processIdentifier)
         if context.processID == ProcessInfo.processInfo.processIdentifier { refreshPermissions() }
         if context.processID != ProcessInfo.processInfo.processIdentifier { targetApp = context }
         refreshLayout()
@@ -277,6 +280,26 @@ import FinderSync
         if value {
             ensureScreenshotLogin()
         } else { releaseFeatureLoginIfUnused() }
+    }
+    func setWindowsKeyModifier(_ value: WindowsKeyModifier) {
+        store.update { $0.windowsKeyModifier = value }
+        settings = store.settings
+        configurationError = store.errorMessage
+        guard store.errorMessage == nil else { return }
+        screenshot.setWindowsKeyModifier(value)
+        publish()
+    }
+    func setWinRunEnabled(_ value: Bool) {
+        store.update { $0.winRunEnabled = value }; settings = store.settings
+        configurationError = store.errorMessage; publish()
+    }
+    func setWinSettingsEnabled(_ value: Bool) {
+        store.update { $0.winSettingsEnabled = value }; settings = store.settings
+        configurationError = store.errorMessage; publish()
+    }
+    func setWinTaskViewEnabled(_ value: Bool) {
+        store.update { $0.winTaskViewEnabled = value }; settings = store.settings
+        configurationError = store.errorMessage; publish()
     }
     private func ensureMacBookLogin() {
         let wasRegistered = inputSources.loginIsRegistered
@@ -345,6 +368,10 @@ import FinderSync
         config.windowThumbnailsEnabled = settings.windowThumbnailsEnabled
         config.altF4Enabled = settings.altF4Enabled
         config.altF4QuitLastWindow = settings.altF4QuitLastWindow
+        config.windowsKeyModifier = settings.windowsKeyModifier
+        config.winRunEnabled = settings.winRunEnabled
+        config.winSettingsEnabled = settings.winSettingsEnabled
+        config.winTaskViewEnabled = settings.winTaskViewEnabled
         hid.update(config, active: settings.inputBackend == .deviceHID && !macBookKeyboardStatus.restorePending)
         config.enabled = config.enabled && settings.inputBackend == .eventTap
         engine.update(config)

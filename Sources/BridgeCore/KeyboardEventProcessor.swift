@@ -18,6 +18,10 @@ public struct KeyboardEventProcessor: Sendable {
     private var finderPermanentDeleteEnabled = false
     private var textNavigationEnabled = true
     private var altF4Enabled = false
+    private var windowsKeyModifier: WindowsKeyModifier = .option
+    private var winRunEnabled = false
+    private var winSettingsEnabled = false
+    private var winTaskViewEnabled = false
     public private(set) var manualPassThrough = false
     private var awaitingNeutral = true
     private var pressCount = 0
@@ -34,7 +38,11 @@ public struct KeyboardEventProcessor: Sendable {
                                    finderEnabled: Bool = false,
                                    finderPermanentDeleteEnabled: Bool = false,
                                    textNavigationEnabled: Bool = true,
-                                   altF4Enabled: Bool = false) {
+                                   altF4Enabled: Bool = false,
+                                   windowsKeyModifier: WindowsKeyModifier = .option,
+                                   winRunEnabled: Bool = false,
+                                   winSettingsEnabled: Bool = false,
+                                   winTaskViewEnabled: Bool = false) {
         let changedContext = context.processID != newContext.processID ||
             context.bundleID != newContext.bundleID || context.mode != newContext.mode ||
             context.isBrowser != newContext.isBrowser
@@ -45,13 +53,19 @@ public struct KeyboardEventProcessor: Sendable {
         if changedContext || self.enabled != enabled || self.layoutSupported != layoutSupported ||
             self.finderEnabled != finderEnabled ||
             self.finderPermanentDeleteEnabled != finderPermanentDeleteEnabled ||
-            self.textNavigationEnabled != textNavigationEnabled || self.altF4Enabled != altF4Enabled {
+            self.textNavigationEnabled != textNavigationEnabled || self.altF4Enabled != altF4Enabled ||
+            self.windowsKeyModifier != windowsKeyModifier ||
+            self.winRunEnabled != winRunEnabled || self.winSettingsEnabled != winSettingsEnabled ||
+            self.winTaskViewEnabled != winTaskViewEnabled {
             awaitingNeutral = true
         }
         context = newContext; self.enabled = enabled; self.layoutSupported = layoutSupported
         self.controlsEnabled = controlsEnabled; self.finderEnabled = finderEnabled
         self.finderPermanentDeleteEnabled = finderPermanentDeleteEnabled
         self.textNavigationEnabled = textNavigationEnabled; self.altF4Enabled = altF4Enabled
+        self.windowsKeyModifier = windowsKeyModifier
+        self.winRunEnabled = winRunEnabled; self.winSettingsEnabled = winSettingsEnabled
+        self.winTaskViewEnabled = winTaskViewEnabled
     }
 
     public mutating func resumeManualPassThrough() { manualPassThrough = false; invalidate() }
@@ -160,18 +174,34 @@ public struct KeyboardEventProcessor: Sendable {
 
     private func match(_ event: KeyboardEvent) -> ShortcutRule? {
         // Remote/VM/game protections precede every local action, not only Ctrl shortcuts.
-        guard context.mode == .macOS || context.mode == .terminal || context.mode == .ide else { return nil }
-        if let system = RuleEngine.system.match(keyCode: event.keyCode, modifiers: event.modifiers),
-           event.modifiers != .option || (modifiers.isDown(.leftOption) && !modifiers.isDown(.rightOption)) {
+        guard context.mode == .macOS else { return nil }
+        let systemRules = windowsKeyModifier == .option ? RuleEngine.system : RuleEngine.systemCommand
+        if let system = systemRules.match(keyCode: event.keyCode, modifiers: event.modifiers),
+           event.modifiers != windowsKeyModifier.flag ||
+           (modifiers.isDown(windowsKeyModifier == .option ? .leftOption : .leftCommand) &&
+            !modifiers.isDown(windowsKeyModifier == .option ? .rightOption : .rightCommand)) {
             return system
         }
         guard context.mode.allowsTranslation else { return nil }
-        if altF4Enabled && event.keyCode == 118 && event.modifiers == .option {
-            return WindowsCompatibilityRules.altF4
+        let extraRules = windowsKeyModifier == .option ? RuleEngine.systemExtras : RuleEngine.systemExtrasCommand
+        if event.modifiers == windowsKeyModifier.flag,
+           modifiers.isDown(windowsKeyModifier == .option ? .leftOption : .leftCommand),
+           !modifiers.isDown(windowsKeyModifier == .option ? .rightOption : .rightCommand),
+           let extra = extraRules.match(keyCode: event.keyCode, modifiers: event.modifiers) {
+            switch extra.id {
+            case "windows.winR" where winRunEnabled: return extra
+            case "windows.winI" where winSettingsEnabled: return extra
+            case "windows.winTab" where winTaskViewEnabled: return extra
+            default: break
+            }
+        }
+        if altF4Enabled && event.keyCode == 118 && event.modifiers == windowsKeyModifier.altFlag {
+            return windowsKeyModifier == .option ? WindowsCompatibilityRules.altF4Command : WindowsCompatibilityRules.altF4
         }
         if context.bundleID == "com.apple.finder" {
             if finderEnabled {
-                if let rule = RuleEngine.finder.match(keyCode: event.keyCode, modifiers: event.modifiers) {
+                let finderRules = windowsKeyModifier == .option ? RuleEngine.finderCommandAlt : RuleEngine.finder
+                if let rule = finderRules.match(keyCode: event.keyCode, modifiers: event.modifiers) {
                     return rule
                 }
                 if let rule = RuleEngine.finderExtras.match(keyCode: event.keyCode, modifiers: event.modifiers) {
@@ -189,7 +219,8 @@ public struct KeyboardEventProcessor: Sendable {
             if event.keyCode == 7 { return nil }
             return localRule(event)
         }
-        if context.isBrowser, let browser = RuleEngine.browser.match(keyCode: event.keyCode, modifiers: event.modifiers) {
+        let browserRules = windowsKeyModifier == .option ? RuleEngine.browserCommandAlt : RuleEngine.browser
+        if context.isBrowser, let browser = browserRules.match(keyCode: event.keyCode, modifiers: event.modifiers) {
             return browser
         }
         return localRule(event)

@@ -10,6 +10,14 @@ public struct Modifiers: OptionSet, Hashable, Codable, Sendable {
     public static let fn = Self(rawValue: 16)
 }
 
+/// The macOS modifier produced by the key the user treats as Windows/Win.
+/// This selects only Win-specific shortcuts; it never swaps global modifiers.
+public enum WindowsKeyModifier: String, CaseIterable, Codable, Sendable {
+    case option, command
+    public var flag: Modifiers { self == .option ? .option : .command }
+    public var altFlag: Modifiers { self == .option ? .command : .option }
+}
+
 public enum ModifierSide: Int, CaseIterable, Sendable {
     case leftControl, rightControl, leftCommand, rightCommand
     case leftOption, rightOption, leftShift, rightShift
@@ -125,7 +133,7 @@ public enum EventDecision: Equatable, Sendable {
 public enum FinderAction: String, Sendable, CaseIterable {
     case copy, cut, paste, open, rename, trash, permanentDelete, parentFolder, newFolder, goToFolder
 }
-public enum SystemAction: String, Sendable, CaseIterable { case openFinder, activityMonitor }
+public enum SystemAction: String, Sendable, CaseIterable { case openFinder, openSettings, activityMonitor }
 public enum WindowAction: Equatable, Sendable {
     case advance(reverse: Bool), commit, close
 }

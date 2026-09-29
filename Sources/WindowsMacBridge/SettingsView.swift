@@ -149,6 +149,13 @@ struct SettingsView: View {
             Section("Windows 快捷鍵") {
                 Toggle("啟用 Windows 快捷鍵", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
                 explanation("預設開啟。包含複製、貼上、復原、儲存、尋找、分頁與 Ctrl 文字導覽；關閉後停止 Windows 按鍵翻譯，輸入法守護由自己的開關控制。")
+                Picker("這臺 Mac 收到的 Windows 鍵", selection: Binding(
+                    get: { controller.settings.windowsKeyModifier },
+                    set: { controller.setWindowsKeyModifier($0) })) {
+                    Text("Option (⌥)：這把鍵盤的 Win 送出 Option").tag(WindowsKeyModifier.option)
+                    Text("Command (⌘)：這把鍵盤的 Win 送出 Command").tag(WindowsKeyModifier.command)
+                }
+                explanation("Mac mini 預設 Option，MacBook 預設 Command；舊設定缺少此欄時依本機機型選擇。這項選擇讓 Win 專用操作和 Alt+Tab／Alt+F4／瀏覽器上一頁、下一頁依實際輸入判斷，不交換整把鍵盤；Ctrl 文字操作不受影響。通用控制換用不同來源鍵盤時，EventTap 無法辨識來源，必要時在接收端切換。")
                 explanation("本機自動翻譯；Terminal、IDE、Remote／VM／Game 依 App 規則保留原按鍵。")
                 DisclosureGroup("進階：輸入方式與指定鍵盤") {
                     Picker("輸入方式", selection: Binding(get: { controller.settings.inputBackend }, set: { controller.setInputBackend($0) })) {
@@ -193,15 +200,20 @@ struct SettingsView: View {
                 explanation("使用 App 原生關閉／退出快捷鍵；未儲存文件仍由 App 自己確認。")
                 Toggle("Alt+Tab 逐視窗切換", isOn: Binding(get: { controller.settings.windowSwitcherEnabled }, set: { controller.setWindowSwitcherEnabled($0) }))
                 explanation("只在 Default macOS Profile 攔截；按住 Alt 用 Tab／Shift+Tab 選擇，放開 Alt 切換。顯示 App 圖示與視窗名稱，包含最小化視窗。")
+                Toggle("Win+R 開啟 Spotlight 搜尋", isOn: Binding(get: { controller.settings.winRunEnabled }, set: { controller.setWinRunEnabled($0) }))
+                Toggle("Win+I 開啟系統設定", isOn: Binding(get: { controller.settings.winSettingsEnabled }, set: { controller.setWinSettingsEnabled($0) }))
+                Toggle("Win+Tab 開啟 Mission Control", isOn: Binding(get: { controller.settings.winTaskViewEnabled }, set: { controller.setWinTaskViewEnabled($0) }))
+                explanation("這三項預設關閉，各自選用；僅在 Default macOS Profile 的 EventTap 後端生效。Win+R 使用 macOS ⌘Space，Win+Tab 使用 ⌃↑；若你已改過系統快捷鍵，結果會跟隨 macOS 設定。")
                 Toggle("顯示視窗縮圖（需螢幕錄製權限）", isOn: Binding(get: { controller.settings.windowThumbnailsEnabled }, set: { controller.setWindowThumbnailsEnabled($0) }))
                     .disabled(!controller.settings.windowSwitcherEnabled)
                 explanation("逐視窗切換、視窗縮圖、Alt+F4 與新增 Finder／文字鍵位使用 EventTap；進階 HID 後端保留原有實體鍵位規則。")
             }
             Section("截圖") {
-                Toggle("截圖自動複製（Shift+Win+S／⇧⌘S）", isOn: Binding(
+                Toggle("截圖自動複製（Shift+Win+S）", isOn: Binding(
                     get: { controller.settings.screenshotAutoCopy },
                     set: { controller.setScreenshotAutoCopy($0) }))
-                explanation("預設開啟。Win 鍵在 macOS 對應 Command；框選完成後存檔並複製 PNG 圖片供 ⌘V 貼上。Ctrl+Shift+S 不會觸發截圖。原本的 ⇧⌘4 交由 macOS 處理；Esc 取消時不改剪貼簿。")
+                explanation("使用上方所選的 Windows 鍵位置。若實體 Alt+Shift+S 觸發截圖，代表此處選錯了映射。")
+                explanation("框選完成後存檔並複製 PNG 圖片供 ⌘V 貼上。Ctrl+Shift+S 不會觸發截圖。原本的 ⇧⌘4 交由 macOS 處理；Esc 取消時不改剪貼簿。")
                 LabeledContent("截圖狀態", value: controller.screenshotStatus.lastResult)
                 if let issue = controller.screenshotStatus.issue { Text(issue).foregroundStyle(.orange) }
                 explanation("啟用時立即檢查，之後每 30 天檢查與修復。此功能需要輔助使用與登入啟動；macOS 若要求核准登入項目或權限，請在系統設定完成。")

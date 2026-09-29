@@ -28,8 +28,13 @@ public struct RuleEngine: Sendable {
     }
     public static let windows = try! RuleEngine(rules: WindowsCompatibilityRules.general)
     public static let browser = try! RuleEngine(rules: WindowsCompatibilityRules.browser)
+    public static let browserCommandAlt = try! RuleEngine(rules: WindowsCompatibilityRules.browserCommandAlt)
     public static let finder = try! RuleEngine(rules: WindowsCompatibilityRules.finder)
+    public static let finderCommandAlt = try! RuleEngine(rules: WindowsCompatibilityRules.finderCommandAlt)
     public static let finderExtras = try! RuleEngine(rules: WindowsCompatibilityRules.finderExtras)
     public static let system = try! RuleEngine(rules: WindowsCompatibilityRules.system)
+    public static let systemCommand = try! RuleEngine(rules: WindowsCompatibilityRules.systemCommand)
+    public static let systemExtras = try! RuleEngine(rules: WindowsCompatibilityRules.systemExtras)
+    public static let systemExtrasCommand = try! RuleEngine(rules: WindowsCompatibilityRules.systemExtrasCommand)
     public static let textNavigation = try! RuleEngine(rules: WindowsCompatibilityRules.textNavigation)
 }

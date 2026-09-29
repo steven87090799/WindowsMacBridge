@@ -1,4 +1,10 @@
-# 0.5.10 保護與一般使用者情境檢查
+# 0.5.11 保護與一般使用者情境檢查
+
+## 本版 Windows 鍵位檢查
+
+舊規則將 Win+E／Win+L 視為 Option，截圖卻只認 Command，Alt+Tab／Alt+F4 又寫死 Option。在這臺 Mac 的實際鍵盤排列下，實體 Alt 送出 Command，造成 Shift+Alt+S 誤觸截圖；這是程式內部的邏輯鍵位定義不一致。現在以持久保存的「這臺 Mac 收到的 Windows 鍵」選擇 Win 來源，Alt 專用操作只用另一個修飾鍵，Ctrl 文字鍵不變。桌機舊設定預設 Option，MacBook 舊設定預設 Command，使用者明確存過的選擇優先。截圖與新增的三個 Win 操作在受保護的 App Profile 原樣通過；沒有增加裝置掃描或按鍵日誌。
+
+依 [Microsoft Windows 快捷鍵](https://support.microsoft.com/en-us/windows/keyboard-shortcuts-in-windows-dcc61a57-8ff0-cffe-9796-cb9706c75eec) 和 [Apple Mac 快捷鍵](https://support.apple.com/en-au/102650)，可直接對應且不需攔截一般文字的 Win+R／Win+I／Win+Tab 已加入各自關閉的開關，分別對應 Spotlight、系統設定和 Mission Control。這些是類似操作，不是 Windows Run 對話框或 Task View 的逐項複製；⌘Space／⌃↑ 若由使用者改過，應以 macOS 的設定為準。[公開 Karabiner Windows 設定](https://github.com/venkatarangan/karabiner-mac-to-windows) 也記錄了 Win／Alt 在外部映射後反轉的常見現象，但此 App 不修改其他工具或系統鍵位。
 
 ## 這版已修改
 
@@ -17,6 +23,8 @@
 | 更新後授權紅叉、快捷鍵沒有作用 | 真實原生授權清單與直接連結；不把點連結當授權 | 免費 ad-hoc 簽章更新可能需重新核准 |
 | 手動切換輸入法又被切回唯音 | 保留手動選擇、定時／直到手動恢復的守護暫停 | 各輸入法與實體切換鍵 |
 | Shift+Ctrl+S 被當成截圖 | 原始 Win／Command 熱鍵先處理，自己的翻譯事件排除 | 實體鍵位、外部映射、兩個 Ctrl |
+| Shift+Alt+S 被當成 Win 截圖 | 截圖、Win+E／L 與 Alt 專用功能採同一份邏輯鍵位選擇；只接受指定的單一修飾鍵 | 外接鍵盤與通用控制換來源時，接收端需核對實體鍵位 |
+| Win+R／I／Tab 不像 Windows | 各自選配原生 Spotlight／系統設定／Mission Control，保護 Profile 原樣通過 | 系統已改動的 Spotlight／Mission Control 快捷鍵；實體鍵驗收 |
 | 截圖途中重開開關，舊圖蓋掉新剪貼簿 | 本版 token 拒絕舊工作，圖片保留 | 實體框選及大圖途中切換 |
 | 重複按截圖熱鍵、按 Esc | 單一工作、取消不寫剪貼簿 | macOS 原生框選在不同螢幕的結果 |
 | 巨大截圖導致 UI／Tap 暫停 | 本版背景轉換與局部 pool；PNG 重用 | 多螢幕高解析度峰值，不宣稱無峰值 |
@@ -38,6 +46,8 @@
 | 優先度 | 建議 | 使用者得到的幫助與資源界線 |
 | --- | --- | --- |
 | 高 | 30 秒按鍵位置校準 | 只顯示修飾鍵／keycode，明確開始停止、不存文字；找出 Win／Ctrl／Fn 外部映射衝突，不能從普通 EventTap 猜裝置來源 |
+| 中 | Win+D／Win+方向鍵／Print Screen | 顯示桌面、視窗排列及全畫面截圖常見；macOS 原生快捷鍵與多螢幕／Fn 差異大，應先以實體鍵和 OS 版本驗收，再各自提供開關 |
+| 中 | Win+V 剪貼簿歷史 | Windows 常見但涉及私人資料；若要加入，必須明確啟用、限制保留、提供清除，不應在本版暗中讀取既有剪貼簿 |
 | 高 | 一鍵匯出可預覽的診斷摘要 | 版本、授權、功能狀態、同 PID 資源快照；先排除路徑、視窗標題、文件、輸入內容，按下才匯出 |
 | 高 | 設定備份與還原預覽 | 升級前可回看變動、保留 Profile；只保存本 App 設定，匯入前 schema 驗證，不改 TCC |
 | 中 | 截圖成功提示與手動重試複製 | 只由使用者點擊最近一次本 App 已儲存的圖；不掃資料夾，不讀取剪貼簿歷史 |

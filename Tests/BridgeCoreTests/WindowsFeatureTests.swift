@@ -59,6 +59,16 @@ struct WindowsFeatureTests {
                                                inputReady: false,
                                                manualPassThrough: false, emergencyPaused: false))
     }
+    @Test func altTabUsesPhysicalAltForBothKeyboardLayouts() {
+        for selected in WindowsKeyModifier.allCases {
+            #expect(WindowSwitchPolicy.cycleDirection(modifiers: selected.altFlag,
+                                                      windowsKeyModifier: selected) == false)
+            #expect(WindowSwitchPolicy.cycleDirection(modifiers: [selected.altFlag, .shift],
+                                                      windowsKeyModifier: selected) == true)
+            #expect(WindowSwitchPolicy.cycleDirection(modifiers: selected.flag,
+                                                      windowsKeyModifier: selected) == nil)
+        }
+    }
     private func processor(mode: ApplicationMode = .macOS, finder: Bool = false,
                            text: Bool = true, permanentDelete: Bool = false,
                            altF4: Bool = false) -> KeyboardEventProcessor {
@@ -66,14 +76,16 @@ struct WindowsFeatureTests {
         value.configure(context: .init(processID: 12, bundleID: finder ? "com.apple.finder" : "test", mode: mode),
                         enabled: true, layoutSupported: true, finderEnabled: finder,
                         finderPermanentDeleteEnabled: permanentDelete,
-                        textNavigationEnabled: text, altF4Enabled: altF4)
+                        textNavigationEnabled: text, altF4Enabled: altF4,
+                        windowsKeyModifier: .command)
         value.reconcileNeutralHardware()
         return value
     }
     private func hold(_ modifiers: Modifiers, _ value: inout KeyboardEventProcessor) {
         var active: Modifiers = []
         for (group, side, key) in [(Modifiers.control, ModifierSide.leftControl, UInt16(59)),
-                                   (.option, .leftOption, 58), (.shift, .leftShift, 56)] where modifiers.contains(group) {
+                                   (.option, .leftOption, 58), (.command, .leftCommand, 55),
+                                   (.shift, .leftShift, 56)] where modifiers.contains(group) {
             active.insert(group)
             _ = value.process(.init(.flagsChanged, keyCode: key, modifiers: active,
                                     modifierSide: side, modifierDown: true))
@@ -110,15 +122,74 @@ struct WindowsFeatureTests {
         #expect(remote.process(.init(.down, keyCode: 117)) == .passThrough)
     }
     @Test func altF4OnlyClosesInLocalModeWhenEnabled() {
-        for mode in ApplicationMode.allCases {
-            var value = processor(mode: mode, altF4: true)
-            hold(.option, &value)
-            let result = value.process(.init(.down, keyCode: 118, modifiers: .option))
-            if mode == .macOS { #expect(result == .action(.window(.close), ruleID: "windows.altF4")) }
-            else { #expect(result == .passThrough) }
+        for selected in WindowsKeyModifier.allCases {
+            for mode in ApplicationMode.allCases {
+                var value = KeyboardEventProcessor()
+                value.configure(context: .init(processID: 12, bundleID: "test", mode: mode),
+                                enabled: true, layoutSupported: true, altF4Enabled: true,
+                                windowsKeyModifier: selected)
+                value.reconcileNeutralHardware()
+                hold(selected.altFlag, &value)
+                let result = value.process(.init(.down, keyCode: 118, modifiers: selected.altFlag))
+                if mode == .macOS { #expect(result == .action(.window(.close), ruleID: "windows.altF4")) }
+                else { #expect(result == .passThrough) }
+            }
         }
         var disabled = processor()
         hold(.option, &disabled)
         #expect(disabled.process(.init(.down, keyCode: 118, modifiers: .option)) == .passThrough)
+    }
+    @Test func optionalWinActionsStayIndependentAndProtected() {
+        for selected in WindowsKeyModifier.allCases {
+            for mode in ApplicationMode.allCases {
+                var value = KeyboardEventProcessor()
+                value.configure(context: .init(processID: 12, bundleID: "test", mode: mode),
+                                enabled: true, layoutSupported: true, windowsKeyModifier: selected,
+                                winRunEnabled: true, winSettingsEnabled: true, winTaskViewEnabled: true)
+                value.reconcileNeutralHardware()
+                hold(selected.flag, &value)
+                for (key, expected) in [
+                    (UInt16(15), EventDecision.rewrite(keyCode: 49, modifiers: .command, ruleID: "windows.winR")),
+                    (UInt16(34), .action(.system(.openSettings), ruleID: "windows.winI")),
+                    (UInt16(48), .rewrite(keyCode: 126, modifiers: .control, ruleID: "windows.winTab"))
+                ] {
+                    let result = value.process(.init(.down, keyCode: key, modifiers: selected.flag))
+                    #expect(result == (mode == .macOS ? expected : .passThrough))
+                    _ = value.process(.init(.up, keyCode: key, modifiers: selected.flag))
+                }
+            }
+            var disabled = KeyboardEventProcessor()
+            disabled.configure(context: .init(processID: 12, bundleID: "test", mode: .macOS),
+                               enabled: true, layoutSupported: true, windowsKeyModifier: selected)
+            disabled.reconcileNeutralHardware()
+            hold(selected.flag, &disabled)
+            for key: UInt16 in [15, 34, 48] {
+                #expect(disabled.process(.init(.down, keyCode: key, modifiers: selected.flag)) == .passThrough)
+                _ = disabled.process(.init(.up, keyCode: key, modifiers: selected.flag))
+            }
+        }
+    }
+    @Test func winSystemActionsFollowConfiguredModifierWithoutSwappingAlt() {
+        for selected in WindowsKeyModifier.allCases {
+            var value = KeyboardEventProcessor()
+            value.configure(context: .init(processID: 12, bundleID: "test", mode: .macOS),
+                            enabled: true, layoutSupported: true, windowsKeyModifier: selected)
+            value.reconcileNeutralHardware()
+            let side: ModifierSide = selected == .option ? .leftOption : .leftCommand
+            let key: UInt16 = selected == .option ? 58 : 55
+            _ = value.process(.init(.flagsChanged, keyCode: key, modifiers: selected.flag,
+                                    modifierSide: side, modifierDown: true))
+            #expect(value.process(.init(.down, keyCode: 14, modifiers: selected.flag)) ==
+                    .action(.system(.openFinder), ruleID: "karabiner.12"))
+            _ = value.process(.init(.up, keyCode: 14, modifiers: selected.flag))
+            _ = value.process(.init(.flagsChanged, keyCode: key, modifiers: [],
+                                    modifierSide: side, modifierDown: false))
+            let other: Modifiers = selected == .option ? .command : .option
+            let otherSide: ModifierSide = selected == .option ? .leftCommand : .leftOption
+            let otherKey: UInt16 = selected == .option ? 55 : 58
+            _ = value.process(.init(.flagsChanged, keyCode: otherKey, modifiers: other,
+                                    modifierSide: otherSide, modifierDown: true))
+            #expect(value.process(.init(.down, keyCode: 14, modifiers: other)) == .passThrough)
+        }
     }
 }

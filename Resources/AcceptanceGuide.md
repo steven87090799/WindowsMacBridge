@@ -6,7 +6,7 @@
 
 ## 準備（約兩分鐘）
 
-0.5.10 截圖保護驗收：開啟框選後關閉再重開截圖開關，完成舊框選時只儲存、不覆寫剪貼簿；下一次新截圖應可正常複製。大圖轉換期間做相同測試。同時確認 Esc 取消、快速重複快捷鍵、Shift+Ctrl+S 不截圖及 Shift+Win+S 框選。上述需實體操作，純核心生命週期與圖片 worker 測試不替代它。
+0.5.11 鍵位驗收：先看「這臺 Mac 收到的 Windows 鍵」。Mac mini 的現有 Win 若送出 Option，選 Option；MacBook 內建 Command 當 Win 時選 Command。分別實測 Shift+Win+S 會截圖、Shift+Alt+S 不會截圖、Win+E 開 Finder、Win+L 鎖定，以及啟用時 Alt+Tab／Alt+F4 使用實體 Alt。若用通用控制換了來源鍵盤，在接收端再核對一次。截圖框選期間關閉再重開開關，上一輪不應覆寫剪貼簿。這些需實體操作，純核心測試不替代它。
 
 1. 從 Applications 啟動 App；診斷應顯示 EventTap Active、Secure Input OFF。
 2. 記下 App 版本、macOS 版本、鍵盤型號、輸入來源。先關掉 Karabiner 中重複的規則。
@@ -29,7 +29,8 @@
 | Ctrl+Y 先放 Ctrl、Y 暫時不放 | 不應連續輸入 Z，也不應在重按 Ctrl 後復活連發；放開全部後新快捷鍵正常 |
 | Ctrl 按住切 App | 在新 App 先放開全部按鍵，再按新快捷鍵才開始翻譯；不重播前個 App 的動作 |
 | 本機視窗切換 | 預設 Alt+Tab 原樣通過；啟用逐視窗開關後，Alt+Tab／Alt+Shift+Tab 選擇不同視窗，放開 Alt 才切換；最小化及多螢幕也要測。HID 模式另測舊有持有式映射。 |
-| 框選截圖 | 在一般設定確認截圖自動複製已開，實際按 `Shift+Win+S`（`⇧⌘S`），框選 App 視窗中一小塊非敏感區域；確認圖片照常存檔，且直接按 `⌘V` 能貼上圖片。另按 `Ctrl+Shift+S`，確認沒有進入截圖，並保留該 Profile 的另存新檔翻譯或原樣通過；再按 `⇧⌘4`，確認維持 macOS 原本行為。取消框選時剪貼簿不變。 |
+| 框選截圖 | 在一般設定確認截圖自動複製已開、Win 鍵位置選對，實際按 `Shift+Win+S`，框選 App 視窗中一小塊非敏感區域；確認圖片照常存檔，且直接按 `⌘V` 能貼上圖片。另按 `Shift+Alt+S` 和 `Ctrl+Shift+S`，確認都沒有進入截圖；再按 `⇧⌘4`，確認維持 macOS 原本行為。取消框選時剪貼簿不變。 |
+| Win+R／I／Tab | 各自開啟設定後，依序應顯示 Spotlight／系統設定／Mission Control；關閉開關則不攔截，Remote／VM／Terminal Profile 也應原樣通過。 |
 
 再到 Codex 的**未送出聊天文字框**用相同測試文字做 Ctrl+A/C/X/V/Z；不要送出。
 Codex 的預設 Profile 適合聊天；若使用它的內建 Terminal，需改成 IDE 保護模式。

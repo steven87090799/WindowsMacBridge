@@ -72,6 +72,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private let logURL: URL
     private let lastCheckKey = "screenshot.lastCheck.v1"
     private var enabled = false
+    private var captureAllowed = false
     private var accessibilityTrusted = false
     private var shortcut = ScreenshotShortcut()
     private var tap: CFMachPort?
@@ -118,6 +119,17 @@ public struct ScreenshotStatus: Equatable, Sendable {
         }
     }
 
+    public func setWindowsKeyModifier(_ value: WindowsKeyModifier) {
+        guard shortcut.windowsKeyModifier != value else { return }
+        shortcut.reset()
+        shortcut.windowsKeyModifier = value
+        if enabled { verifyAndRepair(reason: "Windows 鍵映射已變更") }
+    }
+
+    public func setContextMode(_ value: ApplicationMode, ownAppForeground: Bool = false) {
+        captureAllowed = value == .macOS || ownAppForeground
+    }
+
     public func stop() {
         checkTimer?.invalidate(); checkTimer = nil
         destroyTap()
@@ -161,8 +173,9 @@ public struct ScreenshotStatus: Equatable, Sendable {
         }
         if tap == nil { createTap() }
         if let tap, CGEvent.tapIsEnabled(tap: tap) {
-            setStatus(issue: nil, result: "設定與快捷鍵攔截正常")
-            log("\(reason)：設定與快捷鍵攔截正常")
+            let modifier = shortcut.windowsKeyModifier == .option ? "⌥" : "⌘"
+            setStatus(issue: nil, result: "Shift+Win+S（⇧\(modifier)S）攔截正常")
+            log("\(reason)：⇧\(modifier)S 攔截正常")
         } else {
             setStatus(issue: "無法建立截圖 Event Tap；請檢查輔助使用權限。", result: "檢查失敗")
             log("\(reason)：無法建立截圖 Event Tap")
@@ -254,7 +267,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         guard enabled, type == .keyDown || type == .keyUp else { return Unmanaged.passUnretained(event) }
         let key = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
         guard key == ScreenshotShortcut.keyCode else { return Unmanaged.passUnretained(event) }
-        let decision = shortcut.handle(type: type, event: event)
+        let decision = shortcut.handle(type: type, event: event, allowsCapture: captureAllowed)
         switch decision {
         case .passThrough: return Unmanaged.passUnretained(event)
         case .suppress: return nil

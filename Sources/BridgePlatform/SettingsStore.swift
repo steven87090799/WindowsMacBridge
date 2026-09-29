@@ -1,4 +1,5 @@
 import Foundation
+import IOKit
 import BridgeCore
 
 public struct BridgeSettings: Codable, Equatable, Sendable {
@@ -11,6 +12,10 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     public var allowIMEShortcuts = true
     public var inputBackend: InputBackend = .eventTap
     public var screenshotAutoCopy = true
+    public var windowsKeyModifier: WindowsKeyModifier = .option
+    public var winRunEnabled = false
+    public var winSettingsEnabled = false
+    public var winTaskViewEnabled = false
     public var windowSwitcherEnabled = false
     public var windowThumbnailsEnabled = false
     public var finderPermanentDeleteEnabled = false
@@ -30,7 +35,7 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case schemaVersion, enabled, overrides, keyboardScope, finderEnabled, allowIMEShortcuts, inputBackend, screenshotAutoCopy
         case windowSwitcherEnabled, windowThumbnailsEnabled, finderPermanentDeleteEnabled, textNavigationEnabled, altF4Enabled, altF4QuitLastWindow
-        case macBookFnControlSwap
+        case macBookFnControlSwap, windowsKeyModifier, winRunEnabled, winSettingsEnabled, winTaskViewEnabled
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -43,6 +48,10 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         allowIMEShortcuts = try values.decodeIfPresent(Bool.self, forKey: .allowIMEShortcuts) ?? false
         inputBackend = try values.decodeIfPresent(InputBackend.self, forKey: .inputBackend) ?? .eventTap
         screenshotAutoCopy = try values.decodeIfPresent(Bool.self, forKey: .screenshotAutoCopy) ?? true
+        windowsKeyModifier = try values.decodeIfPresent(WindowsKeyModifier.self, forKey: .windowsKeyModifier) ?? .option
+        winRunEnabled = try values.decodeIfPresent(Bool.self, forKey: .winRunEnabled) ?? false
+        winSettingsEnabled = try values.decodeIfPresent(Bool.self, forKey: .winSettingsEnabled) ?? false
+        winTaskViewEnabled = try values.decodeIfPresent(Bool.self, forKey: .winTaskViewEnabled) ?? false
         windowSwitcherEnabled = try values.decodeIfPresent(Bool.self, forKey: .windowSwitcherEnabled) ?? false
         windowThumbnailsEnabled = try values.decodeIfPresent(Bool.self, forKey: .windowThumbnailsEnabled) ?? false
         finderPermanentDeleteEnabled = try values.decodeIfPresent(Bool.self, forKey: .finderPermanentDeleteEnabled) ?? false
@@ -57,19 +66,35 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     private let defaults: UserDefaults
     public private(set) var settings: BridgeSettings
     public private(set) var errorMessage: String?
-    public init(defaults: UserDefaults = .standard) {
+    private static func portableHost() -> Bool {
+        let battery = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
+        guard battery != 0 else { return false }
+        defer { IOObjectRelease(battery) }
+        return (IORegistryEntryCreateCFProperty(battery, "BatteryInstalled" as CFString,
+                kCFAllocatorDefault, 0)?.takeRetainedValue() as? NSNumber)?.boolValue == true
+    }
+    public init(defaults: UserDefaults = .standard, portableHost: Bool? = nil) {
         self.defaults = defaults
+        let defaultModifier: WindowsKeyModifier = (portableHost ?? Self.portableHost()) ? .command : .option
         if let data = defaults.data(forKey: "bridge.settings.v1") {
             do {
                 let loaded = try JSONDecoder().decode(BridgeSettings.self, from: data)
                 guard (1...3).contains(loaded.schemaVersion) else { throw CocoaError(.coderReadCorrupt) }
                 settings = loaded
                 settings.schemaVersion = 3
+                // v1-v3 did not store this choice. Preserve explicit choices on newer files.
+                if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   object["windowsKeyModifier"] == nil {
+                    settings.windowsKeyModifier = defaultModifier
+                }
             } catch {
                 settings = .safeFallback
                 errorMessage = "設定無法讀取，已使用停用的安全預設；原資料未覆寫。"
             }
-        } else { settings = BridgeSettings() }
+        } else {
+            settings = BridgeSettings()
+            settings.windowsKeyModifier = defaultModifier
+        }
     }
     public func update(_ body: (inout BridgeSettings) -> Void) {
         var next = settings
@@ -87,6 +112,10 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
             let preserved = $0
             $0 = BridgeSettings()
             $0.screenshotAutoCopy = preserved.screenshotAutoCopy
+            $0.windowsKeyModifier = preserved.windowsKeyModifier
+            $0.winRunEnabled = preserved.winRunEnabled
+            $0.winSettingsEnabled = preserved.winSettingsEnabled
+            $0.winTaskViewEnabled = preserved.winTaskViewEnabled
             $0.windowSwitcherEnabled = preserved.windowSwitcherEnabled
             $0.windowThumbnailsEnabled = preserved.windowThumbnailsEnabled
             $0.finderPermanentDeleteEnabled = preserved.finderPermanentDeleteEnabled

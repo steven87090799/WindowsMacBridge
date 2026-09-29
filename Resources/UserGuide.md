@@ -1,4 +1,4 @@
-# WindowsMacBridge 0.5.10 — 操作說明
+# WindowsMacBridge 0.5.11 — 操作說明
 
 截圖尚在框選或圖片轉換時，關閉開關會取消該次自動複製；即使馬上重開，也不會複製上一輪圖片。已儲存的圖片保留。原生框選仍可按 Esc 取消；同一時間只接受一輪截圖。截圖 Event Tap 在 60 秒內第三次停用時停止自動重試並顯示錯誤，放開按鍵後重開截圖開關即可重新檢查。
 
@@ -33,7 +33,9 @@ Finder 右鍵路徑選單需要 App 正在執行及 Finder Mode 已開啟。設�
 | Alt+Tab 逐視窗／縮圖 | 關／關 | 開啟後按視窗 MRU 選擇；縮圖另需螢幕錄製權限 |
 | Windows 文字游標 | 開 | 保留舊版 Ctrl 文字導覽並新增 Home／End |
 | Alt+F4／最後視窗退出 | 關／關 | 使用 App 原生關閉／退出確認 |
-| 截圖自動複製 | 開 | `Shift+Win+S`（`⇧⌘S`）框選後儲存圖片並複製到剪貼簿 |
+| Windows 鍵位置 | Mac mini Option／MacBook Command | 依這把鍵盤實際送出的修飾鍵調整；Alt 專用操作用另一鍵 |
+| Win+R／Win+I／Win+Tab | 關／關／關 | 可選 Spotlight／系統設定／Mission Control |
+| 截圖自動複製 | 開 | `Shift+Win+S` 框選後儲存圖片並複製到剪貼簿 |
 | 中文／唯音實體鍵位快捷鍵 | 開 | 底層 ABC／U.S. 的中文來源也翻譯快捷鍵 |
 | 輸入法守護／切換快捷鍵 | 關／關 | 保留原本輸入來源，不自動改成唯音 |
 | 守護修正延遲／啟動等待 | 400 ms／1500 ms | 只影響守護，不增加按鍵翻譯延遲 |
@@ -68,7 +70,9 @@ App 啟動、開啟設定及返回前景時會重新檢查，也可按「重新�
 - **鍵盤範圍**：EventTap 使用所有鍵盤，HID 使用指定範圍。EventTap 選內建限定時停止翻譯，避免錯誤地套用到全部鍵盤。
 - **Finder 加強**：確認在檔案列表才啟用開啟、改名、刪除與 Ctrl+X／V 移動。Ctrl+X 先執行 Copy 並記住剪下狀態，Ctrl+V 再交由 Finder 的 Move 執行。剪貼簿更新、切換 App、暫停或 5 分鐘後取消標記；不保證 Move 已成功。Shift+Delete 必須另外啟用並逐次確認。右鍵路徑選單由 Finder Sync 提供，請在系統的 Finder 擴充功能設定啟用；「顯示目前資料夾路徑」子選單優先顯示選取項目的完整 POSIX 路徑，並有「複製此路徑」。只有按下複製才寫入剪貼簿。
 - **Windows 文字游標／Alt+F4**：Ctrl+方向鍵按單字移動，Home／End 到行首行尾，Ctrl+Home／End 到文件邊界，Shift 組合選取。Alt+F4 送出原生關閉視窗，選配最後一個主要視窗時送出原生退出 App，未儲存內容仍由 App 確認。
-- **截圖自動複製**：預設開啟。`Shift+Win+S`（Win 鍵在 macOS 對應 Command，即 `⇧⌘S`）使用 macOS 框選；完成時存檔並複製 PNG 圖片供 `⌘V`，Esc 取消不改剪貼簿。`Ctrl+Shift+S` 不會觸發截圖，仍依 App Profile 保留另存新檔翻譯或原樣通過。原本的 `⇧⌘4` 保持系統原樣；關閉時移除截圖攔截。
+- **Windows 鍵位置**：EventTap 收到這把鍵盤的 Win 為 Option 時選 Option，收到 Command 時選 Command。截圖、Win+E／Win+L 和選配 Win+R／I／Tab 使用此鍵；Alt+Tab／Alt+F4／瀏覽器上一頁、下一頁使用另一鍵。不更改 Ctrl、macOS 系統修飾鍵或其他 App 鍵位。MacBook 內建 Command 通常應選 Command；通用控制換用來源鍵盤時可能要在接收端切換。進階 HID 後端尚未採用此選擇。
+- **Win+R／Win+I／Win+Tab**：各自預設關閉、獨立選用，依序對應 Spotlight（⌘Space）、系統設定及 Mission Control（⌃↑）。只有本機 Default macOS Profile 的 EventTap 後端攔截；若 macOS 系統快捷鍵已改動，Spotlight／Mission Control 需依系統設定調整。
+- **截圖自動複製**：預設開啟。`Shift+Win+S` 使用上述 Win 鍵位置進入 macOS 框選；完成時存檔並複製 PNG 圖片供 `⌘V`，Esc 取消不改剪貼簿。`Ctrl+Shift+S` 不會觸發截圖，仍依 App Profile 保留另存新檔翻譯或原樣通過。原本的 `⇧⌘4` 保持系統原樣；關閉時移除截圖攔截。Remote／VM／Game 等保護 Profile 原樣通過。
 - **登入啟動**：先將 App 放進 /Applications。截圖自動複製會註冊登入項目；若系統顯示待核准，按「開啟登入項目設定」檢查。關閉截圖功能時只移除它新增的註冊。
 - **輔助使用／事件輸出**：允許攔截與送出翻譯後按鍵。未授權時不翻譯；「要求輔助使用」提出提示，「開啟權限設定」開啟系統設定。更新後權限異常時，重新加入目前 App。
 - **App 輸入監控**：用「要求 App 輸入監控」提出請求；EventTap 的可用性依系統授權而定。HID helper 必須另外取得自己的輸入監控權限。

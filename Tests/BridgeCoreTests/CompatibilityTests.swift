@@ -3,10 +3,12 @@ import Testing
 @testable import BridgeCore
 
 struct CompatibilityTests {
-    private func processor(browser: Bool = false, finder: Bool = false, mode: ApplicationMode = .macOS) -> KeyboardEventProcessor {
+    private func processor(browser: Bool = false, finder: Bool = false, mode: ApplicationMode = .macOS,
+                           windowsKeyModifier: WindowsKeyModifier = .command) -> KeyboardEventProcessor {
         var processor = KeyboardEventProcessor()
         processor.configure(context: .init(processID: 10, bundleID: finder ? "com.apple.finder" : "test", mode: mode,
-                                            isBrowser: browser), enabled: true, layoutSupported: true, finderEnabled: finder)
+                                            isBrowser: browser), enabled: true, layoutSupported: true, finderEnabled: finder,
+                            windowsKeyModifier: windowsKeyModifier)
         processor.reconcileNeutralHardware()
         return processor
     }
@@ -76,13 +78,13 @@ struct CompatibilityTests {
     }
     @Test func systemActionsRespectSideAndRemoteProtection() {
         for mode in ApplicationMode.allCases {
-            var p = processor(mode: mode); pressModifiers(.option, &p)
+            var p = processor(mode: mode, windowsKeyModifier: .option); pressModifiers(.option, &p)
             let result = p.process(.init(.down, keyCode: 14, modifiers: .option))
-            if [.macOS, .terminal, .ide].contains(mode) {
+            if mode == .macOS {
                 #expect(result == .action(.system(.openFinder), ruleID: "karabiner.12"))
             } else { #expect(result == .passThrough) }
         }
-        var right = processor(); pressModifiers(.option, &right, right: true)
+        var right = processor(windowsKeyModifier: .option); pressModifiers(.option, &right, right: true)
         #expect(right.process(.init(.down, keyCode: 14, modifiers: .option)) == .passThrough)
     }
     @Test func fileCutOnlyMovesOnceAndExpiresOnMetadataChanges() {
