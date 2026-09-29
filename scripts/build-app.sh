@@ -10,6 +10,15 @@ app_directory="$task_scratch/Artifacts/WindowsMacBridge.app"
 mkdir -p "$app_directory/Contents/MacOS" "$app_directory/Contents/Resources"
 cp "$binary_directory/WindowsMacBridge" "$app_directory/Contents/MacOS/WindowsMacBridge"
 cp "$task_root/Resources/Info.plist" "$app_directory/Contents/Info.plist"
+bridge_revision="$(git -C "$task_root" rev-parse HEAD)"
+bridge_source_state=clean
+if [ -n "$(git -C "$task_root" status --porcelain --untracked-files=normal)" ]; then
+    bridge_source_state=modified
+fi
+bridge_build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+/usr/libexec/PlistBuddy -c "Add :WMBGitRevision string $bridge_revision" "$app_directory/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :WMBBuildDateUTC string $bridge_build_date" "$app_directory/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :WMBSourceState string $bridge_source_state" "$app_directory/Contents/Info.plist"
 for brand_asset in AppIcon.icns MenuBarIcon.png MenuBarPausedIcon.png; do
     cp "$task_root/Resources/Brand/$brand_asset" "$app_directory/Contents/Resources/$brand_asset"
 done

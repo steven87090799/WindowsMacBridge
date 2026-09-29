@@ -114,6 +114,13 @@ public struct InputSourceStatus: Equatable, Sendable {
         catch { loginIssue = "登入項目更新失敗：\(error.localizedDescription)。請將 App 放在 Applications 後再設定。" }
         emit()
     }
+    public var loginIsRegistered: Bool { LoginItemManager.isRegistered }
+    public var loginIsActive: Bool { LoginItemManager.isEnabled }
+    public var loginStatusText: String { LoginItemManager.statusDescription }
+    @discardableResult public func ensureLoginEnabled() -> Bool {
+        setLoginEnabled(true)
+        return LoginItemManager.isRegistered
+    }
     public func quitLegacyApp() {
         let oldApps = NSRunningApplication.runningApplications(withBundleIdentifier: LegacyPreferences.domain)
         let refused = oldApps.filter { !$0.terminate() }

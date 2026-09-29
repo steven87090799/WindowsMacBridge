@@ -25,9 +25,12 @@ import HIDProtocol
     @Published var presetNotice: String?
     @Published var targetApp: ApplicationContext?
     @Published var hidStatus = HIDStatus()
+    @Published var screenshotStatus = ScreenshotStatus()
     private let engine = InputEngine()
     private let hid = HIDBackendClient()
     private let store = SettingsStore()
+    private let screenshot = ScreenshotManager()
+    private let screenshotManagedLoginKey = "screenshot.loginManaged.v1"
     private var registry: ApplicationRegistry?
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
@@ -97,6 +100,10 @@ import HIDProtocol
         observe(center, NSWorkspace.sessionDidResignActiveNotification) { $0.setSuspended(.inactiveSession, true) }
         observe(center, NSWorkspace.sessionDidBecomeActiveNotification) { $0.setSuspended(.inactiveSession, false); $0.refreshApplication() }
         inputSources.start()
+        screenshot.onChange = { [weak self] status in self?.screenshotStatus = status }
+        screenshot.onPeriodicCheck = { [weak self] in self?.verifyScreenshotConfiguration() }
+        screenshot.start(enabled: settings.screenshotAutoCopy)
+        if settings.screenshotAutoCopy { ensureScreenshotLogin() }
         engine.start()
         hid.start()
         publish()
@@ -115,11 +122,13 @@ import HIDProtocol
         for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         observers.removeAll()
         inputSources.stop()
+        screenshot.stop()
         engine.stop()
         hid.stop()
     }
     private func tick() {
         let previousPassThrough = status.manualPassThrough
+        let previousAccessibility = status.accessibility
         var next = engine.snapshot()
         if settings.inputBackend == .deviceHID {
             if hidStatus != hid.status { hidStatus = hid.status }
@@ -134,6 +143,9 @@ import HIDProtocol
         // Publishing identical snapshots wakes SwiftUI even when no window is visible.
         let changed = status != next
         if changed { status = next }
+        if !previousAccessibility && next.accessibility && settings.screenshotAutoCopy {
+            screenshot.verifyAndRepair(reason: "輔助使用權限恢復")
+        }
         if previousPassThrough != status.manualPassThrough {
             inputSources.updateProtection(sourceSuspension(for: context))
         }
@@ -177,8 +189,49 @@ import HIDProtocol
     }
     private func setSuspended(_ reason: SuspensionReason, _ suspended: Bool) {
         if suspended { suspensionReasons.insert(reason) } else { suspensionReasons.remove(reason) }
+        if !suspended && settings.screenshotAutoCopy { screenshot.verifyAndRepair(reason: "Session 恢復") }
         publish()
     }
+    func setScreenshotAutoCopy(_ value: Bool) {
+        store.update { $0.screenshotAutoCopy = value }
+        settings = store.settings
+        configurationError = store.errorMessage
+        guard store.errorMessage == nil else { return }
+        screenshot.setEnabled(value)
+        if value {
+            ensureScreenshotLogin()
+        } else if UserDefaults.standard.bool(forKey: screenshotManagedLoginKey) {
+            inputSources.setLoginEnabled(false)
+            if !inputSources.loginIsRegistered {
+                UserDefaults.standard.removeObject(forKey: screenshotManagedLoginKey)
+            }
+        }
+    }
+    private func ensureScreenshotLogin() {
+        let wasRegistered = inputSources.loginIsRegistered
+        if inputSources.ensureLoginEnabled(), !wasRegistered {
+            UserDefaults.standard.set(true, forKey: screenshotManagedLoginKey)
+            screenshot.recordRepair("登入啟動已註冊")
+        }
+        if !inputSources.loginIsActive {
+            screenshot.reportConfigurationIssue("登入啟動未生效（\(inputSources.loginStatusText)）；請在系統設定核准登入項目。")
+        }
+    }
+    private func verifyScreenshotConfiguration() {
+        guard settings.screenshotAutoCopy else { return }
+        let stored = SettingsStore().settings
+        if !stored.screenshotAutoCopy {
+            store.update { $0.screenshotAutoCopy = true }
+            settings = store.settings
+            if store.errorMessage != nil {
+                screenshot.reportConfigurationIssue("截圖設定無法持久儲存。")
+            } else {
+                screenshot.recordRepair("持久設定已重新寫入")
+            }
+        }
+        ensureScreenshotLogin()
+    }
+    var screenshotLogPath: String { screenshot.logPath }
     func refreshSourceDiagnostics() {
         sourceDiagnostics = inputSources.diagnostics
         sourceLog = inputSources.recentLog

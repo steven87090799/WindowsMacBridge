@@ -10,16 +10,18 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     public var finderEnabled = false
     public var allowIMEShortcuts = true
     public var inputBackend: InputBackend = .eventTap
+    public var screenshotAutoCopy = true
     public init() {}
     public static var safeFallback: Self {
         var settings = Self()
         settings.enabled = false
         settings.overrides = [:]
         settings.allowIMEShortcuts = false
+        settings.screenshotAutoCopy = false
         return settings
     }
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, enabled, overrides, keyboardScope, finderEnabled, allowIMEShortcuts, inputBackend
+        case schemaVersion, enabled, overrides, keyboardScope, finderEnabled, allowIMEShortcuts, inputBackend, screenshotAutoCopy
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -31,6 +33,7 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         finderEnabled = try values.decodeIfPresent(Bool.self, forKey: .finderEnabled) ?? false
         allowIMEShortcuts = try values.decodeIfPresent(Bool.self, forKey: .allowIMEShortcuts) ?? false
         inputBackend = try values.decodeIfPresent(InputBackend.self, forKey: .inputBackend) ?? .eventTap
+        screenshotAutoCopy = try values.decodeIfPresent(Bool.self, forKey: .screenshotAutoCopy) ?? true
     }
 }
 
@@ -64,7 +67,9 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     public func applyRecommendedPreset() {
         update {
             let existingOverrides = $0.overrides
+            let screenshotAutoCopy = $0.screenshotAutoCopy
             $0 = BridgeSettings()
+            $0.screenshotAutoCopy = screenshotAutoCopy
             $0.overrides.merge(existingOverrides) { _, existing in existing }
             $0.overrides["com.openai.codex"] = .macOS
         }

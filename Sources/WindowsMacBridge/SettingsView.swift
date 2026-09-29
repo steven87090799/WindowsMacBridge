@@ -51,7 +51,7 @@ struct SettingsView: View {
                     explanation("快捷鍵預設已開啟；授權後自動開始，不需要執行安裝指令或安裝 Driver。macOS 權限只能由你核准；更新後若系統再次要求，請核准目前版本。")
                 }
             }
-            Section("WindowsMacBridge · 0.4.2 Preview") {
+            Section("WindowsMacBridge · \(AppBuildInfo.current.versionLabel) Preview") {
                 Text(controller.summary).font(.headline).textSelection(.enabled)
                 explanation("新安裝已啟用 Windows 快捷鍵：本機 Ctrl+C／X／V 會轉成複製／剪下／貼上。Codex 預設適用聊天與文字輸入；Terminal、其他 IDE、遠端桌面、VM 和遊戲保留原按鍵。")
                 HStack {
@@ -92,9 +92,19 @@ struct SettingsView: View {
                 Toggle("Finder 檔案快捷鍵加強", isOn: Binding(get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
                 explanation("預設關閉。開啟後，確認焦點在檔案列表才提供開啟、改名及 Ctrl+X → Ctrl+V 移動；文字框仍使用文字操作。剪下標記在剪貼簿更新、切換 App、暫停或 5 分鐘後失效；程式無法確認 Finder 是否真的移動成功。")
             }
+            Section("截圖") {
+                Toggle("截圖自動複製（⇧⌘4）", isOn: Binding(
+                    get: { controller.settings.screenshotAutoCopy },
+                    set: { controller.setScreenshotAutoCopy($0) }))
+                explanation("預設開啟。仍可框選，截圖照常存到 macOS 指定位置，完成時也複製圖片供 ⌘V 貼上；Esc 取消時不改剪貼簿。關閉會移除截圖攔截。")
+                LabeledContent("截圖狀態", value: controller.screenshotStatus.lastResult)
+                if let issue = controller.screenshotStatus.issue { Text(issue).foregroundStyle(.orange) }
+                explanation("啟用時立即檢查，之後每 30 天檢查與修復。此功能需要輔助使用與登入啟動；macOS 若要求核准登入項目或權限，請在系統設定完成。")
+            }
             Section("登入時啟動") {
                 Toggle("登入時啟動 WindowsMacBridge", isOn: Binding(get: { controller.sourceStatus.loginRegistered }, set: { controller.inputSources.setLoginEnabled($0) }))
-                explanation("預設關閉。先將 App 放在 /Applications，再開啟此項；以後登入會自動常駐 Menu Bar，仍需 macOS 權限。關閉會移除本程式的登入註冊。")
+                    .disabled(controller.settings.screenshotAutoCopy)
+                explanation("新安裝因截圖自動複製預設開啟，會註冊登入啟動，以便重新登入後繼續生效；關閉截圖功能時，只有由截圖功能新增的登入註冊會被移除。")
                 LabeledContent("系統登入項目狀態", value: controller.sourceStatus.loginStatus)
                 Button("開啟登入項目設定") { controller.inputSources.openLoginSettings() }
                 explanation("若顯示待核准或啟動失敗，到系統設定檢查 WindowsMacBridge 是否被允許啟動。")
@@ -246,12 +256,24 @@ struct SettingsView: View {
 
     private var diagnostics: some View {
         Form {
+            Section("版本與編譯資訊") {
+                LabeledContent("版本與 Build", value: AppBuildInfo.current.versionLabel)
+                LabeledContent("編譯時間（UTC）", value: AppBuildInfo.current.buildDateUTC)
+                LabeledContent("Git Commit", value: AppBuildInfo.current.gitRevision)
+                LabeledContent("原始碼狀態", value: AppBuildInfo.current.sourceState)
+                LabeledContent("Bundle ID", value: AppBuildInfo.current.bundleIdentifier)
+                Button("複製版本資訊") { AppBuildInfo.current.copyToPasteboard() }
+            }
             Section("目前判定") {
                 Text("\(controller.context.displayName) · \(controller.context.mode.title)").font(.headline)
                 Text(controller.context.bundleID).textSelection(.enabled)
                 explanation("這是目前前景 App 與實際套用的模式；Remote 表示按 App 規則穿透，不表示已確認遠端連線。開啟此設定視窗時，WindowsMacBridge 自己會保持穿透。")
                 LabeledContent("輸入方式", value: controller.settings.inputBackend.title)
                 LabeledContent("Event Tap", value: controller.status.tapActive ? "Active" : "Inactive")
+                LabeledContent("截圖 Event Tap", value: controller.screenshotStatus.tapActive ? "Active" : "Inactive")
+                LabeledContent("截圖最近結果", value: controller.screenshotStatus.lastResult)
+                Text(controller.screenshotLogPath).font(.caption).textSelection(.enabled)
+                if let issue = controller.screenshotStatus.issue { Text(issue).foregroundStyle(.orange) }
                 explanation("EventTap 模式要看到 Active 才能攔截快捷鍵。HID 模式不使用 EventTap，請回一般頁查看 Helper／Driver 與接管數。")
                 LabeledContent("Secure Input", value: controller.status.secureInput ? "ON — 已停止翻譯" : "OFF")
                 explanation("macOS 的密碼或安全輸入環境啟用時，程式尊重安全邊界並停止翻譯；離開後等待按鍵放開再恢復。")

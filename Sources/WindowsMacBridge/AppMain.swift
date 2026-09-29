@@ -74,6 +74,7 @@ import InputSourceSupport
     }
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        label("WindowsMacBridge \(AppBuildInfo.current.versionLabel) · \(AppBuildInfo.current.shortRevision)", in: menu)
         label(controller.summary, in: menu)
         label("App: \(controller.context.displayName)", in: menu)
         label("Profile: \(controller.context.mode.title)", in: menu)
@@ -139,12 +140,15 @@ import InputSourceSupport
         if CommandLine.arguments.contains("--self-check") {
             do {
                 let registry = try ApplicationRegistry()
-                let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development"
-                print("WindowsMacBridge \(version): bundled registry loaded (\(registry.entries.count) entries); no event tap or capture started.")
+                print("\(AppBuildInfo.current.diagnosticText)\nBundled registry loaded (\(registry.entries.count) entries); no event tap or capture started.")
             } catch {
                 print("WindowsMacBridge self-check failed: registry unavailable.")
                 exit(1)
             }
+            return
+        }
+        if CommandLine.arguments.contains("--version") {
+            print(AppBuildInfo.current.diagnosticText)
             return
         }
         if CommandLine.arguments.contains("--diagnose-input-sources") {

@@ -9,10 +9,12 @@ struct HIDProtocolTests {
         let settings = BridgeSettings()
         #expect(settings.enabled); #expect(settings.inputBackend == .eventTap)
         #expect(settings.keyboardScope == .allKeyboards)
+        #expect(settings.screenshotAutoCopy)
         #expect(settings.overrides["com.openai.codex"] == .macOS)
         let legacy = Data(#"{"schemaVersion":1,"enabled":true,"overrides":{}}"#.utf8)
         let decoded = try JSONDecoder().decode(BridgeSettings.self, from: legacy)
         #expect(decoded.inputBackend == .eventTap); #expect(decoded.keyboardScope == .allKeyboards)
+        #expect(decoded.screenshotAutoCopy)
     }
     @Test func boundedPolicyRejectsUnknownVersionInvalidPIDAndLongBundle() {
         var policy = HIDConfiguration(); #expect(policy.valid)

@@ -17,6 +17,7 @@ import BridgePlatform
         #expect(settings.inputBackend == .eventTap)
         #expect(settings.keyboardScope == .allKeyboards)
         #expect(!settings.finderEnabled && settings.allowIMEShortcuts)
+        #expect(settings.screenshotAutoCopy)
         #expect(KeyboardLayoutResolver.supports(sourceID: "org.atelierInmu.inputmethod.vChewing.IMECHT", asciiLayoutID: "com.apple.keylayout.ABC", allowIME: settings.allowIMEShortcuts))
         let registry = try ApplicationRegistry()
         #expect(registry.mode(for: "com.openai.codex", overrides: settings.overrides) == .macOS)
@@ -35,6 +36,7 @@ import BridgePlatform
         #expect(!store.settings.enabled)
         #expect(store.settings.overrides.isEmpty)
         #expect(!store.settings.allowIMEShortcuts)
+        #expect(!store.settings.screenshotAutoCopy)
         #expect(store.errorMessage != nil)
         #expect(defaults.data(forKey: "bridge.settings.v1") == data)
     }
@@ -68,7 +70,20 @@ import BridgePlatform
         #expect(store.settings.overrides["com.openai.codex"] == .macOS)
         #expect(store.settings.overrides["custom.browser"] == .remoteWindows)
         #expect(!store.settings.finderEnabled)
+        #expect(store.settings.screenshotAutoCopy)
         #expect(SettingsStore(defaults: defaults).settings == store.settings)
+    }
+
+    @Test func screenshotChoicePersistsAndPresetDoesNotResetIt() {
+        let (name, defaults) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = SettingsStore(defaults: defaults)
+        store.update { $0.screenshotAutoCopy = false }
+        #expect(!SettingsStore(defaults: defaults).settings.screenshotAutoCopy)
+        store.applyRecommendedPreset()
+        #expect(!store.settings.screenshotAutoCopy)
+        store.update { $0.screenshotAutoCopy = true }
+        #expect(SettingsStore(defaults: defaults).settings.screenshotAutoCopy)
     }
 
     @Test func removingBundledCodexRuleRestoresTerminalProtection() throws {
