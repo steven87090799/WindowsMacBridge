@@ -1,12 +1,12 @@
 # WindowsMacBridge
 
-Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.11 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
+Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.12 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
 
 主專案是這個 repository；`vchewing-input-helper` 已移入 `InputSourceCore` 與 `InputSourceSupport`，不需同時執行兩個 App。[整合與遷移](Docs/ProjectIntegration.md)。
 
-## 0.5.11 快速開始
+## 0.5.12 快速開始
 
-新安裝預設啟用 Windows 快捷鍵、EventTap／所有鍵盤、底層 ABC／U.S. 的中文／唯音快捷鍵、截圖自動複製，以及 Codex 的聊天／文字 Profile。Terminal、其他 IDE、Remote、VM、Game 保留原按鍵；Finder 加強、唯音守護及切換快捷鍵預設關閉。截圖功能會註冊登入啟動，仍可能需要 macOS 核准。更新保留已存設定，可從一般頁按「套用建議預設」。
+新安裝預設啟用 Windows 快捷鍵、EventTap／所有鍵盤、底層 ABC／U.S. 的中文／唯音快捷鍵、截圖自動複製，以及 Codex 的聊天／文字 Profile。MacBook 新安裝會自動啟用只作用於內建鍵盤的 Fn／左 Ctrl 交換；外接和通用控制虛擬鍵盤保留原鍵位。Terminal、其他 IDE、Remote、VM、Game 保留原按鍵；Finder 加強、唯音守護及切換快捷鍵預設關閉。截圖功能會註冊登入啟動，仍可能需要 macOS 核准。更新保留已存設定，可從一般頁按「套用建議預設」。
 
 ### 授權清單
 
@@ -63,7 +63,7 @@ App 改用黑色鍵盤／雙向箭頭圖示，Menu Bar 不再顯示文字；暫�
 
 ## MacBook Fn／Ctrl 模式與通用控制
 
-一般設定新增獨立、預設關閉的「MacBook 內建鍵盤：交換 Fn／地球鍵與左 Ctrl」。開啟後最左側 Fn → 左 Ctrl、原左 Ctrl → Fn；右 Ctrl、Command／Win、Option／Alt 保持原位。用 Apple [TN2450 的 IOKit API](https://developer.apple.com/library/archive/technotes/tn2450/_index.html) 對**本機實體 Apple 內建鍵盤**設定暫存 `UserKeyMapping`，不需要 Automator、額外 Driver、root 或全域 Event Tap 交換。外接 USB／Bluetooth、Magic Keyboard、Karabiner 及通用控制虛擬鍵盤均排除；Mac mini 上開啟只顯示等待，沒有鍵盤被修改。
+一般設定提供獨立的「MacBook 內建鍵盤：交換 Fn／地球鍵與左 Ctrl」；MacBook 新安裝預設開啟，Mac mini 預設關閉，已保存的使用者選擇保持不變。開啟後最左側 Fn → 左 Ctrl、原左 Ctrl → Fn；右 Ctrl、Command／Win、Option／Alt 保持原位。用 Apple [TN2450 的 IOKit API](https://developer.apple.com/library/archive/technotes/tn2450/_index.html) 對**本機實體 Apple 內建鍵盤**設定暫存 `UserKeyMapping`，不需要 Automator、額外 Driver、root 或全域 Event Tap 交換。外接 USB／Bluetooth、Magic Keyboard、Karabiner 及通用控制虛擬鍵盤均排除；Mac mini 上開啟只顯示等待，沒有鍵盤被修改。
 
 | 你正在使用的鍵盤 | Fn／Ctrl 模式作用位置 | 接收另一臺 Mac 時 |
 | --- | --- | --- |

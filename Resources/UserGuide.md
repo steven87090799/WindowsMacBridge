@@ -1,4 +1,4 @@
-# WindowsMacBridge 0.5.11 — 操作說明
+# WindowsMacBridge 0.5.12 — 操作說明
 
 截圖尚在框選或圖片轉換時，關閉開關會取消該次自動複製；即使馬上重開，也不會複製上一輪圖片。已儲存的圖片保留。原生框選仍可按 Esc 取消；同一時間只接受一輪截圖。截圖 Event Tap 在 60 秒內第三次停用時停止自動重試並顯示錯誤，放開按鍵後重開截圖開關即可重新檢查。
 
@@ -25,7 +25,7 @@ Finder 右鍵路徑選單需要 App 正在執行及 Finder Mode 已開啟。設�
 | Windows 快捷鍵 | 開 | 本機 Ctrl 快捷鍵轉為 macOS 操作 |
 | 輸入方式 | EventTap | 使用目前可用的快捷鍵翻譯，不接管實體鍵盤 |
 | 鍵盤範圍 | 所有鍵盤 | 內建、USB、Bluetooth 均使用同一套快捷鍵規則 |
-| MacBook Fn／Ctrl 交換 | 關 | 本機內建 Fn → 左 Ctrl、左 Ctrl → Fn；外接與通用控制虛擬鍵盤排除 |
+| MacBook Fn／Ctrl 交換 | MacBook 開／Mac mini 關 | 本機內建 Fn → 左 Ctrl、左 Ctrl → Fn；外接與通用控制虛擬鍵盤排除 |
 | Codex／ChatGPT App | Default macOS | 依 `com.openai.codex` 套用聊天／文字操作 |
 | Terminal／其他 IDE | 原樣通過 | 保護 Unix 與內嵌終端機 Ctrl 快捷鍵 |
 | Remote／VM／Game | 原樣通過 | 不在本機翻譯或切換輸入法 |
@@ -46,7 +46,7 @@ Finder 右鍵路徑選單需要 App 正在執行及 Finder Mode 已開啟。設�
 
 ## MacBook 內建鍵盤模式
 
-一般設定開啟「MacBook 內建鍵盤：交換 Fn／地球鍵與左 Ctrl」。最左側變成 Ctrl，右側原 Ctrl 變成 Fn，其他修飾鍵不變。狀態顯示「已交換」才代表原生服務讀回成功；Mac mini 或找不到本機實體內建鍵盤時顯示等待，不修改外接鍵盤。請先放開按鍵再切換。
+新安裝時自動辨識這臺 Mac 是否為 MacBook：MacBook 預設開啟「MacBook 內建鍵盤：交換 Fn／地球鍵與左 Ctrl」，Mac mini 預設關閉。舊設定沒有此欄位才依機型補值；已儲存的關閉選擇不會被升級覆蓋。最左側變成 Ctrl，右側原 Ctrl 變成 Fn，其他修飾鍵不變。映射在原生 HID 鍵盤服務上依裝置套用，內建鍵盤和外接鍵盤可以交替使用，不必切換開關；只有內建鍵盤會交換。狀態顯示「已交換」才代表服務讀回成功；找不到本機實體內建鍵盤時顯示等待，不修改外接鍵盤。請先放開按鍵再手動切換。
 
 通用控制兩種方向都能使用同一份設定：只在來源 MacBook 交換實體內建鍵盤，另一臺收到的虛擬服務不會再次交換；外接鍵盤操控 MacBook 時仍保持外接排列。實際跨機 Ctrl／Fn、中文組字及睡眠恢復需按驗收指南測試，未測之前不視為已驗收。
 

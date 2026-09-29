@@ -75,17 +75,19 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     }
     public init(defaults: UserDefaults = .standard, portableHost: Bool? = nil) {
         self.defaults = defaults
-        let defaultModifier: WindowsKeyModifier = (portableHost ?? Self.portableHost()) ? .command : .option
+        let isPortable = portableHost ?? Self.portableHost()
+        let defaultModifier: WindowsKeyModifier = isPortable ? .command : .option
         if let data = defaults.data(forKey: "bridge.settings.v1") {
             do {
                 let loaded = try JSONDecoder().decode(BridgeSettings.self, from: data)
                 guard (1...3).contains(loaded.schemaVersion) else { throw CocoaError(.coderReadCorrupt) }
                 settings = loaded
                 settings.schemaVersion = 3
-                // v1-v3 did not store this choice. Preserve explicit choices on newer files.
-                if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   object["windowsKeyModifier"] == nil {
-                    settings.windowsKeyModifier = defaultModifier
+                // Older files without these fields get host defaults. A stored
+                // false is an explicit choice and must never be overwritten.
+                if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    if object["windowsKeyModifier"] == nil { settings.windowsKeyModifier = defaultModifier }
+                    if object["macBookFnControlSwap"] == nil { settings.macBookFnControlSwap = isPortable }
                 }
             } catch {
                 settings = .safeFallback
@@ -94,6 +96,7 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         } else {
             settings = BridgeSettings()
             settings.windowsKeyModifier = defaultModifier
+            settings.macBookFnControlSwap = isPortable
         }
     }
     public func update(_ body: (inout BridgeSettings) -> Void) {

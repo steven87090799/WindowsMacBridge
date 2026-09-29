@@ -6,7 +6,7 @@
 
 ## 準備（約兩分鐘）
 
-0.5.11 鍵位驗收：先看「這臺 Mac 收到的 Windows 鍵」。Mac mini 的現有 Win 若送出 Option，選 Option；MacBook 內建 Command 當 Win 時選 Command。分別實測 Shift+Win+S 會截圖、Shift+Alt+S 不會截圖、Win+E 開 Finder、Win+L 鎖定，以及啟用時 Alt+Tab／Alt+F4 使用實體 Alt。若用通用控制換了來源鍵盤，在接收端再核對一次。截圖框選期間關閉再重開開關，上一輪不應覆寫剪貼簿。這些需實體操作，純核心測試不替代它。
+0.5.12 鍵位驗收：先看「這臺 Mac 收到的 Windows 鍵」。Mac mini 的現有 Win 若送出 Option，選 Option；MacBook 內建 Command 當 Win 時選 Command。分別實測 Shift+Win+S 會截圖、Shift+Alt+S 不會截圖、Win+E 開 Finder、Win+L 鎖定，以及啟用時 Alt+Tab／Alt+F4 使用實體 Alt。若用通用控制換了來源鍵盤，在接收端再核對一次。截圖框選期間關閉再重開開關，上一輪不應覆寫剪貼簿。這些需實體操作，純核心測試不替代它。
 
 1. 從 Applications 啟動 App；診斷應顯示 EventTap Active、Secure Input OFF。
 2. 記下 App 版本、macOS 版本、鍵盤型號、輸入來源。先關掉 Karabiner 中重複的規則。
@@ -87,7 +87,7 @@ HID 不在一般 DMG 的安裝流程內，不要為了完成本機快捷鍵驗�
 
 ## MacBook Fn／Ctrl 與通用控制
 
-先放開所有按鍵，用可丟棄的文字文件測試。MacBook 開啟 Fn／Ctrl 模式並確認「已交換」，Mac mini 應顯示等待、外接鍵盤不變。
+先放開所有按鍵，用可丟棄的文字文件測試。MacBook 新安裝應自動顯示 Fn／Ctrl 模式已開啟並確認「已交換」；舊設定明確關閉時應維持關閉。Mac mini 應顯示關閉或等待，外接鍵盤不變。交替使用內建與外接鍵盤，確認不用切換 Fn 模式且不會留下卡住的 Ctrl。
 
 | 鍵盤來源 → 操作目標 | 必須確認 |
 | --- | --- |

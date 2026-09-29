@@ -181,7 +181,7 @@ struct SettingsView: View {
                 Toggle("MacBook 內建鍵盤：交換 Fn／地球鍵與左 Ctrl", isOn: Binding(
                     get: { controller.settings.macBookFnControlSwap }, set: { controller.setMacBookFnControlSwap($0) }))
                     .disabled(controller.settings.inputBackend == .deviceHID)
-                explanation("預設關閉。Fn 變成 Ctrl、原左 Ctrl 變成 Fn；右 Ctrl、Win／Command、Alt／Option 及外接鍵盤保持原樣。只對本機實體內建鍵盤生效，退出 App 或關閉時還原；請先放開按鍵再切換。HID 後端已有自己的交換，兩種方式不會疊加。")
+                explanation("MacBook 新安裝預設開啟，Mac mini 預設關閉；舊設定中明確關閉會保留。Fn 變成 Ctrl、原左 Ctrl 變成 Fn；右 Ctrl、Win／Command、Alt／Option 及外接鍵盤保持原樣。按鍵來源由內建鍵盤的 HID 服務辨識，不靠目前連接哪把鍵盤猜測；外接鍵盤和通用控制虛擬鍵盤不套用交換。退出 App 或關閉時還原；請先放開按鍵再切換。HID 後端已有自己的交換，不會疊加。")
                 explanation("通用控制：在鍵盤實際所在的 MacBook 開啟。接收端不交換虛擬鍵盤，避免交換兩次；Mac mini 的外接鍵盤操作 MacBook 時仍保持外接排列。兩臺 Mac 的跨機修飾鍵結果需實測。Fn／Ctrl 是實體位置交換，Terminal／Remote 等 Profile 仍照原規則處理交換後的 Ctrl。")
                 LabeledContent("MacBook 鍵盤模式", value: controller.macBookKeyboardStatus.summary)
                 Button("重新檢查鍵盤模式") { controller.refreshMacBookKeyboard() }

@@ -100,8 +100,22 @@ import BridgePlatform
         defaults.set(previous, forKey: "bridge.settings.v1")
         let migrated = SettingsStore(defaults: defaults, portableHost: true)
         #expect(migrated.settings.windowsKeyModifier == .command)
+        #expect(migrated.settings.macBookFnControlSwap)
         migrated.update { $0.windowsKeyModifier = .option }
         #expect(SettingsStore(defaults: defaults, portableHost: true).settings.windowsKeyModifier == .option)
+    }
+
+    @Test func freshMacBookEnablesFnSwapDefaultAndExplicitOffSurvives() throws {
+        let (name, defaults) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = SettingsStore(defaults: defaults, portableHost: true)
+        #expect(store.settings.macBookFnControlSwap)
+        #expect(store.settings.windowsKeyModifier == .command)
+        store.update { $0.macBookFnControlSwap = false }
+        #expect(!SettingsStore(defaults: defaults, portableHost: true).settings.macBookFnControlSwap)
+        store.applyRecommendedPreset()
+        #expect(!store.settings.macBookFnControlSwap)
+        #expect(!SettingsStore(defaults: defaults, portableHost: true).settings.macBookFnControlSwap)
     }
 
     @Test func removingBundledCodexRuleRestoresTerminalProtection() throws {
