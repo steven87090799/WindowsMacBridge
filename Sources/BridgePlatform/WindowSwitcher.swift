@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import BridgeCore
+import ImageIO
 import ScreenCaptureKit
 import SwiftUI
 
@@ -14,6 +15,15 @@ import SwiftUI
         let icon: NSImage
         let minimized: Bool
         var thumbnail: NSImage?
+    }
+    private struct ThumbnailRequest: Sendable {
+        let index: Int
+        let processID: Int32
+        let title: String
+    }
+    private struct ThumbnailResult: Sendable {
+        let index: Int
+        let data: Data
     }
     private var items: [Item] = []
     private var recent = WindowHistory()
@@ -221,13 +231,29 @@ import SwiftUI
     }
 
     private func captureThumbnails() async {
+        let requests = items.prefix(12).enumerated().map {
+            ThumbnailRequest(index: $0.offset, processID: $0.element.app.processIdentifier, title: $0.element.title)
+        }
+        let results = await Self.loadThumbnails(requests)
+        guard !Task.isCancelled else { return }
+        for result in results where items.indices.contains(result.index) {
+            if let image = NSImage(data: result.data) {
+                items[result.index].thumbnail = image
+            }
+        }
+        show()
+        if results.isEmpty { status = "縮圖不可用；仍可用圖示與標題切換。" }
+    }
+
+    /// ScreenCaptureKit objects never cross the main-actor boundary. Only PNG data does.
+    private nonisolated static func loadThumbnails(_ requests: [ThumbnailRequest]) async -> [ThumbnailResult] {
+        var results: [ThumbnailResult] = []
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
-            for index in items.indices.prefix(12) {
-                if Task.isCancelled { return }
-                let item = items[index]
+            for request in requests {
+                if Task.isCancelled { return results }
                 guard let window = content.windows.first(where: {
-                    $0.owningApplication?.processID == item.app.processIdentifier && $0.title == item.title
+                    $0.owningApplication?.processID == request.processID && $0.title == request.title
                 }) else { continue }
                 let filter = SCContentFilter(desktopIndependentWindow: window)
                 let config = SCStreamConfiguration()
@@ -235,14 +261,17 @@ import SwiftUI
                 config.height = max(1, Int(160 * window.frame.height / max(1, window.frame.width)))
                 do {
                     let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
-                    if Task.isCancelled { return }
-                    if items.indices.contains(index) && items[index].id == item.id {
-                        items[index].thumbnail = NSImage(cgImage: image, size: .zero)
-                        show()
-                    }
-                } catch { status = "縮圖擷取失敗；仍可用標題切換。" }
+                    let data = CFDataCreateMutable(kCFAllocatorDefault, 0)!
+                    guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else { continue }
+                    CGImageDestinationAddImage(destination, image, nil)
+                    guard CGImageDestinationFinalize(destination),
+                          let bytes = CFDataGetBytePtr(data) else { continue }
+                    results.append(ThumbnailResult(index: request.index,
+                                                   data: Data(bytes: bytes, count: CFDataGetLength(data))))
+                } catch { continue }
             }
-        } catch { status = "無法取得視窗縮圖；請確認螢幕錄製權限。" }
+        } catch { return [] }
+        return results
     }
 }
 
