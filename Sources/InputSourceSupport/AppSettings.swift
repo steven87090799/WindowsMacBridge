@@ -1,6 +1,7 @@
 // Adapted from vchewing-input-helper @ 43779320 (MIT). See Resources/Licenses/VChewingGuard.txt.
 import Carbon
 import Foundation
+import InputSourceCore
 
 enum AppSettings {
     private static let defaults = UserDefaults.standard
@@ -9,6 +10,10 @@ enum AppSettings {
     static let startupDelayKey = "inputSource.startupDelayMilliseconds"
     static let hotkeyKey = "inputSource.hotkeyPreset"
     static let guardEnabledKey = "inputSource.guardEnabled"
+    static let pauseDurationKey = "inputSource.pauseDuration"
+    static let pauseUntilKey = "inputSource.pauseUntil"
+    static let pauseIndefiniteKey = "inputSource.pauseIndefinite"
+    static let preservedSourceKey = "inputSource.preservedSourceIdentifier"
 
     static func registerDefaults() {
         defaults.register(defaults: [
@@ -16,6 +21,7 @@ enum AppSettings {
             startupDelayKey: 1_500,
             hotkeyKey: HotkeyPreset.controlOptionCommandSpace.rawValue,
             guardEnabledKey: false,
+            pauseDurationKey: GuardPauseDuration.fifteenMinutes.rawValue,
         ])
     }
 
@@ -28,6 +34,32 @@ enum AppSettings {
     }
 
     static var guardEnabled: Bool { defaults.bool(forKey: guardEnabledKey) }
+
+    static var pauseDuration: GuardPauseDuration {
+        GuardPauseDuration(rawValue: defaults.string(forKey: pauseDurationKey) ?? "") ?? .fifteenMinutes
+    }
+
+    static var detectionPause: GuardDetectionPause {
+        GuardDetectionPause(until: defaults.object(forKey: pauseUntilKey) as? Date,
+                            indefinite: defaults.bool(forKey: pauseIndefiniteKey))
+    }
+
+    static var preservedSourceIdentifier: String? { defaults.string(forKey: preservedSourceKey) }
+
+    static func setPauseDuration(_ value: GuardPauseDuration) {
+        defaults.set(value.rawValue, forKey: pauseDurationKey)
+    }
+
+    static func setDetectionPause(_ value: GuardDetectionPause) {
+        if let until = value.until { defaults.set(until, forKey: pauseUntilKey) }
+        else { defaults.removeObject(forKey: pauseUntilKey) }
+        defaults.set(value.indefinite, forKey: pauseIndefiniteKey)
+    }
+
+    static func setPreservedSourceIdentifier(_ value: String?) {
+        if let value { defaults.set(value, forKey: preservedSourceKey) }
+        else { defaults.removeObject(forKey: preservedSourceKey) }
+    }
 
     static var hotkeyPreset: HotkeyPreset {
         HotkeyPreset(rawValue: defaults.string(forKey: hotkeyKey) ?? "") ?? .controlOptionCommandSpace

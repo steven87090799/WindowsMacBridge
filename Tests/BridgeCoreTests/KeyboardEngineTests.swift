@@ -42,11 +42,88 @@ struct KeyboardEngineTests {
             #expect(p.process(.init(.down, keyCode: 8, modifiers: flags)) == .passThrough)
         }
     }
+    @Test func safariNativeFullscreenAndWindowChordsRemainUntouchedWithTrustedModifiers() {
+        for (key, flags): (UInt16, Modifiers) in [(3, [.control, .command]), (46, .command),
+                                                  (3, .fn), (53, [.command, .option])] {
+            var p = engine(bundle: "com.apple.Safari")
+            p.configure(context: .init(processID: 10, bundleID: "com.apple.Safari", mode: .macOS,
+                                       isBrowser: true), enabled: true, layoutSupported: true)
+            p.reconcileNeutralHardware()
+            var held: Modifiers = []
+            for (code, side): (UInt16, ModifierSide) in [(59, .leftControl), (55, .leftCommand), (58, .leftOption)] {
+                if flags.contains(side.group) {
+                    held.insert(side.group)
+                    #expect(p.process(.init(.flagsChanged, keyCode: code, modifiers: held,
+                                           modifierSide: side, modifierDown: true)) == .passThrough)
+                }
+            }
+            #expect(p.modifiers.synchronized)
+            #expect(!p.isAwaitingNeutral)
+            #expect(p.process(.init(.down, keyCode: key, modifiers: flags)) == .passThrough)
+            #expect(p.process(.init(.up, keyCode: key, modifiers: flags)) == .passThrough)
+            #expect(p.translatedCount == 0)
+            #expect(p.activePressCount == 0)
+        }
+    }
+    @Test func youtubePlayerKeysRemainUntouchedAfterTranslatedCopyAndFullRelease() {
+        var p = engine(bundle: "com.apple.Safari")
+        p.configure(context: .init(processID: 10, bundleID: "com.apple.Safari", mode: .macOS,
+                                   isBrowser: true), enabled: true, layoutSupported: true)
+        p.reconcileNeutralHardware(); ctrlDown(&p)
+        #expect(p.process(.init(.down, keyCode: 8, modifiers: .control)) == .rewrite(
+            keyCode: 8, modifiers: .command, ruleID: "windows.copy"))
+        _ = p.process(.init(.up, keyCode: 8, modifiers: .control))
+        _ = p.process(.init(.flagsChanged, keyCode: 59, modifierSide: .leftControl, modifierDown: false))
+        // F / Escape / K / Space / M / arrows are player controls, never local translations.
+        for key: UInt16 in [3, 53, 40, 49, 46, 123, 124, 125, 126] {
+            #expect(p.process(.init(.down, keyCode: key)) == .passThrough)
+            #expect(p.process(.init(.up, keyCode: key)) == .passThrough)
+        }
+        #expect(p.modifiers.aggregate.isEmpty)
+        #expect(p.activePressCount == 0)
+        #expect(p.translatedCount == 1)
+    }
     @Test func testReleaseDoesNotResurrectSyntheticModifier() {
         var p = engine(); ctrlDown(&p)
         _ = p.process(.init(.down, keyCode: 16, modifiers: .control))
         _ = p.process(.init(.flagsChanged, keyCode: 59, modifierSide: .leftControl, modifierDown: false))
         #expect(p.process(.init(.up, keyCode: 16)) == .rewrite(keyCode: 6, modifiers: [], ruleID: "windows.redo"))
+    }
+    @Test func earlyControlReleaseStopsPlainKeyRepeatsAndCannotRevive() {
+        var p = engine(); ctrlDown(&p)
+        _ = p.process(.init(.down, keyCode: 16, modifiers: .control))
+        _ = p.process(.init(.flagsChanged, keyCode: 59, modifierSide: .leftControl, modifierDown: false))
+        #expect(p.process(.init(.down, keyCode: 16, isRepeat: true)) == .suppress)
+        ctrlDown(&p)
+        #expect(p.process(.init(.down, keyCode: 16, modifiers: .control, isRepeat: true)) == .suppress)
+        // The original translated down still needs its translated key-up.
+        #expect(p.process(.init(.up, keyCode: 16, modifiers: .control)) == .rewrite(
+            keyCode: 6, modifiers: [.command, .shift], ruleID: "windows.redo"))
+        #expect(p.activePressCount == 0)
+        #expect(p.process(.init(.down, keyCode: 16, modifiers: .control)) == .rewrite(
+            keyCode: 6, modifiers: [.command, .shift], ruleID: "windows.redo"))
+    }
+    @Test func missingModifierReleaseStillStopsRepeatFromEventFlags() {
+        var p = engine(); ctrlDown(&p)
+        _ = p.process(.init(.down, keyCode: 16, modifiers: .control))
+        #expect(p.process(.init(.down, keyCode: 16, isRepeat: true)) == .suppress)
+        #expect(p.process(.init(.down, keyCode: 16, modifiers: .control, isRepeat: true)) == .suppress)
+        #expect(p.process(.init(.up, keyCode: 16)) == .rewrite(
+            keyCode: 6, modifiers: [], ruleID: "windows.redo"))
+    }
+    @Test func releasingOnlyOneControlKeepsShortcutRepeatUntilLastControl() {
+        var p = engine(); ctrlDown(&p)
+        _ = p.process(.init(.flagsChanged, keyCode: 62, modifiers: .control,
+                            modifierSide: .rightControl, modifierDown: true))
+        _ = p.process(.init(.down, keyCode: 8, modifiers: .control))
+        _ = p.process(.init(.flagsChanged, keyCode: 59, modifiers: .control,
+                            modifierSide: .leftControl, modifierDown: false))
+        #expect(p.process(.init(.down, keyCode: 8, modifiers: .control, isRepeat: true)) == .rewrite(
+            keyCode: 8, modifiers: .command, ruleID: "windows.copy"))
+        _ = p.process(.init(.flagsChanged, keyCode: 62, modifierSide: .rightControl, modifierDown: false))
+        #expect(p.process(.init(.down, keyCode: 8, isRepeat: true)) == .suppress)
+        _ = p.process(.init(.up, keyCode: 8))
+        #expect(p.activePressCount == 0)
     }
     @Test func testRemoteTransitionDoesNotReceiveLocalRepeatOrRelease() {
         var p = engine(); ctrlDown(&p)

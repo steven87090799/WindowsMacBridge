@@ -7,11 +7,22 @@ public struct KeyboardEventProcessor: Sendable {
         var contextBundle: String
         var contextMode: ApplicationMode
         var suppress: Bool
+        var repeatSuppressed = false
     }
     private var presses = [Press?](repeating: nil, count: 128)
     private var context = ApplicationContext()
     private var enabled = false
     private var layoutSupported = false
+    private var controlsEnabled = true
+    private var finderEnabled = false
+    private var finderPermanentDeleteEnabled = false
+    private var textNavigationEnabled = true
+    private var altF4Enabled = false
+    private var windowsKeyModifier: WindowsKeyModifier = .option
+    private var winRunEnabled = false
+    private var winSettingsEnabled = false
+    private var winTaskViewEnabled = false
+    public private(set) var manualPassThrough = false
     private var awaitingNeutral = true
     private var pressCount = 0
     public private(set) var modifiers = ModifierStateMachine()
@@ -23,18 +34,41 @@ public struct KeyboardEventProcessor: Sendable {
     public init() {}
 
     public mutating func configure(context newContext: ApplicationContext, enabled: Bool,
-                                   layoutSupported: Bool) {
+                                   layoutSupported: Bool, controlsEnabled: Bool = true,
+                                   finderEnabled: Bool = false,
+                                   finderPermanentDeleteEnabled: Bool = false,
+                                   textNavigationEnabled: Bool = true,
+                                   altF4Enabled: Bool = false,
+                                   windowsKeyModifier: WindowsKeyModifier = .option,
+                                   winRunEnabled: Bool = false,
+                                   winSettingsEnabled: Bool = false,
+                                   winTaskViewEnabled: Bool = false) {
         let changedContext = context.processID != newContext.processID ||
-            context.bundleID != newContext.bundleID || context.mode != newContext.mode
+            context.bundleID != newContext.bundleID || context.mode != newContext.mode ||
+            context.isBrowser != newContext.isBrowser
         if changedContext {
             // Once a focus transaction ends, returning to the same PID must not revive it.
             for i in presses.indices where presses[i]?.rule != nil { presses[i]?.suppress = true }
         }
-        if changedContext || self.enabled != enabled || self.layoutSupported != layoutSupported {
+        if changedContext || self.enabled != enabled || self.layoutSupported != layoutSupported ||
+            self.finderEnabled != finderEnabled ||
+            self.finderPermanentDeleteEnabled != finderPermanentDeleteEnabled ||
+            self.textNavigationEnabled != textNavigationEnabled || self.altF4Enabled != altF4Enabled ||
+            self.windowsKeyModifier != windowsKeyModifier ||
+            self.winRunEnabled != winRunEnabled || self.winSettingsEnabled != winSettingsEnabled ||
+            self.winTaskViewEnabled != winTaskViewEnabled {
             awaitingNeutral = true
         }
         context = newContext; self.enabled = enabled; self.layoutSupported = layoutSupported
+        self.controlsEnabled = controlsEnabled; self.finderEnabled = finderEnabled
+        self.finderPermanentDeleteEnabled = finderPermanentDeleteEnabled
+        self.textNavigationEnabled = textNavigationEnabled; self.altF4Enabled = altF4Enabled
+        self.windowsKeyModifier = windowsKeyModifier
+        self.winRunEnabled = winRunEnabled; self.winSettingsEnabled = winSettingsEnabled
+        self.winTaskViewEnabled = winTaskViewEnabled
     }
+
+    public mutating func resumeManualPassThrough() { manualPassThrough = false; invalidate() }
 
     /// A gap makes retained presses tombstones, swallowing their later repeat/up.
     public mutating func invalidate() {
@@ -59,6 +93,14 @@ public struct KeyboardEventProcessor: Sendable {
             if let side = event.modifierSide, let down = event.modifierDown {
                 modifiers.observe(side, down: down, aggregate: event.modifiers)
             }
+            // End repeats as soon as any trigger modifier is released. A later modifier
+            // press must not revive the held shortcut; retain its translated key-up pair.
+            for index in presses.indices {
+                if let rule = presses[index]?.rule,
+                   !event.modifiers.isSuperset(of: rule.input.modifiers) {
+                    presses[index]?.repeatSuppressed = true
+                }
+            }
             if event.modifiers.isEmpty && activePressCount == 0 {
                 modifiers.reset(); awaitingNeutral = false
             }
@@ -78,7 +120,14 @@ public struct KeyboardEventProcessor: Sendable {
                 return .suppress
             }
             // A repeat is stopped during pause/recovery. Release still pairs with its down.
-            if event.phase == .down && (!enabled || !layoutSupported) { return .suppress }
+            if event.phase == .down {
+                // Event flags also catch a missing flagsChanged release.
+                if !event.modifiers.isSuperset(of: rule.input.modifiers) {
+                    presses[index]?.repeatSuppressed = true
+                    return .suppress
+                }
+                if press.repeatSuppressed || !enabled || !layoutSupported || manualPassThrough { return .suppress }
+            }
             return rewrite(event, rule: rule)
         }
         guard event.phase == .down else { return .passThrough }
@@ -91,34 +140,112 @@ public struct KeyboardEventProcessor: Sendable {
         }
 
         // Reserved emergency pause, even in a protected application. Never consumes modifiers.
-        if event.keyCode == 35 && event.modifiers == [.control, .option, .command] {
+        if controlsEnabled && event.keyCode == 35 && event.modifiers == [.control, .option, .command] {
             presses[index] = Press(rule: nil, contextPID: context.processID,
                                    contextBundle: context.bundleID, contextMode: context.mode, suppress: true)
             pressCount += 1
             enabled = false; awaitingNeutral = true
             return .emergencyPause
         }
+        // Reserved in all application profiles, like rule #1 in the supplied file.
+        if controlsEnabled && modifiers.synchronized && event.keyCode == 35 && event.modifiers == .option &&
+            modifiers.isDown(.rightOption) && !modifiers.isDown(.leftOption) {
+            presses[index] = Press(rule: nil, contextPID: context.processID,
+                                   contextBundle: context.bundleID, contextMode: context.mode, suppress: true)
+            pressCount += 1
+            manualPassThrough.toggle(); invalidate()
+            return .togglePassThrough
+        }
         if event.modifiers.isEmpty && activePressCount == 0 { awaitingNeutral = false }
 
-        // Finder X is intentionally excluded until a safe file/text focus adapter exists.
-        let finderCut = context.bundleID == "com.apple.finder" && event.keyCode == 7
-        let rule = enabled && layoutSupported && !awaitingNeutral && modifiers.synchronized &&
-            context.mode.allowsTranslation && !finderCut
-            ? rules.match(keyCode: event.keyCode, modifiers: event.modifiers) : nil
+        let rule = enabled && layoutSupported && !manualPassThrough && !awaitingNeutral && modifiers.synchronized
+            ? match(event) : nil
         presses[index] = Press(rule: rule, contextPID: context.processID,
                                contextBundle: context.bundleID, contextMode: context.mode, suppress: false)
         pressCount += 1
         guard let rule else { return .passThrough }
         translatedCount &+= 1
+        if let action = rule.action {
+            presses[index]?.suppress = true
+            return .action(action, ruleID: rule.id)
+        }
         return rewrite(event, rule: rule)
+    }
+
+    private func match(_ event: KeyboardEvent) -> ShortcutRule? {
+        // Remote/VM/game protections precede every local action, not only Ctrl shortcuts.
+        guard context.mode == .macOS else { return nil }
+        let systemRules = windowsKeyModifier == .option ? RuleEngine.system : RuleEngine.systemCommand
+        if let system = systemRules.match(keyCode: event.keyCode, modifiers: event.modifiers),
+           event.modifiers != windowsKeyModifier.flag ||
+           (modifiers.isDown(windowsKeyModifier == .option ? .leftOption : .leftCommand) &&
+            !modifiers.isDown(windowsKeyModifier == .option ? .rightOption : .rightCommand)) {
+            return system
+        }
+        guard context.mode.allowsTranslation else { return nil }
+        let extraRules = windowsKeyModifier == .option ? RuleEngine.systemExtras : RuleEngine.systemExtrasCommand
+        if event.modifiers == windowsKeyModifier.flag,
+           modifiers.isDown(windowsKeyModifier == .option ? .leftOption : .leftCommand),
+           !modifiers.isDown(windowsKeyModifier == .option ? .rightOption : .rightCommand),
+           let extra = extraRules.match(keyCode: event.keyCode, modifiers: event.modifiers) {
+            switch extra.id {
+            case "windows.winR" where winRunEnabled: return extra
+            case "windows.winI" where winSettingsEnabled: return extra
+            case "windows.winTab" where winTaskViewEnabled: return extra
+            default: break
+            }
+        }
+        if altF4Enabled && event.keyCode == 118 && event.modifiers == windowsKeyModifier.altFlag {
+            return windowsKeyModifier == .option ? WindowsCompatibilityRules.altF4Command : WindowsCompatibilityRules.altF4
+        }
+        if context.bundleID == "com.apple.finder" {
+            if finderEnabled {
+                let finderRules = windowsKeyModifier == .option ? RuleEngine.finderCommandAlt : RuleEngine.finder
+                if let rule = finderRules.match(keyCode: event.keyCode, modifiers: event.modifiers) {
+                    return rule
+                }
+                if let rule = RuleEngine.finderExtras.match(keyCode: event.keyCode, modifiers: event.modifiers) {
+                    if rule.action == .finder(.permanentDelete) && !finderPermanentDeleteEnabled { return nil }
+                    return rule
+                }
+                if textNavigationEnabled {
+                    if let extra = RuleEngine.textNavigation.match(keyCode: event.keyCode, modifiers: event.modifiers) { return extra }
+                    if let general = rules.match(keyCode: event.keyCode, modifiers: event.modifiers),
+                       Self.isTextNavigation(general) { return general }
+                }
+                return nil
+            }
+            // Keep the old, non-stateful fallback until Finder actions are enabled.
+            if event.keyCode == 7 { return nil }
+            return localRule(event)
+        }
+        let browserRules = windowsKeyModifier == .option ? RuleEngine.browserCommandAlt : RuleEngine.browser
+        if context.isBrowser, let browser = browserRules.match(keyCode: event.keyCode, modifiers: event.modifiers) {
+            return browser
+        }
+        return localRule(event)
+    }
+
+    private func localRule(_ event: KeyboardEvent) -> ShortcutRule? {
+        if textNavigationEnabled, let rule = RuleEngine.textNavigation.match(keyCode: event.keyCode, modifiers: event.modifiers) { return rule }
+        let rule = rules.match(keyCode: event.keyCode, modifiers: event.modifiers)
+        if !textNavigationEnabled, let rule, Self.isTextNavigation(rule) { return nil }
+        return rule
+    }
+
+    private static func isTextNavigation(_ rule: ShortcutRule) -> Bool {
+        (32...41).contains(Int(rule.id.split(separator: ".").last ?? "") ?? -1)
     }
 
     private func rewrite(_ event: KeyboardEvent, rule: ShortcutRule) -> EventDecision {
         var outputModifiers = event.modifiers
-        // Do not resurrect Command/Shift if the physical Control has already been released.
-        if event.modifiers.contains(.control) {
-            outputModifiers.remove(.control)
-            outputModifiers.formUnion(rule.output.modifiers)
+        // Consume the actual input modifiers (Option navigation included), never rematch output.
+        let trigger = rule.input.modifiers.subtracting(.shift)
+        if trigger.isEmpty || event.modifiers.isSuperset(of: trigger) {
+            outputModifiers.subtract(rule.input.modifiers)
+            var added = rule.output.modifiers
+            if rule.input.modifiers.contains(.shift) && !event.modifiers.contains(.shift) { added.remove(.shift) }
+            outputModifiers.formUnion(added)
         }
         return .rewrite(keyCode: rule.output.keyCode, modifiers: outputModifiers, ruleID: rule.id)
     }

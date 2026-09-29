@@ -49,8 +49,6 @@ final class GuardController {
 
     private var pendingInternalSourceID: String?
     private var pendingSelectionWasAutomatic = false
-    private var internalSelectionAttemptBeganAt: Date?
-    private var didLogStaleInternalNotification = false
     private var isWaitingForSecureInputToEnd = false
     private var secureInputIsBlockingRecorded = false
     private var didReportRetryExhaustion = false
@@ -59,6 +57,11 @@ final class GuardController {
 
     private var automaticCorrectionTimestamps: [Date] = []
     private var correctionCooldownUntil: Date?
+    private var detectionPause = AppSettings.detectionPause
+    private var pauseRecoveryWork: DispatchWorkItem?
+    private var pauseGeneration = 0
+    private var lastObservedIdentifier: String?
+    private(set) var preservedSourceIdentifier = AppSettings.preservedSourceIdentifier
 
     init() {
         machine = GuardStateMachine(
@@ -72,6 +75,12 @@ final class GuardController {
     var isEnabled: Bool { machine.isEnabled }
     var selectionInProgress: Bool { pendingInternalSourceID != nil }
     var isSecureInputEnabled: Bool { IsSecureEventInputEnabled() }
+    var isDetectionPaused: Bool { detectionPause.isActive(at: Date()) }
+    var detectionPauseUntil: Date? { detectionPause.until }
+    var detectionPauseIndefinite: Bool { detectionPause.indefinite }
+    private var automaticReconciliationAllowed: Bool {
+        isEnabled && !isEnvironmentSuspended && !isDetectionPaused && machine.preservedSelection == nil
+    }
 
     private var isEnvironmentSuspended: Bool {
         !environmentSuspensionReasons.isEmpty
@@ -84,7 +93,9 @@ final class GuardController {
 
     var statusText: String {
         if isEnvironmentSuspended { return "◌ 系統待機中" }
-        if !isEnabled { return "○ Guard 已暫停" }
+        if !isEnabled { return "○ 輸入法守護已關閉" }
+        if isDetectionPaused { return "◌ 自動偵測已暫停" }
+        if preservedSourceIdentifier != nil { return "● 手動切換已保留" }
         if isCorrectionCoolingDown { return "◌ 偵測到輸入源衝突，暫時冷卻" }
         if inputSources.discovery.traditional == nil { return "⚠ 找不到唯音-繁" }
 
@@ -92,12 +103,12 @@ final class GuardController {
         if desired == .vChewing,
            sourceDiffersFromDesired(currentIdentifier),
            isSecureInputEnabled {
-            return "● 唯音鎖定（安全輸入中）"
+            return "◌ 等待切換唯音（安全輸入中）"
         }
 
         return switch desired {
-        case .vChewing: "● 唯音鎖定"
-        case .abc: "● ABC 手動模式"
+        case .vChewing: "● 唯音繁體已選擇"
+        case .abc: "● ABC 已選擇"
         }
     }
 
@@ -142,9 +153,11 @@ final class GuardController {
         isStarted = true
         prepareForLaunch()
 
-        FileLogger.shared.log("Guard started; desired input source reset to vChewing Traditional")
+        FileLogger.shared.log("Guard started; respecting the current input source")
         installTISObservers()
         _ = inputSources.rediscover()
+        preserveCurrentSelection(record: false)
+        schedulePauseRecovery()
         startupRetryCount = 0
         scheduleStartupReconciliation(after: AppSettings.startupDelayMilliseconds)
         onStateChange?()
@@ -164,6 +177,8 @@ final class GuardController {
         removeWorkspaceObservers()
         cancelScheduledWork()
         cancelCorrectionCooldownWork()
+        pauseGeneration += 1
+        pauseRecoveryWork?.cancel(); pauseRecoveryWork = nil
         stopSecureRecoveryTimer()
         pendingExplicitSelection = nil
         environmentSuspensionReasons.removeAll()
@@ -176,6 +191,8 @@ final class GuardController {
 
     func request(_ source: DesiredInputSource) {
         machine.request(source)
+        preservedSourceIdentifier = nil
+        AppSettings.setPreservedSourceIdentifier(nil)
         machine.setDebounce(milliseconds: AppSettings.debounceMilliseconds)
         FileLogger.shared.log("User requested \(source == .vChewing ? "vChewing Traditional" : "ABC")")
 
@@ -184,7 +201,6 @@ final class GuardController {
         pendingExplicitSelection = nil
         didReportRetryExhaustion = false
         pendingInternalSourceID = nil
-        internalSelectionAttemptBeganAt = nil
 
         onStateChange?()
         selectDesiredSource(isExplicitUserRequest: true)
@@ -193,6 +209,83 @@ final class GuardController {
     func toggleDesiredSource() {
         let source = machine.toggleDesiredSource()
         request(source)
+    }
+
+    func pauseDetection(_ duration: GuardPauseDuration, now: Date = Date()) {
+        detectionPause = GuardDetectionPause(duration: duration, now: now)
+        AppSettings.setDetectionPause(detectionPause)
+        preserveCurrentSelection(record: false)
+        cancelScheduledWork()
+        resetCorrectionCircuitBreaker()
+        stopSecureRecoveryTimer()
+        pendingExplicitSelection = nil
+        pendingInternalSourceID = nil
+        pendingSelectionWasAutomatic = false
+        machine.selectionSucceeded()
+        schedulePauseRecovery()
+        FileLogger.shared.log("Automatic detection paused: \(duration.title)")
+        onStateChange?()
+    }
+
+    func resumeDetection() {
+        detectionPause = GuardDetectionPause()
+        AppSettings.setDetectionPause(detectionPause)
+        pauseGeneration += 1
+        pauseRecoveryWork?.cancel(); pauseRecoveryWork = nil
+        if pendingInternalSourceID == nil, pendingExplicitSelection == nil {
+            preserveCurrentSelection(record: false)
+        }
+        FileLogger.shared.log("Automatic detection resumed; keeping the current input source")
+        onStateChange?()
+    }
+
+    private func schedulePauseRecovery() {
+        pauseGeneration += 1
+        pauseRecoveryWork?.cancel(); pauseRecoveryWork = nil
+        guard isStarted else { return }
+        guard isDetectionPaused else {
+            if detectionPause.until != nil { resumeDetection() }
+            return
+        }
+        guard !detectionPause.indefinite, let until = detectionPause.until else { return }
+        let generation = pauseGeneration
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.isStarted, self.pauseGeneration == generation else { return }
+            self.pauseRecoveryWork = nil
+            if self.isDetectionPaused { self.schedulePauseRecovery() }
+            else { self.resumeDetection() }
+        }
+        pauseRecoveryWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, until.timeIntervalSinceNow), execute: work)
+    }
+
+    private func preserveCurrentSelection(record: Bool) {
+        guard pendingInternalSourceID == nil, pendingExplicitSelection == nil,
+              let identifier = inputSources.currentIdentifier else { return }
+        preserveExternalSelection(identifier, record: record)
+    }
+
+    private func preserveExternalSelection(_ identifier: String, record: Bool) {
+        let changed = identifier != lastObservedIdentifier
+        let observed = InputSourceManager.observedSource(identifier: identifier, discovery: inputSources.discovery)
+        machine.preserveExternalSelection(observed)
+        lastObservedIdentifier = identifier
+        if preservedSourceIdentifier != identifier {
+            preservedSourceIdentifier = identifier
+            AppSettings.setPreservedSourceIdentifier(identifier)
+        }
+        cancelScheduledWork()
+        resetCorrectionCircuitBreaker()
+        stopSecureRecoveryTimer()
+        pendingExplicitSelection = nil
+        pendingInternalSourceID = nil
+        pendingSelectionWasAutomatic = false
+        startupRetryCount = 0
+        didReportRetryExhaustion = false
+        if record, changed {
+            DiagnosticMetrics.shared.recordPreservedExternalSelection()
+            FileLogger.shared.log("External input source selection preserved: \(identifier)")
+        }
     }
 
     func setGuardEnabled(_ enabled: Bool) {
@@ -205,9 +298,9 @@ final class GuardController {
         pendingExplicitSelection = nil
         didReportRetryExhaustion = false
         pendingInternalSourceID = nil
-        internalSelectionAttemptBeganAt = nil
         startupRetryCount = 0
         resetCorrectionCircuitBreaker()
+        preserveCurrentSelection(record: false)
 
         onStateChange?()
         if enabled {
@@ -217,7 +310,7 @@ final class GuardController {
 
     func debounceSettingChanged() {
         machine.setDebounce(milliseconds: AppSettings.debounceMilliseconds)
-        guard isEnabled, !isEnvironmentSuspended else { return }
+        guard automaticReconciliationAllowed else { return }
 
         let currentIdentifier = inputSources.currentSource().identifier
         guard sourceDiffersFromDesired(currentIdentifier) else { return }
@@ -230,7 +323,11 @@ final class GuardController {
         FileLogger.shared.log(reason)
         _ = inputSources.rediscover()
 
-        guard isEnabled else {
+        // A refresh or wake must not turn a manually selected source back into
+        // an automatic correction. TIS does not report who initiated a switch.
+        preserveCurrentSelection(record: false)
+        schedulePauseRecovery()
+        guard automaticReconciliationAllowed else {
             onStateChange?()
             return
         }
@@ -267,6 +364,8 @@ final class GuardController {
             "WindowsMacBridge 輸入法模組 版本 \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.0")",
             "macOS \(ProcessInfo.processInfo.operatingSystemVersionString)",
             "Guard：\(isEnabled ? "啟用" : "暫停")；目標：\(desired == .vChewing ? "唯音-繁" : "ABC")",
+            "自動偵測暫停：\(isDetectionPaused ? (detectionPause.indefinite ? "直到手動恢復" : detectionPause.until?.description ?? "暫停") : "無")",
+            "保留的輸入來源：\(preservedSourceIdentifier ?? "無；可執行明確切換")",
             "目前輸入源：\(current.identifier ?? "（無法讀取）")（\(current.localizedName ?? "無名稱")）",
             "唯音-繁：\(traditional)",
             "ABC：\(abc)",
@@ -439,8 +538,9 @@ final class GuardController {
         FileLogger.shared.log("Enabled input sources changed; re-discovering")
         startupRetryCount = 0
         _ = inputSources.rediscover()
+        preserveCurrentSelection(record: false)
 
-        if isEnabled {
+        if automaticReconciliationAllowed {
             if targetSource == nil {
                 scheduleStartupReconciliation(after: 1_000)
             } else {
@@ -452,12 +552,14 @@ final class GuardController {
 
     private func handleSelectedSourceChange() {
         guard isStarted else { return }
-        guard !isEnvironmentSuspended else { onStateChange?(); return }
 
         let currentIdentifier = inputSources.currentSource().identifier
-        let isInternal = currentIdentifier != nil && currentIdentifier == pendingInternalSourceID
+        let decision = SourceNotificationDecision.evaluate(
+            current: currentIdentifier, pendingTarget: pendingInternalSourceID,
+            waitingForExplicitSelection: pendingExplicitSelection != nil, lastObserved: lastObservedIdentifier
+        )
 
-        if isInternal {
+        if decision == .ownSelectionConfirmed {
             let wasAutomatic = pendingSelectionWasAutomatic
             let restoredVChewing = currentIdentifier == inputSources.traditionalIdentifier
             DiagnosticMetrics.shared.recordSelectionSuccess(
@@ -466,8 +568,8 @@ final class GuardController {
             )
             pendingInternalSourceID = nil
             pendingSelectionWasAutomatic = false
-            internalSelectionAttemptBeganAt = nil
             machine.selectionSucceeded()
+            lastObservedIdentifier = currentIdentifier
             didReportRetryExhaustion = false
             pendingExplicitSelection = nil
             cancelReconciliationWork()
@@ -484,44 +586,25 @@ final class GuardController {
             return
         }
 
-        if let beganAt = internalSelectionAttemptBeganAt,
-           Date().timeIntervalSince(beganAt) <= 1.5 {
-            if !didLogStaleInternalNotification {
-                FileLogger.shared.log(
-                    "Ignored a delayed notification caused by Guard's own selection attempt; current source is \(currentIdentifier ?? "unknown")"
-                )
-                didLogStaleInternalNotification = true
-            }
-            onStateChange?()
-            return
-        }
+        // A notification for the previous source can also be a user switching
+        // back before our own confirmation arrives. Cancel conservatively when
+        // it differs from an in-flight target, even if the source is unchanged.
+        guard decision == .preserveExternalSelection, let currentIdentifier else { return }
 
-        if pendingInternalSourceID != nil || internalSelectionAttemptBeganAt != nil {
+        if pendingInternalSourceID != nil {
             FileLogger.shared.log("Input source changed before Guard's selection completed")
             DiagnosticMetrics.shared.recordFailedSelection()
             pendingInternalSourceID = nil
             pendingSelectionWasAutomatic = false
-            internalSelectionAttemptBeganAt = nil
             cancelVerificationWork()
         }
 
-        let observed = InputSourceManager.observedSource(
-            identifier: currentIdentifier,
-            discovery: inputSources.discovery
-        )
-        let response = machine.observe(observed, isInternalSwitch: false)
-
-        if case .scheduleDebounce = response {
-            FileLogger.shared.log(
-                "Unexpected input source change: \(currentIdentifier ?? "unknown"); desired \(machine.desired.rawValue)"
-            )
-        }
-
-        handle(response)
+        preserveExternalSelection(currentIdentifier, record: isEnabled)
         onStateChange?()
     }
 
     private func reconcileObservedSource() {
+        guard automaticReconciliationAllowed else { return }
         let currentIdentifier = inputSources.currentSource().identifier
         let observed = InputSourceManager.observedSource(
             identifier: currentIdentifier,
@@ -549,6 +632,7 @@ final class GuardController {
     }
 
     private func scheduleStartupReconciliation(after milliseconds: Int) {
+        guard automaticReconciliationAllowed else { return }
         startupWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             self?.performStartupReconciliation()
@@ -562,7 +646,7 @@ final class GuardController {
 
     private func performStartupReconciliation() {
         startupWork = nil
-        guard isEnabled, !isEnvironmentSuspended else { return }
+        guard automaticReconciliationAllowed else { return }
 
         _ = inputSources.rediscover()
         guard let targetSource else {
@@ -596,6 +680,7 @@ final class GuardController {
     }
 
     private func scheduleReconciliation(after milliseconds: Int) {
+        guard automaticReconciliationAllowed else { return }
         cancelReconciliationWork()
         let work = DispatchWorkItem { [weak self] in
             self?.attemptReconciliation()
@@ -609,7 +694,7 @@ final class GuardController {
 
     private func attemptReconciliation() {
         reconciliationWork = nil
-        guard !isEnvironmentSuspended else { return }
+        guard automaticReconciliationAllowed else { return }
 
         let currentIdentifier = inputSources.currentSource().identifier
         guard isEnabled, sourceDiffersFromDesired(currentIdentifier) else {
@@ -626,6 +711,7 @@ final class GuardController {
     private func selectDesiredSource(isExplicitUserRequest: Bool) {
         guard selectionAllowed() else { return }
         guard !isEnvironmentSuspended else { return }
+        if !isExplicitUserRequest, !automaticReconciliationAllowed { return }
 
         if targetSource == nil {
             _ = inputSources.rediscover()
@@ -697,13 +783,10 @@ final class GuardController {
         // gate until a source notification or bounded verification resolves it.
         pendingInternalSourceID = target.identifier
         pendingSelectionWasAutomatic = !isExplicitUserRequest
-        internalSelectionAttemptBeganAt = Date()
-        didLogStaleInternalNotification = false
         onStateChange?()
         guard !isEnvironmentSuspended, selectionAllowed() else {
             pendingInternalSourceID = nil
             pendingSelectionWasAutomatic = false
-            internalSelectionAttemptBeganAt = nil
             onStateChange?()
             return
         }
@@ -718,7 +801,6 @@ final class GuardController {
             DiagnosticMetrics.shared.recordFailedSelection()
             pendingInternalSourceID = nil
             pendingSelectionWasAutomatic = false
-            internalSelectionAttemptBeganAt = nil
             FileLogger.shared.log(
                 "TISSelectInputSource failed for \(target.identifier), OSStatus \(status), attempt \(attempt)/\(Configuration.maximumSelectionAttempts)"
             )
@@ -759,17 +841,21 @@ final class GuardController {
                 )
                 self.pendingInternalSourceID = nil
                 self.pendingSelectionWasAutomatic = false
-                self.internalSelectionAttemptBeganAt = nil
                 self.machine.selectionSucceeded()
+                self.lastObservedIdentifier = currentIdentifier
                 self.pendingExplicitSelection = nil
                 self.didReportRetryExhaustion = false
                 FileLogger.shared.log("Input source selection verified: \(identifier)")
                 self.onStateChange?()
             } else {
                 DiagnosticMetrics.shared.recordFailedSelection()
+                if let currentIdentifier, currentIdentifier != self.lastObservedIdentifier {
+                    self.preserveExternalSelection(currentIdentifier, record: self.isEnabled)
+                    self.onStateChange?()
+                    return
+                }
                 self.pendingInternalSourceID = nil
                 self.pendingSelectionWasAutomatic = false
-                self.internalSelectionAttemptBeganAt = nil
                 FileLogger.shared.log("Input source did not change after TIS selection: \(identifier)")
 
                 if self.isSecureInputEnabled {
@@ -794,6 +880,7 @@ final class GuardController {
     }
 
     private func scheduleNextRetryIfAllowed() {
+        guard automaticReconciliationAllowed else { return }
         guard let delay = machine.delayBeforeNextAttempt() else {
             if !didReportRetryExhaustion {
                 FileLogger.shared.log("Input source selection retry limit reached; waiting for a new event or wake")
@@ -814,7 +901,7 @@ final class GuardController {
 
     private func ensureSecureRecoveryTimer() {
         guard secureRecoveryTimer == nil,
-              (isEnabled || pendingExplicitSelection != nil),
+              (automaticReconciliationAllowed || pendingExplicitSelection != nil),
               !isEnvironmentSuspended else {
             return
         }
@@ -849,7 +936,7 @@ final class GuardController {
     }
 
     private func checkForSecureInputEnd() {
-        guard isEnabled || pendingExplicitSelection != nil else {
+        guard automaticReconciliationAllowed || pendingExplicitSelection != nil else {
             stopSecureRecoveryTimer()
             return
         }
@@ -979,8 +1066,6 @@ final class GuardController {
         pendingExplicitSelection = nil
         pendingInternalSourceID = nil
         pendingSelectionWasAutomatic = false
-        internalSelectionAttemptBeganAt = nil
-        didLogStaleInternalNotification = false
         machine.selectionSucceeded()
         onStateChange?()
     }

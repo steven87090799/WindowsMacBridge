@@ -10,6 +10,14 @@ public struct Modifiers: OptionSet, Hashable, Codable, Sendable {
     public static let fn = Self(rawValue: 16)
 }
 
+/// The macOS modifier produced by the key the user treats as Windows/Win.
+/// This selects only Win-specific shortcuts; it never swaps global modifiers.
+public enum WindowsKeyModifier: String, CaseIterable, Codable, Sendable {
+    case option, command
+    public var flag: Modifiers { self == .option ? .option : .command }
+    public var altFlag: Modifiers { self == .option ? .command : .option }
+}
+
 public enum ModifierSide: Int, CaseIterable, Sendable {
     case leftControl, rightControl, leftCommand, rightCommand
     case leftOption, rightOption, leftShift, rightShift
@@ -67,10 +75,13 @@ public struct ApplicationContext: Equatable, Sendable {
     public var bundleID: String
     public var displayName: String
     public var mode: ApplicationMode
+    public var executablePath: String
+    public var isBrowser: Bool
     public init(processID: Int32 = 0, bundleID: String = "", displayName: String = "Unknown",
-                mode: ApplicationMode = .disabled) {
+                mode: ApplicationMode = .disabled, executablePath: String = "", isBrowser: Bool = false) {
         self.processID = processID; self.bundleID = bundleID
         self.displayName = displayName; self.mode = mode
+        self.executablePath = executablePath; self.isBrowser = isBrowser
     }
 }
 
@@ -103,8 +114,10 @@ public struct ShortcutRule: Sendable {
     public let id: String
     public let input: Shortcut
     public let output: Shortcut
-    public init(id: String, input: Shortcut, output: Shortcut) {
+    public let action: ShortcutAction?
+    public init(id: String, input: Shortcut, output: Shortcut, action: ShortcutAction? = nil) {
         self.id = id; self.input = input; self.output = output
+        self.action = action
     }
 }
 
@@ -113,4 +126,19 @@ public enum EventDecision: Equatable, Sendable {
     case suppress
     case rewrite(keyCode: UInt16, modifiers: Modifiers, ruleID: String)
     case emergencyPause
+    case togglePassThrough
+    case action(ShortcutAction, ruleID: String)
+}
+
+public enum FinderAction: String, Sendable, CaseIterable {
+    case copy, cut, paste, open, rename, trash, permanentDelete, parentFolder, newFolder, goToFolder
+}
+public enum SystemAction: String, Sendable, CaseIterable { case openFinder, openSettings, activityMonitor }
+public enum WindowAction: Equatable, Sendable {
+    case advance(reverse: Bool), commit, close
+}
+public enum ShortcutAction: Equatable, Sendable {
+    case finder(FinderAction)
+    case system(SystemAction)
+    case window(WindowAction)
 }

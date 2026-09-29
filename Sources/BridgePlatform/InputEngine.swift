@@ -10,17 +10,29 @@ public struct EngineConfiguration: Sendable {
     public var layoutSupported = false
     public var diagnostics = false
     public var restartToken: UInt64 = 0
+    public var keyboardScope: KeyboardScope = .builtInAndApple834
+    public var finderEnabled = false
+    public var finderPermanentDeleteEnabled = false
+    public var textNavigationEnabled = true
+    public var windowSwitcherEnabled = false
+    public var windowThumbnailsEnabled = false
+    public var altF4Enabled = false
+    public var altF4QuitLastWindow = false
+    public var windowsKeyModifier: WindowsKeyModifier = .option
+    public var winRunEnabled = false
+    public var winSettingsEnabled = false
+    public var winTaskViewEnabled = false
     public init() {}
 }
 
-public struct DiagnosticRecord: Sendable, Identifiable {
+public struct DiagnosticRecord: Equatable, Sendable, Identifiable {
     public let id: UInt64
     public let rule: String
     public let application: String
     public let microseconds: Double
 }
 
-public struct EngineStatus: Sendable {
+public struct EngineStatus: Equatable, Sendable {
     public var accessibility = false
     public var listenAccess = false
     public var postAccess = false
@@ -29,6 +41,9 @@ public struct EngineStatus: Sendable {
     public var awaitingNeutral = true
     public var fault: String?
     public var emergencyPaused = false
+    public var manualPassThrough = false
+    public var backendIssue: String?
+    public var actionStatus = ""
     public var processed: UInt64 = 0
     public var translated: UInt64 = 0
     public var maxMicroseconds: Double = 0
@@ -62,36 +77,68 @@ public final class InputEngine: @unchecked Sendable {
     private var lastRestart: UInt64 = 0
     private var attemptedStart = false
     private var needsRecreation = false
-    private let marker = Int64.random(in: 1...Int64.max)
+    private let marker: Int64
+    private let actions: ShortcutActionDispatcher
     private var records = [DiagnosticRecord?](repeating: nil, count: 128)
     private var recordIndex = 0
     private var recordSequence: UInt64 = 0
+    private var diagnosticRevision: UInt64 = 0
+    private var publishedDiagnosticRevision: UInt64 = .max
     private var diagnosticDeadline: TimeInterval = 0
+    private var actionEpoch: UInt64 = 0
+    private var altTabHeld = false
+    private var altTabActive = false
 
-    public init() {}
+    public init() {
+        let marker = EventRewriter.generatedEventMarker
+        self.marker = marker; actions = ShortcutActionDispatcher(marker: marker)
+        // Compile every table before an event callback can run.
+        _ = RuleEngine.browser; _ = RuleEngine.finder; _ = RuleEngine.finderExtras
+        _ = RuleEngine.textNavigation; _ = RuleEngine.system
+    }
     /// Invoke once per instance, by the owning lifecycle coordinator.
     public func start() { Thread { [self] in run() }.start() }
     public func update(_ configuration: EngineConfiguration) {
-        mailbox.lock.lock(); defer { mailbox.lock.unlock() }
+        mailbox.lock.lock()
+        let previous = mailbox.configuration
+        let cancel = previous.context != configuration.context || previous.enabled != configuration.enabled ||
+            previous.sessionActive != configuration.sessionActive || previous.keyboardScope != configuration.keyboardScope ||
+            previous.finderEnabled != configuration.finderEnabled || previous.layoutSupported != configuration.layoutSupported ||
+            previous.finderPermanentDeleteEnabled != configuration.finderPermanentDeleteEnabled ||
+            previous.textNavigationEnabled != configuration.textNavigationEnabled ||
+            previous.windowSwitcherEnabled != configuration.windowSwitcherEnabled ||
+            previous.windowThumbnailsEnabled != configuration.windowThumbnailsEnabled ||
+            previous.altF4Enabled != configuration.altF4Enabled ||
+            previous.altF4QuitLastWindow != configuration.altF4QuitLastWindow ||
+            previous.windowsKeyModifier != configuration.windowsKeyModifier ||
+            previous.winRunEnabled != configuration.winRunEnabled ||
+            previous.winSettingsEnabled != configuration.winSettingsEnabled ||
+            previous.winTaskViewEnabled != configuration.winTaskViewEnabled ||
+            previous.restartToken != configuration.restartToken
         mailbox.configuration = configuration; mailbox.revision &+= 1
+        mailbox.lock.unlock()
+        if cancel { actions.cancelPending() }
     }
     public func snapshot() -> EngineStatus {
         mailbox.lock.lock(); defer { mailbox.lock.unlock() }
         return mailbox.status
     }
     public func stop() {
+        actions.cancelPending(disable: true)
         mailbox.lock.lock(); defer { mailbox.lock.unlock() }
         mailbox.stopping = true
     }
 
     private func run() {
         Thread.current.name = "WindowsMacBridge.Input"
-        let timer = Timer(timeInterval: 0.25, repeats: true) { [self] _ in tick() }
+        let timer = Timer(timeInterval: 0.25, repeats: true) { [self] _ in autoreleasepool { tick() } }
+        timer.tolerance = 0.025
         RunLoop.current.add(timer, forMode: .common)
-        tick()
+        autoreleasepool { tick() }
         CFRunLoopRun()
         timer.invalidate()
         destroyTap()
+        actions.update(context: .init(), enabled: false)
     }
 
     private func readConfiguration() {
@@ -100,29 +147,55 @@ public final class InputEngine: @unchecked Sendable {
         if changed { configuration = mailbox.configuration; revision = mailbox.revision }
         mailbox.lock.unlock()
         if changed {
+            altTabActive = false
             if lastRestart != configuration.restartToken {
                 lastRestart = configuration.restartToken
                 status.fault = nil; status.emergencyPaused = false
                 recovery.reset(); attemptedStart = false
                 needsRecreation = true
                 processor.invalidate()
+                processor.resumeManualPassThrough()
+                actionEpoch &+= 1
             }
             if !configuration.diagnostics {
-                for i in records.indices { records[i] = nil }
+                if diagnosticDeadline != 0 || !status.diagnostics.isEmpty {
+                    for i in records.indices { records[i] = nil }
+                    diagnosticRevision &+= 1
+                }
                 diagnosticDeadline = 0
             } else if diagnosticDeadline == 0 {
                 diagnosticDeadline = ProcessInfo.processInfo.systemUptime + 300
             }
         }
-        configureProcessor()
+        if changed { configureProcessor() }
     }
 
     private func configureProcessor() {
+        let scopeSupported = BackendCapabilities.eventTap.supports(configuration.keyboardScope)
+        status.backendIssue = scopeSupported ? nil : "內建鍵盤限定需要裝置攔截後端；目前不會套用到其他鍵盤。"
+        let active = configuration.enabled && configuration.sessionActive &&
+            status.accessibility && status.postAccess && !status.secureInput &&
+            status.fault == nil && !status.emergencyPaused && scopeSupported
         processor.configure(context: configuration.context,
-                            enabled: configuration.enabled && configuration.sessionActive &&
-                                status.accessibility && status.postAccess && !status.secureInput &&
-                                status.fault == nil && !status.emergencyPaused,
-                            layoutSupported: configuration.layoutSupported)
+                            enabled: active, layoutSupported: configuration.layoutSupported,
+                            controlsEnabled: active, finderEnabled: configuration.finderEnabled,
+                            finderPermanentDeleteEnabled: configuration.finderPermanentDeleteEnabled,
+                            textNavigationEnabled: configuration.textNavigationEnabled,
+                            altF4Enabled: configuration.altF4Enabled,
+                            windowsKeyModifier: configuration.windowsKeyModifier,
+                            winRunEnabled: configuration.winRunEnabled,
+                            winSettingsEnabled: configuration.winSettingsEnabled,
+                            winTaskViewEnabled: configuration.winTaskViewEnabled)
+        if !actions.update(context: configuration.context,
+                           enabled: active && configuration.layoutSupported && !processor.manualPassThrough,
+                           finderEnabled: configuration.finderEnabled,
+                           finderPermanentDeleteEnabled: configuration.finderPermanentDeleteEnabled,
+                           windowSwitcherEnabled: configuration.windowSwitcherEnabled && active && !processor.manualPassThrough,
+                           windowThumbnailsEnabled: configuration.windowThumbnailsEnabled,
+                           altF4QuitLastWindow: configuration.altF4QuitLastWindow,
+                           epoch: actionEpoch) {
+            processor.invalidate()
+        }
     }
 
     private func tick() {
@@ -138,6 +211,7 @@ public final class InputEngine: @unchecked Sendable {
         if status.accessibility != lastTrust || status.secureInput != lastSecure ||
             configuration.sessionActive != lastSessionActive {
             processor.invalidate()
+            actionEpoch &+= 1
             if status.accessibility && !lastTrust { attemptedStart = false }
             lastTrust = status.accessibility; lastSecure = status.secureInput
             lastSessionActive = configuration.sessionActive
@@ -157,11 +231,18 @@ public final class InputEngine: @unchecked Sendable {
         status.tapActive = tap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false
         status.awaitingNeutral = processor.isAwaitingNeutral
         status.processed = processor.processedCount; status.translated = processor.translatedCount
+        status.manualPassThrough = processor.manualPassThrough
+        status.actionStatus = actions.status()
         if diagnosticDeadline > 0 && ProcessInfo.processInfo.systemUptime >= diagnosticDeadline {
             for i in records.indices { records[i] = nil }
+            diagnosticDeadline = 0
+            diagnosticRevision &+= 1
         }
-        // Formatting and allocation are outside the callback, four times per second at most.
-        status.diagnostics = records.compactMap { $0 }.sorted { $0.id > $1.id }
+        // Build diagnostics only when the ring changes; idle ticks allocate nothing here.
+        if publishedDiagnosticRevision != diagnosticRevision {
+            status.diagnostics = records.compactMap { $0 }.sorted { $0.id > $1.id }
+            publishedDiagnosticRevision = diagnosticRevision
+        }
         mailbox.lock.lock(); mailbox.status = status; mailbox.lock.unlock()
     }
 
@@ -182,7 +263,9 @@ public final class InputEngine: @unchecked Sendable {
             let engine = Unmanaged<InputEngine>.fromOpaque(userInfo).takeUnretainedValue()
             return engine.handle(type, event: event)
         }
-        guard let created = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap,
+        // Screenshot claims the original Win+Shift+S at the session head. Keep
+        // Ctrl translations at the tail even when either tap is recreated.
+        guard let created = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .tailAppendEventTap,
                                               options: .defaultTap, eventsOfInterest: CGEventMask(mask),
                                               callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque()),
               let runSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, created, 0) else {
@@ -203,7 +286,9 @@ public final class InputEngine: @unchecked Sendable {
 
     private func handle(_ type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            altTabHeld = false; altTabActive = false
             processor.invalidate()
+            actionEpoch &+= 1
             if configuration.enabled && configuration.sessionActive && status.accessibility &&
                 !status.secureInput && !status.emergencyPaused && status.fault == nil &&
                 recovery.mayRetry(at: ProcessInfo.processInfo.systemUptime), let tap {
@@ -211,6 +296,7 @@ public final class InputEngine: @unchecked Sendable {
             } else {
                 status.fault = "Event Tap 已停用；請放開按鍵後重新啟動。"
             }
+            configureProcessor()
             return Unmanaged.passUnretained(event)
         }
         if event.getIntegerValueField(.eventSourceUserData) == marker { return Unmanaged.passUnretained(event) }
@@ -229,6 +315,38 @@ public final class InputEngine: @unchecked Sendable {
         let normalized = KeyboardEvent(phase, keyCode: key, modifiers: flags,
                                        isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
                                        modifierSide: side, modifierDown: down)
+        // A Tab release belongs to a previously consumed press even if focus, profile
+        // or Alt state changed after the selection was committed.
+        if key == 48 && phase == .up && altTabHeld {
+            altTabHeld = false
+            return nil
+        }
+        let altFlag = configuration.windowsKeyModifier.altFlag
+        if key == 48 && phase == .down && altTabHeld && !flags.contains(altFlag) {
+            return nil
+        }
+        if WindowSwitchPolicy.intercepts(mode: configuration.context.mode,
+                                         enabled: configuration.windowSwitcherEnabled && configuration.enabled,
+                                         layoutSupported: configuration.layoutSupported,
+                                         inputReady: !processor.isAwaitingNeutral && processor.modifiers.synchronized,
+                                         manualPassThrough: processor.manualPassThrough,
+                                         emergencyPaused: status.emergencyPaused) {
+            if key == 48 && (phase == .down || phase == .up) {
+                if phase == .down,
+                   let reverse = WindowSwitchPolicy.cycleDirection(modifiers: flags,
+                                                                   windowsKeyModifier: configuration.windowsKeyModifier) {
+                    if actions.submit(.window(.advance(reverse: reverse)), context: configuration.context) {
+                        altTabHeld = true; altTabActive = true; return nil
+                    }
+                }
+            }
+            if phase == .flagsChanged && altTabActive && !flags.contains(altFlag) {
+                altTabActive = false
+                if !actions.submit(.window(.commit), context: configuration.context) {
+                    actions.cancelSwitcherFromCallback()
+                }
+            }
+        }
         let decision = processor.process(normalized)
         var result: Unmanaged<CGEvent>? = Unmanaged.passUnretained(event)
         switch decision {
@@ -237,6 +355,13 @@ public final class InputEngine: @unchecked Sendable {
         case .emergencyPause:
             status.emergencyPaused = true
             configureProcessor()
+            result = nil
+        case .togglePassThrough:
+            status.manualPassThrough = processor.manualPassThrough
+            configureProcessor()
+            result = nil
+        case .action(let action, _):
+            _ = actions.submit(action, context: configuration.context)
             result = nil
         case let .rewrite(outputKey, outputModifiers, ruleID):
             EventRewriter.apply(to: event, keyCode: outputKey, modifiers: outputModifiers, marker: marker)
@@ -247,6 +372,7 @@ public final class InputEngine: @unchecked Sendable {
                     application: configuration.context.bundleID,
                     microseconds: Double(DispatchTime.now().uptimeNanoseconds - start) / 1000)
                 recordIndex = (recordIndex + 1) % records.count
+                diagnosticRevision &+= 1
             }
         }
         let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1000

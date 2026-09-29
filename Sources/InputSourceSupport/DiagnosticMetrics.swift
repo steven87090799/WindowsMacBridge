@@ -1,6 +1,7 @@
 // Adapted from vchewing-input-helper @ 43779320 (MIT). See Resources/Licenses/VChewingGuard.txt.
 import Darwin
 import Foundation
+import InputSourceCore
 
 struct ProcessMemorySnapshot {
     let residentBytes: UInt64
@@ -22,73 +23,38 @@ struct ProcessMemorySnapshot {
 final class DiagnosticMetrics {
     static let shared = DiagnosticMetrics()
 
-    private enum Key {
-        static let automaticCorrectionCount = "inputSource.diagnostics.automaticCorrectionCount"
-        static let failedSelectionCount = "inputSource.diagnostics.failedSelectionCount"
-        static let secureInputWaitCount = "inputSource.diagnostics.secureInputWaitCount"
-        static let lastSuccessfulSelectionAt = "inputSource.diagnostics.lastSuccessfulSelectionAt"
-        static let vChewingRestoreCount = "inputSource.diagnostics.vChewingRestoreCount"
-        static let recentVChewingRestoreTimes = "inputSource.diagnostics.recentVChewingRestoreTimes"
+    private let store = InputSourceStatisticsStore(defaults: .standard)
+
+    private init() {
+        // This migration reads statistical fields only, never old guard settings
+        // or running processes. The prior helper need not be installed.
+        if !store.previousStatisticsMigrationCompleted {
+            let previous = UserDefaults.standard.persistentDomain(forName: "com.local.VChewingGuard")
+            if store.importPreviousStatistics(previous) {
+                FileLogger.shared.log("Previous input-source statistics imported once")
+            }
+        }
     }
 
-    private let defaults = UserDefaults.standard
-    private let maximumRecentRestoreTimes = 20
-
-    private init() {}
-
-    var automaticCorrectionCount: Int {
-        defaults.integer(forKey: Key.automaticCorrectionCount)
-    }
-
-    var failedSelectionCount: Int {
-        defaults.integer(forKey: Key.failedSelectionCount)
-    }
-
-    var secureInputWaitCount: Int {
-        defaults.integer(forKey: Key.secureInputWaitCount)
-    }
-
-    var lastSuccessfulSelectionAt: Date? {
-        defaults.object(forKey: Key.lastSuccessfulSelectionAt) as? Date
-    }
-
-    var vChewingRestoreCount: Int {
-        defaults.integer(forKey: Key.vChewingRestoreCount)
-    }
-
-    var recentVChewingRestoreTimes: [Date] {
-        defaults.array(forKey: Key.recentVChewingRestoreTimes) as? [Date] ?? []
-    }
+    var statistics: InputSourceStatistics { store.snapshot }
+    var automaticCorrectionCount: Int { statistics.automaticCorrections }
+    var failedSelectionCount: Int { statistics.failedSelections }
+    var secureInputWaitCount: Int { statistics.secureInputWaits }
+    var lastSuccessfulSelectionAt: Date? { statistics.lastSuccessfulSelection }
+    var vChewingRestoreCount: Int { statistics.vChewingRestores }
+    var recentVChewingRestoreTimes: [Date] { statistics.recentVChewingRestores }
 
     func recordSelectionSuccess(automatic: Bool, restoredVChewing: Bool) {
         let now = Date()
-        defaults.set(now, forKey: Key.lastSuccessfulSelectionAt)
-
-        if automatic {
-            defaults.set(automaticCorrectionCount + 1, forKey: Key.automaticCorrectionCount)
-        }
-
+        store.recordSelectionSuccess(automatic: automatic, restoredVChewing: restoredVChewing, at: now)
         if restoredVChewing {
-            defaults.set(vChewingRestoreCount + 1, forKey: Key.vChewingRestoreCount)
-            var recent = recentVChewingRestoreTimes
-            recent.append(now)
-            if recent.count > maximumRecentRestoreTimes {
-                recent.removeFirst(recent.count - maximumRecentRestoreTimes)
-            }
-            defaults.set(recent, forKey: Key.recentVChewingRestoreTimes)
-            FileLogger.shared.log(
-                "Guard restored vChewing Traditional at \(Self.timestamp(now)); total restores: \(vChewingRestoreCount)"
-            )
+            FileLogger.shared.log("Guard restored vChewing Traditional at \(Self.timestamp(now)); total restores: \(vChewingRestoreCount)")
         }
     }
 
-    func recordFailedSelection() {
-        defaults.set(failedSelectionCount + 1, forKey: Key.failedSelectionCount)
-    }
-
-    func recordSecureInputWait() {
-        defaults.set(secureInputWaitCount + 1, forKey: Key.secureInputWaitCount)
-    }
+    func recordFailedSelection() { store.recordFailedSelection() }
+    func recordSecureInputWait() { store.recordSecureInputWait() }
+    func recordPreservedExternalSelection() { store.recordPreservedExternalSelection() }
 
     func summary(memory: ProcessMemorySnapshot? = nil) -> String {
         let currentMemory = memory ?? DiagnosticMetrics.currentMemorySnapshot()
@@ -101,9 +67,10 @@ final class DiagnosticMetrics {
         let memoryText = currentMemory?.description ?? "無法讀取"
 
         return [
-            "自動 correction 成功：\(automaticCorrectionCount) 次",
-            "Failed select：\(failedSelectionCount) 次",
+            "自動修正成功：\(automaticCorrectionCount) 次",
+            "切換失敗：\(failedSelectionCount) 次",
             "Secure Input 等待：\(secureInputWaitCount) 次",
+            "保留外部切換：\(statistics.preservedExternalSelections) 次",
             "最後成功切換：\(lastSuccess)",
             "程式切回唯音：\(vChewingRestoreCount) 次",
             "最近程式切回唯音時間：\(recent.isEmpty ? "尚無" : recent)",

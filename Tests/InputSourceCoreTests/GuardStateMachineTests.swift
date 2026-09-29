@@ -55,14 +55,16 @@ struct GuardStateMachineTests {
         #expect(machine.observe(.abc, isInternalSwitch: true) == .ignored)
         #expect(machine.beginSelectionAttempt() == nil)
     }
-    @Test func pauseAndResumeRestoresTraditional() {
+    @Test func pauseAndResumePreservesManualABC() {
         var machine = GuardStateMachine()
-        machine.request(.abc)
+        machine.preserveExternalSelection(.abc)
         machine.setEnabled(false)
         #expect(machine.observe(.other, isInternalSwitch: false) == .ignored)
         machine.setEnabled(true)
-        #expect(machine.desired == .vChewing)
-        #expect(machine.observe(.abc, isInternalSwitch: false) == .scheduleDebounce(milliseconds: 400))
+        #expect(machine.desired == .abc)
+        #expect(machine.observe(.abc, isInternalSwitch: false) == .alreadySatisfied)
+        #expect(machine.observe(.vChewing, isInternalSwitch: false) == .ignored)
+        #expect(machine.beginSelectionAttempt() == nil)
     }
     @Test func successClearsRetryBudget() {
         var machine = GuardStateMachine()
@@ -71,5 +73,71 @@ struct GuardStateMachineTests {
         machine.selectionSucceeded()
         #expect(machine.delayBeforeNextAttempt() == nil)
         #expect(machine.beginSelectionAttempt() == nil)
+    }
+    @Test func externalSelectionPreemptsPendingRetries() {
+        var machine = GuardStateMachine()
+        _ = machine.observe(.abc, isInternalSwitch: false)
+        #expect(machine.beginSelectionAttempt() == 1)
+        machine.preserveExternalSelection(.abc)
+        #expect(machine.beginSelectionAttempt() == nil)
+        #expect(machine.delayBeforeNextAttempt() == nil)
+        #expect(machine.observe(.abc, isInternalSwitch: false) == .alreadySatisfied)
+    }
+    @Test func thirdPartySourceStaysPreservedAcrossEnableCycle() {
+        var machine = GuardStateMachine()
+        machine.preserveExternalSelection(.other)
+        machine.setEnabled(false)
+        machine.setEnabled(true)
+        #expect(machine.preservedSelection == .other)
+        #expect(machine.observe(.other, isInternalSwitch: false) == .alreadySatisfied)
+        #expect(machine.beginSelectionAttempt() == nil)
+    }
+    @Test func explicitRequestReleasesPreservedChoice() {
+        var machine = GuardStateMachine()
+        machine.preserveExternalSelection(.abc)
+        machine.request(.vChewing)
+        #expect(machine.preservedSelection == nil)
+        #expect(machine.beginSelectionAttempt() == 1)
+        machine.preserveExternalSelection(.other)
+        #expect(machine.beginSelectionAttempt() == nil)
+    }
+    @Test func ownDelayedNotificationDoesNotChangePreservedChoice() {
+        var machine = GuardStateMachine()
+        machine.preserveExternalSelection(.other)
+        #expect(machine.observe(.vChewing, isInternalSwitch: true) == .ignored)
+        #expect(machine.preservedSelection == .other)
+        #expect(machine.beginSelectionAttempt() == nil)
+    }
+    @Test func selectingPreviousSourcePreemptsUnconfirmedOwnRequest() {
+        let decision = SourceNotificationDecision.evaluate(
+            current: "ABC", pendingTarget: "vChewing", waitingForExplicitSelection: false, lastObserved: "ABC"
+        )
+        #expect(decision == .preserveExternalSelection)
+        var machine = GuardStateMachine()
+        machine.request(.vChewing)
+        #expect(machine.beginSelectionAttempt() == 1)
+        machine.preserveExternalSelection(.abc)
+        #expect(machine.delayBeforeNextAttempt() == nil)
+    }
+    @Test func sourceNotificationPreemptsSecureInputIntent() {
+        #expect(SourceNotificationDecision.evaluate(
+            current: "ABC", pendingTarget: nil, waitingForExplicitSelection: true, lastObserved: "ABC"
+        ) == .preserveExternalSelection)
+    }
+    @Test func ownNotificationConfirmsOnlyItsExactTarget() {
+        #expect(SourceNotificationDecision.evaluate(
+            current: "vChewing", pendingTarget: "vChewing", waitingForExplicitSelection: false, lastObserved: "ABC"
+        ) == .ownSelectionConfirmed)
+        #expect(SourceNotificationDecision.evaluate(
+            current: "thirdParty", pendingTarget: "vChewing", waitingForExplicitSelection: false, lastObserved: "ABC"
+        ) == .preserveExternalSelection)
+    }
+    @Test func idleDuplicateAndUnavailableSourceDoNotChangeIntent() {
+        #expect(SourceNotificationDecision.evaluate(
+            current: "ABC", pendingTarget: nil, waitingForExplicitSelection: false, lastObserved: "ABC"
+        ) == .unchanged)
+        #expect(SourceNotificationDecision.evaluate(
+            current: nil, pendingTarget: "vChewing", waitingForExplicitSelection: true, lastObserved: "ABC"
+        ) == .unchanged)
     }
 }

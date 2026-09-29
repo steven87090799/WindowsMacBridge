@@ -13,6 +13,7 @@ public struct InputSourceStatus: Equatable, Sendable {
     public var desired = DesiredInputSource.vChewing
     public var summary = "輸入法守護未啟動"
     public var current = "unknown"
+    public var currentName = "尚未偵測"
     public var traditional = "尚未偵測"
     public var abc = "尚未偵測"
     public var issue: String?
@@ -22,8 +23,12 @@ public struct InputSourceStatus: Equatable, Sendable {
     public var loginStatus = "Off"
     public var loginRegistered = false
     public var loginIssue: String?
-    public var canImportLegacy = false
-    public var migrationMessage: String?
+    public var detectionPaused = false
+    public var detectionPauseUntil: Date?
+    public var detectionPauseIndefinite = false
+    public var pauseDuration = GuardPauseDuration.fifteenMinutes
+    public var preservedSourceIdentifier: String?
+    public var statistics = InputSourceStatistics()
     public init() {}
 }
 
@@ -40,7 +45,6 @@ public struct InputSourceStatus: Equatable, Sendable {
     private var hotkeyIssue: String?
     private var issue: String?
     private var loginIssue: String?
-    private var migrationMessage: String?
     private var suspension: InputSourceSuspension? = .unknownApplication
     private let defaults = UserDefaults.standard
     private let hotkeyEnabledKey = "inputSource.hotkeyEnabled"
@@ -108,35 +112,23 @@ public struct InputSourceStatus: Equatable, Sendable {
         AppSettings.setDebounce(milliseconds); controller.debounceSettingChanged(); emit()
     }
     public func setStartupDelay(_ milliseconds: Int) { AppSettings.setStartupDelay(milliseconds); emit() }
+    public func setPauseDuration(_ duration: GuardPauseDuration) { AppSettings.setPauseDuration(duration); emit() }
+    public func pauseDetection(_ duration: GuardPauseDuration) { controller.pauseDetection(duration); emit() }
+    public func resumeDetection() { controller.resumeDetection(); emit() }
     public func rediscover() { issue = nil; controller.refreshAndReconcile(reason: "User refreshed input sources"); emit() }
     public func setLoginEnabled(_ enabled: Bool) {
         do { try LoginItemManager.setEnabled(enabled); loginIssue = nil }
         catch { loginIssue = "登入項目更新失敗：\(error.localizedDescription)。請將 App 放在 Applications 後再設定。" }
         emit()
     }
-    public func quitLegacyApp() {
-        let oldApps = NSRunningApplication.runningApplications(withBundleIdentifier: LegacyPreferences.domain)
-        let refused = oldApps.filter { !$0.terminate() }
-        issue = refused.isEmpty ? nil : "舊版 App 尚未結束，請從 VChewingGuard 選單結束。"
-        emit()
+    public var loginIsRegistered: Bool { LoginItemManager.isRegistered }
+    public var loginIsActive: Bool { LoginItemManager.isEnabled }
+    public var loginStatusText: String { LoginItemManager.statusDescription }
+    @discardableResult public func ensureLoginEnabled() -> Bool {
+        setLoginEnabled(true)
+        return LoginItemManager.isRegistered
     }
     public func openLoginSettings() { SMAppService.openSystemSettingsLoginItems() }
-
-    public func importLegacyPreferences() {
-        let source = defaults.persistentDomain(forName: LegacyPreferences.domain) ?? [:]
-        let values = LegacyPreferences.validated(source)
-        guard !values.isEmpty else { migrationMessage = "未找到可匯入的舊版設定。"; emit(); return }
-        // A preset import uses the same transactional registration path as the UI.
-        if let raw = values[AppSettings.hotkeyKey] as? String, let preset = HotkeyPreset(rawValue: raw) {
-            setPreset(preset)
-        }
-        if let n = values[AppSettings.debounceKey] as? Int { setDebounce(n) }
-        if let n = values[AppSettings.startupDelayKey] as? Int { setStartupDelay(n) }
-        migrationMessage = hotkeyIssue == nil
-            ? "已匯入延遲與快捷鍵偏好；啟用狀態、登入項目與歷史紀錄未匯入。"
-            : "已匯入延遲；快捷鍵發生衝突，請重新選擇。"
-        emit()
-    }
 
     public var status: InputSourceStatus {
         var result = InputSourceStatus()
@@ -148,7 +140,9 @@ public struct InputSourceStatus: Equatable, Sendable {
         result.desired = controller.desired
         result.suspension = suspension
         result.summary = suspension?.rawValue ?? controller.statusText
-        result.current = controller.inputSources.currentIdentifier ?? "unknown"
+        let current = controller.inputSources.currentSource()
+        result.current = current.identifier ?? "unknown"
+        result.currentName = current.localizedName ?? result.current
         result.traditional = controller.inputSources.discovery.traditional?.summary ?? "未找到唯音繁體"
         result.abc = controller.inputSources.discovery.abc?.summary ?? "未找到 ABC"
         result.issue = issue ?? hotkeyIssue ?? (controller.isEnabled ? controller.issueDescription : nil)
@@ -157,20 +151,23 @@ public struct InputSourceStatus: Equatable, Sendable {
         result.loginStatus = LoginItemManager.statusDescription
         result.loginRegistered = LoginItemManager.isRegistered
         result.loginIssue = loginIssue
-        result.canImportLegacy = !LegacyPreferences.validated(defaults.persistentDomain(forName: LegacyPreferences.domain) ?? [:]).isEmpty
-        result.migrationMessage = migrationMessage
+        result.detectionPaused = controller.isDetectionPaused
+        result.detectionPauseUntil = controller.detectionPauseUntil
+        result.detectionPauseIndefinite = controller.detectionPauseIndefinite
+        result.pauseDuration = AppSettings.pauseDuration
+        result.preservedSourceIdentifier = controller.preservedSourceIdentifier
+        result.statistics = DiagnosticMetrics.shared.statistics
         return result
     }
     public var diagnostics: String { controller.diagnostics + "\nHost policy: \(suspension?.rawValue ?? "Local")\nHotkey registered: \(hotkeyRegistered)" }
     public var recentLog: String { FileLogger.shared.recentText() }
+    /// Resource measurements run only when settings are opened or refreshed.
+    public var memoryUsageDescription: String { DiagnosticMetrics.currentMemorySnapshot()?.description ?? "無法讀取" }
 
     public static func acquireSingleInstance() -> Bool {
         if SingleInstanceGuard.shared.acquire() { return true }
         SingleInstanceGuard.shared.activateExistingInstanceIfPossible()
         return false
-    }
-    public static var legacyAppRunning: Bool {
-        !NSRunningApplication.runningApplications(withBundleIdentifier: LegacyPreferences.domain).isEmpty
     }
     /// Enumerates metadata only: no source selection, hotkey registration or event tap.
     public static func discoveryReport() -> String {

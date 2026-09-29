@@ -2,27 +2,41 @@ import AppKit
 import ApplicationServices
 import SwiftUI
 import BridgePlatform
+import BridgeCore
 import InputSourceSupport
+import InputSourceCore
 
-@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     private var controller: BridgeController!
     private var item: NSStatusItem!
     private var settingsWindow: NSWindow?
+    private var lastTooltip: String?
+    private var lastActive: Bool?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         installMainMenu()
         controller = BridgeController()
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.title = "W唯"
+        item.button?.title = ""
+        item.button?.image = BrandAssets.active
+        item.button?.setAccessibilityLabel("WindowsMacBridge")
         let menu = NSMenu(); menu.autoenablesItems = false; menu.delegate = self; item.menu = menu
         controller.onStatusChange = { [weak self] in
             guard let self else { return }
-            item.button?.toolTip = controller.summary + " · " + controller.sourceStatus.summary
-            item.button?.title = controller.settings.enabled && !controller.paused && !controller.status.emergencyPaused ? "W唯" : (controller.sourceStatus.enabled ? "唯" : "WⅡ")
+            updateStatusItem()
         }
         controller.start()
         if !AXIsProcessTrusted() || !controller.settings.enabled { showSettings() }
+    }
+    private func updateStatusItem() {
+        let tooltip = controller.summary + " · " + controller.sourceStatus.summary
+        if tooltip != lastTooltip { item.button?.toolTip = tooltip; lastTooltip = tooltip }
+        let active = controller.settings.enabled && !controller.paused && !controller.status.emergencyPaused
+        if active != lastActive {
+            item.button?.image = active ? BrandAssets.active : BrandAssets.paused
+            lastActive = active
+        }
     }
     func applicationWillTerminate(_ notification: Notification) { controller?.stop() }
     private func installMainMenu() {
@@ -53,8 +67,16 @@ import InputSourceSupport
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showSettings(); return true
     }
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === settingsWindow else { return }
+        // A hidden NSHostingView still observes @Published values and performs layout.
+        window.contentView = nil
+        window.delegate = nil
+        settingsWindow = nil
+    }
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        label("WindowsMacBridge \(AppBuildInfo.current.versionLabel) · \(AppBuildInfo.current.shortRevision)", in: menu)
         label(controller.summary, in: menu)
         label("App: \(controller.context.displayName)", in: menu)
         label("Profile: \(controller.context.mode.title)", in: menu)
@@ -74,6 +96,16 @@ import InputSourceSupport
         label("輸入法：\(controller.sourceStatus.summary)", in: menu)
         let guardItem = action("啟用唯音輸入法守護", #selector(toggleGuard), in: menu)
         guardItem.state = controller.sourceStatus.enabled ? .on : .off
+        let detectionPause = NSMenuItem(title: "暫停輸入法偵測", action: nil, keyEquivalent: "")
+        let detectionMenu = NSMenu()
+        for duration in GuardPauseDuration.allCases {
+            let entry = action(duration.title, #selector(pauseSourceDetection(_:)), in: detectionMenu)
+            entry.representedObject = duration.rawValue
+        }
+        detectionPause.submenu = detectionMenu; menu.addItem(detectionPause)
+        if controller.sourceStatus.detectionPaused {
+            action("恢復輸入法偵測", #selector(resumeSourceDetection), in: menu)
+        }
         let chinese = action("切換至唯音繁體", #selector(selectChinese), in: menu)
         let english = action("切換至 ABC", #selector(selectEnglish), in: menu)
         chinese.isEnabled = controller.sourceStatus.suspension == nil
@@ -93,19 +125,28 @@ import InputSourceSupport
     @objc private func toggleGuard() { controller.inputSources.setEnabled(!controller.sourceStatus.enabled) }
     @objc private func selectChinese() { controller.inputSources.select(.vChewing) }
     @objc private func selectEnglish() { controller.inputSources.select(.abc) }
+    @objc private func pauseSourceDetection(_ item: NSMenuItem) {
+        guard let raw = item.representedObject as? String, let duration = GuardPauseDuration(rawValue: raw) else { return }
+        controller.inputSources.pauseDetection(duration)
+    }
+    @objc private func resumeSourceDetection() { controller.inputSources.resumeDetection() }
     @objc private func toggleEnabled() { controller.setEnabled(!controller.settings.enabled) }
     @objc private func resume() { controller.resume() }
     @objc private func pauseTimed(_ item: NSMenuItem) { controller.pause(minutes: item.tag) }
     @objc private func pauseUntilRestart() { controller.pause(minutes: nil) }
     @objc private func quit() { NSApp.terminate(nil) }
     @objc private func showSettings() {
+        controller.refreshPermissions()
+        controller.settingsPage = .permissions
         if settingsWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 620),
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 840, height: 740),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
                                   backing: .buffered, defer: false)
             window.title = "WindowsMacBridge"
+            window.contentMinSize = NSSize(width: 730, height: 600)
             window.contentView = NSHostingView(rootView: SettingsView(controller: controller))
             window.isReleasedWhenClosed = false
+            window.delegate = self
             window.center(); settingsWindow = window
         }
         settingsWindow?.makeKeyAndOrderFront(nil)
@@ -118,15 +159,44 @@ import InputSourceSupport
         if CommandLine.arguments.contains("--self-check") {
             do {
                 let registry = try ApplicationRegistry()
-                print("WindowsMacBridge 0.2.0: bundled registry loaded (\(registry.entries.count) entries); no event tap started.")
+                if Bundle.main.bundleURL.pathExtension == "app" {
+                    let extensionURL = Bundle.main.bundleURL.appendingPathComponent("Contents/PlugIns/WindowsMacBridgeFinderSync.appex")
+                    guard let finder = Bundle(url: extensionURL),
+                          finder.infoDictionary?["CFBundleIdentifier"] as? String == "local.WindowsMacBridge.FinderSync",
+                          finder.executableURL != nil else {
+                        print("WindowsMacBridge self-check failed: Finder Sync extension missing.")
+                        exit(1)
+                    }
+                    guard finder.infoDictionary?["WMBFinderSignalVersion"] as? Int == FinderModeChannel.version,
+                          finder.infoDictionary?["CFBundleShortVersionString"] as? String == Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+                          finder.infoDictionary?["CFBundleVersion"] as? String == Bundle.main.infoDictionary?["CFBundleVersion"] as? String else {
+                        print("WindowsMacBridge self-check failed: Finder signal protocol mismatch.")
+                        exit(1)
+                    }
+                }
+                print("\(AppBuildInfo.current.diagnosticText)\nBundled registry loaded (\(registry.entries.count) entries); no event tap or capture started.")
             } catch {
                 print("WindowsMacBridge self-check failed: registry unavailable.")
                 exit(1)
             }
             return
         }
+        if CommandLine.arguments.contains("--version") {
+            print(AppBuildInfo.current.diagnosticText)
+            return
+        }
+        if CommandLine.arguments.contains("--diagnose-permissions") {
+            print("\(AppBuildInfo.current.diagnosticText)\n\(PermissionStatus.current().diagnosticText)")
+            print("CLI permission checks may use the launching terminal's TCC identity. The running App's permission page is authoritative for that App.")
+            return
+        }
         if CommandLine.arguments.contains("--diagnose-input-sources") {
             print(InputSourceCoordinator.discoveryReport())
+            return
+        }
+        if CommandLine.arguments.contains("--diagnose-backend") {
+            print(HIDDeviceInventory.report())
+            print(NativeMacBookKeyboardBackend().diagnosticReport())
             return
         }
         guard InputSourceCoordinator.acquireSingleInstance() else { return }
