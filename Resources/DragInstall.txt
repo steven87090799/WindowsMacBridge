@@ -1,0 +1,24 @@
+WindowsMacBridge — 拖曳安裝
+
+1. 將 WindowsMacBridge.app 拖到旁邊的 Applications（應用程式）。
+   更新時先從 Menu Bar 結束舊版，再替換 App；原本的設定會保留。
+2. 從「應用程式」開啟 WindowsMacBridge。
+3. 首次使用，按 App 的「開啟輔助使用設定」，核准 WindowsMacBridge。
+   回到 App 後會自動開始，不需要執行指令或安裝 Driver。
+
+這是免費的個人測試版，沒有 Apple Developer ID／公證。
+若 macOS 阻擋開啟：嘗試開啟 App 後，到「系統設定 → 隱私權與安全性」，
+確認來源後使用系統的「仍要打開」。請勿停用 Gatekeeper、SIP 或清除 quarantine。
+更新後若 macOS 再次要求輔助使用權限，需要核准目前版本；程式不能自動批准。
+
+新安裝已啟用 Ctrl+C/X/V/A/Z/Y/S/F/P、文字導覽與其他本機快捷鍵。
+Terminal、遠端、VM、遊戲會依 App 規則保留原按鍵；Codex 預設用於聊天文字框。
+既有設定不會被覆蓋，需要恢復這些預設時按「套用建議預設」。
+
+Fn／Control、Option／Command 等硬體鍵位交換不在這個 DMG 的免 Driver 模式內。
+需要這些功能時另用進階 HID 整合包；不必為了複製、貼上安裝它。
+Finder 檔案剪下移動仍是選用功能，預設關閉。
+
+遇到不符合預期的按鍵：從 Menu Bar 暫停，或按 Control+Option+Command+P。
+完整操作與驗收步驟：App 設定 →「完整操作說明」。
+移除方式：從 Menu Bar 結束 App，再將 Applications 裡的 App 移到垃圾桶。

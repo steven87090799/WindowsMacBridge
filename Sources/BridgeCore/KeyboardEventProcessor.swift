@@ -7,6 +7,7 @@ public struct KeyboardEventProcessor: Sendable {
         var contextBundle: String
         var contextMode: ApplicationMode
         var suppress: Bool
+        var repeatSuppressed = false
     }
     private var presses = [Press?](repeating: nil, count: 128)
     private var context = ApplicationContext()
@@ -68,6 +69,14 @@ public struct KeyboardEventProcessor: Sendable {
             if let side = event.modifierSide, let down = event.modifierDown {
                 modifiers.observe(side, down: down, aggregate: event.modifiers)
             }
+            // End repeats as soon as any trigger modifier is released. A later modifier
+            // press must not revive the held shortcut; retain its translated key-up pair.
+            for index in presses.indices {
+                if let rule = presses[index]?.rule,
+                   !event.modifiers.isSuperset(of: rule.input.modifiers) {
+                    presses[index]?.repeatSuppressed = true
+                }
+            }
             if event.modifiers.isEmpty && activePressCount == 0 {
                 modifiers.reset(); awaitingNeutral = false
             }
@@ -87,7 +96,14 @@ public struct KeyboardEventProcessor: Sendable {
                 return .suppress
             }
             // A repeat is stopped during pause/recovery. Release still pairs with its down.
-            if event.phase == .down && (!enabled || !layoutSupported || manualPassThrough) { return .suppress }
+            if event.phase == .down {
+                // Event flags also catch a missing flagsChanged release.
+                if !event.modifiers.isSuperset(of: rule.input.modifiers) {
+                    presses[index]?.repeatSuppressed = true
+                    return .suppress
+                }
+                if press.repeatSuppressed || !enabled || !layoutSupported || manualPassThrough { return .suppress }
+            }
             return rewrite(event, rule: rule)
         }
         guard event.phase == .down else { return .passThrough }

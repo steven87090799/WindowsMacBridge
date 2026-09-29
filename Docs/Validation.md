@@ -1,3 +1,38 @@
+# 0.4.2-preview.1 拖曳安裝版（2026-09-28／29）
+
+- 使用者不申請付費 Developer ID，改為免費個人測試版；ad-hoc 簽章與無公證仍如實揭露。
+  DMG 只有 App、Applications 捷徑與開始使用說明，不需要 Install.command 或 Driver。
+  原生系統權限／Gatekeeper 提示無法省略；未關閉系統保護或清除 quarantine。
+- 新增首次授權說明、收合進階 HID 設定、內建實機驗收指南。既有偏好保留。
+  修正文案：EventTap 保留 Alt+Tab，使用原生 Command+Tab 切 App；完整 Alt+Tab
+  僅在選用 HID 路徑提供，不能把普通 DMG 宣稱為完整 Karabiner 替代。
+- EventTap Ctrl+Y 先放 Ctrl、Y 仍按住時，原本 repeat 可能變成無修飾的 Z。
+  三個新測試先得到 5 個失敗，再修正為停止該次按鍵的後續 repeat；仍保留配對 key-up，
+  重按 modifier 不會復活連發。覆蓋兩個 Ctrl 與缺失 flagsChanged 的情境。
+- 主程式／核心完整 **91 tests 通過**（52 core、20 platform/AppKit、15 input-source、4 migration）。
+  包含 120,000+ 事件與 100,000 步雙鍵盤交錯壓測。另有 **36 個鍵盤／HID ASan tests 通過**，
+  執行於加入最後兩個 Safari 回歸測試之前；不得將它寫成全 91 tests 都跑過 ASan。
+- Safari 回歸在已同步 modifier 狀態下驗證原生 Control+Command+F、Command+M、Fn+F、
+  Command+Option+Escape 保留，以及翻譯 Copy 完整放開後普通播放器鍵保留。
+  這是程序內事件測試，不向使用者的 App 注入全域測試鍵。
+- 設定頁由 TabView 改為 segmented Picker，排除原 CoreUI bundle 查找警告及切頁發布狀態警告。
+  負尺寸 fault 以符號化 stack 定位到 macOS 27 的 NSThemeFrame 分享指示器；
+  108 筆原程式／無鍵盤測試 App fault 路徑一致。沒有隱藏日誌或修改 private API。
+  詳見 [調查記錄](macOS27-UIInvestigation.md)，不可宣稱 macOS 系統警告全部消失。
+- Release build、App strict codesign、registry 28 項 self-check、shell syntax、diff whitespace 通過。
+  DMG 唯讀掛載後 App signature／self-check 通過，Applications link 正確，內建兩份指南存在，
+  executable 與指南逐位元比對 /Applications 安裝版相同。
+- DMG 906,059 bytes，SHA-256 `3c7fed1eb90bf3fab8f7e285cbd714cb5f808623759d7e8f74a07f8c924ae9c1`。
+  0.4.2 build 8 已放入 /Applications；最後檢查仍待 macOS 重新授權，不把安裝等同啟用成功。
+- Safari 視窗進入／離開全螢幕可在未啟用 tap 時操作成功；當時有未處理的開啟 Codex 對話框，
+  已取消。尚不能確定原回報的提示音根因，亦尚未完成 tap Active／完全退出的 YouTube 對照。
+- 真實遠端依使用者要求延後，驗收流程已附在 App。實體鍵盤、IME 組字、HID、睡眠／故障恢復
+  仍需逐項記錄；上一版的三小時閒置數據不能當成本版本的新三小時驗收。
+
+以下保留歷史版本結果。
+
+---
+
 # 0.3.0-preview 驗證紀錄
 
 日期：2026-09-27。本機 arm64、Swift 6.4 / macOS 27 SDK，deployment target macOS 14。

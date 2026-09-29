@@ -35,8 +35,10 @@ jobs:
       - name: Build and verify development app
         run: bash scripts/build-app.sh
       - name: Package app
-        run: ditto -c -k --keepParent "$(cat build/APP_PATH.txt)" build/WindowsMacBridge.zip
+        run: bash scripts/package-app-dmg.sh
       - uses: actions/upload-artifact@v4
         with:
           name: WindowsMacBridge-development
-          path: build/WindowsMacBridge.zip
+          path: |
+            build/download/*.dmg
+            build/download/*.dmg.sha256

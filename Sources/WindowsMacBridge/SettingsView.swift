@@ -3,15 +3,35 @@ import BridgeCore
 import InputSourceSupport
 import BridgePlatform
 
+enum SettingsPage: String, CaseIterable {
+    case general = "一般與權限"
+    case inputSources = "唯音與輸入法"
+    case profiles = "App 規則"
+    case diagnostics = "診斷"
+}
+
 struct SettingsView: View {
     @ObservedObject var controller: BridgeController
 
     var body: some View {
-        TabView {
-            general.tabItem { Label("一般與權限", systemImage: "keyboard") }
-            inputSources.tabItem { Label("唯音與輸入法", systemImage: "character.bubble") }
-            profiles.tabItem { Label("App 規則", systemImage: "app.badge") }
-            diagnostics.tabItem { Label("診斷", systemImage: "waveform.path.ecg") }
+        // NSTabView's pane path emits CoreUI bundle-lookup faults on macOS 27,
+        // including text-only tab items. Keep one page mounted under a native picker.
+        VStack(spacing: 16) {
+            Picker("設定分類", selection: Binding(get: { controller.settingsPage }, set: { page in
+                // Native picker callbacks can arrive during a SwiftUI update on macOS 27.
+                // Publish the page replacement after that update finishes.
+                DispatchQueue.main.async { controller.settingsPage = page }
+            })) {
+                ForEach(SettingsPage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 560)
+            Group {
+                switch controller.settingsPage {
+                case .general: general
+                case .inputSources: inputSources
+                case .profiles: profiles
+                case .diagnostics: diagnostics
+                }
+            }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .padding(18)
         .frame(minWidth: 730, minHeight: 600)
@@ -23,7 +43,15 @@ struct SettingsView: View {
 
     private var general: some View {
         Form {
-            Section("WindowsMacBridge · 0.4.1 Preview") {
+            if !controller.status.accessibility {
+                Section("首次啟用：核准鍵盤權限") {
+                    Text("1. 將 WindowsMacBridge 拖到「應用程式」，並從那裡開啟。")
+                    Text("2. 按下方按鈕，在「輔助使用」開啟 WindowsMacBridge。")
+                    Button("開啟輔助使用設定") { controller.requestAccessibility(); controller.openPermissions() }
+                    explanation("快捷鍵預設已開啟；授權後自動開始，不需要執行安裝指令或安裝 Driver。macOS 權限只能由你核准；更新後若系統再次要求，請核准目前版本。")
+                }
+            }
+            Section("WindowsMacBridge · 0.4.2 Preview") {
                 Text(controller.summary).font(.headline).textSelection(.enabled)
                 explanation("新安裝已啟用 Windows 快捷鍵：本機 Ctrl+C／X／V 會轉成複製／剪下／貼上。Codex 預設適用聊天與文字輸入；Terminal、其他 IDE、遠端桌面、VM 和遊戲保留原按鍵。")
                 HStack {
@@ -31,30 +59,35 @@ struct SettingsView: View {
                         controller.applyRecommendedPreset()
                     }
                     Button("完整操作說明") { controller.openUserGuide() }
+                    Button("實機驗收步驟") { controller.openAcceptanceGuide() }
                 }
                 explanation("「套用建議預設」會啟用快捷鍵及中文／唯音相容、選 EventTap／所有鍵盤、將 Codex 設為 Default macOS，並關閉 Finder 檔案加強。保留其他 App 規則、輸入法及登入設定；下方仍可逐項調整。")
                 if let notice = controller.presetNotice { Text(notice).foregroundStyle(.secondary) }
             }
             Section("Windows 快捷鍵") {
                 Toggle("啟用 Windows 快捷鍵", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
-                explanation("預設開啟。包含複製、貼上、復原、儲存、尋找、分頁、文字導覽與 Alt+Tab；關閉後停止 Windows 按鍵翻譯，輸入法守護由自己的開關控制。")
-                Picker("輸入方式", selection: Binding(get: { controller.settings.inputBackend }, set: { controller.setInputBackend($0) })) {
-                    ForEach(InputBackend.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                explanation("EventTap 是預設：授權後即可使用快捷鍵，適用目前的外接鍵盤，不需安裝 helper 或 Driver。HID 是進階測試方式：可交換 Fn／Control、Option／Command 與亮度鍵，但需另外安裝並核准 Driver，只支援指定鍵盤。切換方式時會同時選擇對應鍵盤範圍。")
-                Picker("鍵盤範圍", selection: Binding(get: { controller.settings.keyboardScope }, set: { controller.setKeyboardScope($0) })) {
-                    ForEach(KeyboardScope.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                explanation("預設「所有鍵盤」，包含 USB、Bluetooth 與內建鍵盤。EventTap 無法只指定某一把鍵盤；選內建／Apple 範圍時必須使用 HID，否則停止翻譯。HID 目前只接受支援的內建鍵盤或 Apple 1452/834，不包含所有 Apple 鍵盤。")
-                explanation("不要同時在 Karabiner 套用相同映射。若系統已交換 Control／Command，程式收到的是交換後的按鍵；請依完整操作說明確認實際結果，再決定是否還原。")
-                if controller.settings.inputBackend == .deviceHID {
-                    LabeledContent("Helper 狀態", value: controller.hidStatus.state)
-                    LabeledContent("Driver／接管鍵盤數", value: "\(controller.hidStatus.driverReady ? "Ready" : "Not ready")／\(controller.hidStatus.capturedDevices)")
-                    explanation("需先執行下載包的 Install.command 並依 macOS 提示核准官方 VirtualHID。Ready 且接管數大於 0 才表示此後端有鍵盤可用；不支援的鍵盤維持原樣。此路徑仍待實體裝置驗收。")
-                    Button("在 Finder 顯示 helper") { controller.openHelperLocation() }
-                    explanation("手動加入輸入監控時，用此按鈕找到 BridgeHIDHelper.app，再到系統設定的輸入監控清單加入。尚未安裝 helper 時，請先執行 Install.command。")
-                    Button("要求 helper 輸入監控權限") { controller.requestHIDListening() }
-                    explanation("要求 macOS 允許已安裝的 helper 接收鍵盤；需由你在系統設定核准，按鈕不會自動授權。")
+                explanation("預設開啟。包含複製、貼上、復原、儲存、尋找、分頁與 Ctrl 文字導覽；關閉後停止 Windows 按鍵翻譯，輸入法守護由自己的開關控制。")
+                explanation("一般使用不需調整：本機自動翻譯；Terminal、Remote／VM 等依 App 規則保留原按鍵。EventTap 的 Alt+Tab 維持原樣；本機切換 App 請用原生 Command+Tab。")
+                DisclosureGroup("進階：輸入方式與指定鍵盤") {
+                    Picker("輸入方式", selection: Binding(get: { controller.settings.inputBackend }, set: { controller.setInputBackend($0) })) {
+                        ForEach(InputBackend.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    explanation("EventTap 是預設：授權後即可使用快捷鍵，適用目前的外接鍵盤，不需安裝 helper 或 Driver。HID 是進階測試方式：可交換 Fn／Control、Option／Command 與亮度鍵，但需另外安裝並核准 Driver，只支援指定鍵盤。切換方式時會同時選擇對應鍵盤範圍。")
+                    Picker("鍵盤範圍", selection: Binding(get: { controller.settings.keyboardScope }, set: { controller.setKeyboardScope($0) })) {
+                        ForEach(KeyboardScope.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    explanation("預設「所有鍵盤」，包含 USB、Bluetooth 與內建鍵盤。EventTap 無法只指定某一把鍵盤；選內建／Apple 範圍時必須使用 HID，否則停止翻譯。HID 目前只接受支援的內建鍵盤或 Apple 1452/834，不包含所有 Apple 鍵盤。")
+                    explanation("不要同時在 Karabiner 套用相同映射。若系統已交換 Control／Command，程式收到的是交換後的按鍵；請依完整操作說明確認實際結果，再決定是否還原。")
+                    if controller.settings.inputBackend == .deviceHID {
+                        LabeledContent("Helper 狀態", value: controller.hidStatus.state)
+                        LabeledContent("Driver／接管鍵盤數", value: "\(controller.hidStatus.driverReady ? "Ready" : "Not ready")／\(controller.hidStatus.capturedDevices)")
+                        explanation("需先執行下載包的 Install.command 並依 macOS 提示核准官方 VirtualHID。Ready 且接管數大於 0 才表示此後端有鍵盤可用；不支援的鍵盤維持原樣。此路徑仍待實體裝置驗收。")
+                        Button("在 Finder 顯示 helper") { controller.openHelperLocation() }
+                        explanation("手動加入輸入監控時，用此按鈕找到 BridgeHIDHelper.app，再到系統設定的輸入監控清單加入。尚未安裝 helper 時，請先執行 Install.command。")
+                        Button("要求 helper 輸入監控權限") { controller.requestHIDListening() }
+                        explanation("要求 macOS 允許已安裝的 helper 接收鍵盤；需由你在系統設定核准，按鈕不會自動授權。")
+                    }
+                    explanation("一般 DMG 只包含 App。Fn／Control、Option／Command 等硬體鍵位交換仍需另用進階 HID 整合包安裝 Driver；拖曳安裝的快捷鍵模式不包含這些硬體功能。")
                 }
                 Toggle("Finder 檔案快捷鍵加強", isOn: Binding(get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
                 explanation("預設關閉。開啟後，確認焦點在檔案列表才提供開啟、改名及 Ctrl+X → Ctrl+V 移動；文字框仍使用文字操作。剪下標記在剪貼簿更新、切換 App、暫停或 5 分鐘後失效；程式無法確認 Finder 是否真的移動成功。")

@@ -8,6 +8,7 @@ import InputSourceCore
 import HIDProtocol
 
 @MainActor final class BridgeController: ObservableObject {
+    @Published var settingsPage = SettingsPage.general
     let inputSources = InputSourceCoordinator()
     @Published var sourceStatus = InputSourceStatus()
     @Published var sourceDiagnostics = ""
@@ -228,6 +229,11 @@ import HIDProtocol
     func requestHIDListening() { hid.requestInputAccess() }
     func openUserGuide() {
         if let url = Bundle.main.url(forResource: "UserGuide", withExtension: "md") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+    func openAcceptanceGuide() {
+        if let url = Bundle.main.url(forResource: "AcceptanceGuide", withExtension: "md") {
             NSWorkspace.shared.open(url)
         }
     }

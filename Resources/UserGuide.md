@@ -1,15 +1,18 @@
-# WindowsMacBridge 0.4.1 — 操作說明
+# WindowsMacBridge 0.4.2 — 操作說明
 
 ## 最快開始
 
-1. 解壓 ZIP，結束舊版 WindowsMacBridge，將新版 `WindowsMacBridge.app` 放進「應用程式」，再開啟。
-2. 設定 → 一般與權限 →「要求輔助使用」。到系統設定 → 隱私權與安全性 → 輔助使用，允許目前版本的 App。macOS 不允許下載包自動授權。
+1. 開啟 DMG，將 `WindowsMacBridge.app` 拖到旁邊的 Applications，再從「應用程式」開啟。更新前先從 Menu Bar 結束舊版；不用執行安裝指令。
+2. 首次啟動畫面按「開啟輔助使用設定」，允許目前版本的 App。授權後自動開始，不需重設快捷鍵。macOS 不允許下載包自動授權；更新後亦可能需要重新核准。
 3. 新安裝已選 Windows 快捷鍵 ON、EventTap、所有鍵盤，以及 Codex 的 Default macOS 規則。既有設定不會被更新覆蓋；需要相同設定就按「套用建議預設」。
 4. 在 ABC 輸入來源與可丟棄的文字文件試 Ctrl+A／C／X／V／Z；Codex 用聊天文字框實測，不送出測試文字。進入 Terminal 或遠端 App 時會自動切成原樣通過。
 
-這是開發預覽版，適用 Apple Silicon、macOS 14+。App/helper 使用 ad-hoc 簽章，尚未公證；若 macOS 阻擋，使用系統提供的「仍要打開」，不要關閉 Gatekeeper 或 SIP。更新後若舊授權失效，重新加入目前的 App 並重啟。
+這是免費的個人測試版，適用 Apple Silicon、macOS 14+，不需要購買 Developer 帳號。App 使用 ad-hoc 簽章，沒有 Apple 公證；若 macOS 阻擋，嘗試開啟後到「系統設定 → 隱私權與安全性」使用系統提供的「仍要打開」。不要關閉 Gatekeeper／SIP 或清除 quarantine。
 
 普通快捷鍵**不需**執行 Install.command，也不需要 Driver。安裝 HID 只用於下方的進階鍵盤映射測試。
+
+實體鍵盤、中文組字、Terminal、遠端與睡眠恢復驗收，請按 App 的「實機驗收步驟」，
+或閱讀同資料夾的 [AcceptanceGuide.md](AcceptanceGuide.md)。未操作過的情境保留為未驗收。
 
 ## 預設值
 
@@ -33,7 +36,7 @@
 ## 一般與權限
 
 - **Windows 快捷鍵**：開啟後翻譯既有 29 組一般規則與 19 組瀏覽器規則，涵蓋複製、貼上、復原、儲存、分頁與文字導覽；關閉不會連帶關閉輸入法守護。
-- **EventTap**：全鍵盤的快捷鍵翻譯。不能可靠辨識每次按鍵來自哪一把鍵盤，也不提供 Fn／Control 交換或 consumer 亮度鍵映射。
+- **EventTap**：全鍵盤的快捷鍵翻譯。Alt+Tab 維持原樣，本機 App 切換請用原生 Command+Tab；完整持有式 Alt+Tab 只在另裝的 HID 模式提供。不能可靠辨識每次按鍵來自哪一把鍵盤，也不提供 Fn／Control 交換或 consumer 亮度鍵映射。
 - **HID**：進階裝置測試後端，需要另裝 root helper 與官方 VirtualHID Driver。僅支援符合描述的內建鍵盤或 Apple VID 1452/PID 834；Logitech 等未支援裝置不會被接管。切換輸入方式會選擇對應範圍。
 - **鍵盤範圍**：EventTap 使用所有鍵盤，HID 使用指定範圍。EventTap 選內建限定時停止翻譯，避免錯誤地套用到全部鍵盤。
 - **Finder 加強**：確認在檔案列表才啟用開啟、改名與 Ctrl+X／V 移動。Ctrl+X 先執行 Copy 並記住剪下狀態，Ctrl+V 再交由 Finder 的 Move 執行。剪貼簿更新、切換 App、暫停或 5 分鐘後取消標記；不保證 Move 已成功，也不保存剪貼簿內容。
@@ -51,6 +54,19 @@
 macOS 的「修飾鍵」交換與 Karabiner 映射都會影響程式實際收到的按鍵。程式不會改動或還原這些設定。先停用 Karabiner 中重複的規則，測試實際的 Ctrl／Command；需要保留實體 Windows Ctrl 語意時，再把該鍵盤在「系統設定 → 鍵盤 → 鍵盤快速鍵 → 修飾鍵」還原。不同鍵盤有各自設定，不要一次還原全部。
 
 ## App 規則
+
+### Safari／YouTube 全螢幕排查
+
+先查看 Safari 是否有待確認的網站、登入或「開啟其他 App」對話框，處理或取消後再試。
+分別測視窗綠色按鈕、Safari 顯示方式選單，以及 YouTube 播放器全螢幕按鈕。
+F／Escape 應保持原樣，但不要在搜尋欄中測 F。
+
+若仍失敗，從 Menu Bar 完全結束 WindowsMacBridge，再重試相同操作，記錄是否仍發生。
+EventTap 不攔截滑鼠，不翻譯無修飾鍵 F／Escape 或原生 Control+Command+F。
+只有啟用時失敗，才進一步排查映射；兩者都失敗時先保存工作，再考慮正常重啟 Safari。
+不必重設全部鍵盤或降低 macOS 安全設定。程式不會自動關閉其他 App 的對話框。
+
+### 指定模式
 
 「最近使用」可直接指定模式；「選擇其他 App」選取 .app 後先加入 Disabled，再從選單改模式。變更立即儲存，不需重啟。「移除」刪除自訂規則，回到內建判定。
 

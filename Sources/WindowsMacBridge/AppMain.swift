@@ -123,6 +123,7 @@ import InputSourceSupport
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
                                   backing: .buffered, defer: false)
             window.title = "WindowsMacBridge"
+            window.contentMinSize = NSSize(width: 730, height: 600)
             window.contentView = NSHostingView(rootView: SettingsView(controller: controller))
             window.isReleasedWhenClosed = false
             window.delegate = self
