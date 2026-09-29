@@ -1,4 +1,4 @@
-# WindowsMacBridge 0.5.7 — 操作說明
+# WindowsMacBridge 0.5.8 — 操作說明
 
 Finder 右鍵路徑選單需要 App 正在執行及 Finder Mode 已開啟。設定同步僅使用原生通知傳送開／關，不依賴 App Group；免費簽章版本的擴充功能保留沙盒，沒有新增輪詢。
 
@@ -23,6 +23,7 @@ Finder 右鍵路徑選單需要 App 正在執行及 Finder Mode 已開啟。設�
 | Windows 快捷鍵 | 開 | 本機 Ctrl 快捷鍵轉為 macOS 操作 |
 | 輸入方式 | EventTap | 使用目前可用的快捷鍵翻譯，不接管實體鍵盤 |
 | 鍵盤範圍 | 所有鍵盤 | 內建、USB、Bluetooth 均使用同一套快捷鍵規則 |
+| MacBook Fn／Ctrl 交換 | 關 | 本機內建 Fn → 左 Ctrl、左 Ctrl → Fn；外接與通用控制虛擬鍵盤排除 |
 | Codex／ChatGPT App | Default macOS | 依 `com.openai.codex` 套用聊天／文字操作 |
 | Terminal／其他 IDE | 原樣通過 | 保護 Unix 與內嵌終端機 Ctrl 快捷鍵 |
 | Remote／VM／Game | 原樣通過 | 不在本機翻譯或切換輸入法 |
@@ -37,7 +38,17 @@ Finder 右鍵路徑選單需要 App 正在執行及 Finder Mode 已開啟。設�
 | 切換快捷鍵組合 | Control+Option+Command+Space | 功能開啟後才註冊 |
 | 登入啟動／短期診斷 | 由截圖功能註冊／關 | 登入項目可能需在 macOS 系統設定核准 |
 
-「套用建議預設」重新設定 Windows 快捷鍵、輸入方式、範圍、Finder、中文 IME 與 Codex 規則；保留其他自訂 App 規則、輸入法及登入設定。設定有損壞或版本不支援時，安全停用，不強行啟用。
+「套用建議預設」重新設定 Windows 快捷鍵、輸入方式、範圍、Finder、中文 IME 與 Codex 規則；保留其他自訂 App 規則、Fn／Ctrl 選擇、輸入法及登入設定。設定有損壞或版本不支援時，安全停用，不強行啟用。
+
+## MacBook 內建鍵盤模式
+
+一般設定開啟「MacBook 內建鍵盤：交換 Fn／地球鍵與左 Ctrl」。最左側變成 Ctrl，右側原 Ctrl 變成 Fn，其他修飾鍵不變。狀態顯示「已交換」才代表原生服務讀回成功；Mac mini 或找不到本機實體內建鍵盤時顯示等待，不修改外接鍵盤。請先放開按鍵再切換。
+
+通用控制兩種方向都能使用同一份設定：只在來源 MacBook 交換實體內建鍵盤，另一臺收到的虛擬服務不會再次交換；外接鍵盤操控 MacBook 時仍保持外接排列。實際跨機 Ctrl／Fn、中文組字及睡眠恢復需按驗收指南測試，未測之前不視為已驗收。
+
+這個原生選項不需安裝 HID。進階 HID 有自己的整組交換，選 HID 時此選項會暫停並還原原生交換。Terminal、Remote／VM／Game 的快捷鍵翻譯仍照原 Profile；使用者選擇的 Fn／Ctrl 實體位置交換仍適用。Windows 翻譯暫停不會取消此獨立的鍵盤排列設定。
+
+關閉或正常退出還原本程式的交換，其他映射保留。系統或其他工具已占用 Fn／Ctrl 時顯示衝突，先在對應工具還原這把內建鍵盤，再按「重新檢查鍵盤模式」。強制終止可能留下暫存映射，重新開啟可依還原紀錄恢復；重新開機清除暫存映射。App 的登入啟動依保存的開關重新套用，若待核准，按授權清單的登入項目前往系統設定。診斷紀錄為 `~/Library/Logs/WindowsMacBridge/KeyboardMapping.log`。
 
 ## 授權清單
 

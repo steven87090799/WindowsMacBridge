@@ -154,7 +154,7 @@ struct SettingsView: View {
                     Picker("輸入方式", selection: Binding(get: { controller.settings.inputBackend }, set: { controller.setInputBackend($0) })) {
                         ForEach(InputBackend.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
-                    explanation("EventTap 是預設：授權後即可使用快捷鍵，適用目前的外接鍵盤，不需安裝 helper 或 Driver。HID 是進階測試方式：可交換 Fn／Control、Option／Command 與亮度鍵，但需另外安裝並核准 Driver，只支援指定鍵盤。切換方式時會同時選擇對應鍵盤範圍。")
+                    explanation("EventTap 是預設：授權後即可使用快捷鍵。下方 MacBook Fn／Ctrl 交換可用原生 API，不需 Driver。HID 是進階測試方式：另外交換 Option／Command 與亮度鍵，需安裝並核准 Driver，只支援指定鍵盤。切換方式時會同時選擇對應鍵盤範圍。")
                     Picker("鍵盤範圍", selection: Binding(get: { controller.settings.keyboardScope }, set: { controller.setKeyboardScope($0) })) {
                         ForEach(KeyboardScope.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
@@ -169,8 +169,16 @@ struct SettingsView: View {
                         Button("要求 helper 輸入監控權限") { controller.requestHIDListening() }
                         explanation("要求 macOS 允許已安裝的 helper 接收鍵盤；需由你在系統設定核准，按鈕不會自動授權。")
                     }
-                    explanation("一般 DMG 只包含 App。Fn／Control、Option／Command 等硬體鍵位交換仍需另用進階 HID 整合包安裝 Driver；拖曳安裝的快捷鍵模式不包含這些硬體功能。")
+                    explanation("一般 DMG 包含原生 MacBook Fn／Ctrl 交換；Option／Command 與亮度鍵等進階交換仍需另用 HID 整合包。")
                 }
+                Toggle("MacBook 內建鍵盤：交換 Fn／地球鍵與左 Ctrl", isOn: Binding(
+                    get: { controller.settings.macBookFnControlSwap }, set: { controller.setMacBookFnControlSwap($0) }))
+                    .disabled(controller.settings.inputBackend == .deviceHID)
+                explanation("預設關閉。Fn 變成 Ctrl、原左 Ctrl 變成 Fn；右 Ctrl、Win／Command、Alt／Option 及外接鍵盤保持原樣。只對本機實體內建鍵盤生效，退出 App 或關閉時還原；請先放開按鍵再切換。HID 後端已有自己的交換，兩種方式不會疊加。")
+                explanation("通用控制：在鍵盤實際所在的 MacBook 開啟。接收端不交換虛擬鍵盤，避免交換兩次；Mac mini 的外接鍵盤操作 MacBook 時仍保持外接排列。兩臺 Mac 的跨機修飾鍵結果需實測。Fn／Ctrl 是實體位置交換，Terminal／Remote 等 Profile 仍照原規則處理交換後的 Ctrl。")
+                LabeledContent("MacBook 鍵盤模式", value: controller.macBookKeyboardStatus.summary)
+                Button("重新檢查鍵盤模式") { controller.refreshMacBookKeyboard() }
+                if let issue = controller.macBookKeyboardStatus.issue { Text(issue).foregroundStyle(.orange) }
                 Toggle("Finder 檔案快捷鍵加強", isOn: Binding(get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
                 explanation("預設關閉。開啟後，確認焦點在檔案列表才提供開啟、改名及 Ctrl+X → Ctrl+V 移動；文字框仍使用文字操作。剪下標記在剪貼簿更新、切換 App、暫停或 5 分鐘後失效；程式無法確認 Finder 是否真的移動成功。")
                 explanation("右鍵路徑選單由 App 內的 Finder Sync 擴充功能提供。首次安裝後請在「一般 → 登入項目與擴充功能 → Finder」啟用 WindowsMacBridge Finder；此開關關閉時選單不顯示。")
@@ -200,8 +208,8 @@ struct SettingsView: View {
             }
             Section("登入時啟動") {
                 Toggle("登入時啟動 WindowsMacBridge", isOn: Binding(get: { controller.sourceStatus.loginRegistered }, set: { controller.inputSources.setLoginEnabled($0) }))
-                    .disabled(controller.settings.screenshotAutoCopy)
-                explanation("新安裝因截圖自動複製預設開啟，會註冊登入啟動，以便重新登入後繼續生效；關閉截圖功能時，只有由截圖功能新增的登入註冊會被移除。")
+                    .disabled(controller.settings.screenshotAutoCopy || controller.settings.macBookFnControlSwap)
+                explanation("截圖自動複製或 MacBook Fn／Ctrl 模式開啟時，會註冊登入啟動。兩者都關閉才移除由這些功能新增的註冊；原先手動開啟的登入項目保留。")
                 LabeledContent("系統登入項目狀態", value: controller.sourceStatus.loginStatus)
                 Button("開啟登入項目設定") { controller.inputSources.openLoginSettings() }
                 explanation("若顯示待核准或啟動失敗，到系統設定檢查 WindowsMacBridge 是否被允許啟動。")
@@ -222,6 +230,7 @@ struct SettingsView: View {
                 explanation("右 Option+P 切換原樣穿透；Control+Option+Command+P 緊急暫停。Remote／VM／Game 的 HID 模式交回鍵盤後不攔截這些熱鍵，請用 Menu Bar 暫停或結束。暫停圖示是鍵盤內的雙直線。")
             }
         }.formStyle(.grouped)
+        .onAppear { controller.refreshMacBookKeyboard() }
     }
 
     private var inputSources: some View {
@@ -406,6 +415,7 @@ struct SettingsView: View {
                 LabeledContent("Secure Input", value: controller.status.secureInput ? "ON — 已停止翻譯" : "OFF")
                 explanation("macOS 的密碼或安全輸入環境啟用時，程式尊重安全邊界並停止翻譯；離開後等待按鍵放開再恢復。")
                 LabeledContent("鍵盤範圍", value: controller.settings.keyboardScope.title)
+                LabeledContent("Fn／Ctrl 交換", value: controller.macBookKeyboardStatus.summary)
                 if let issue = controller.status.backendIssue { Text(issue).foregroundStyle(.orange) }
                 if let rule = controller.hidStatus.lastRule { LabeledContent("HID 最近命中規則", value: rule) }
                 if !controller.status.actionStatus.isEmpty { Text(controller.status.actionStatus) }

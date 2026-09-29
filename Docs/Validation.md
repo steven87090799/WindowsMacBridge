@@ -1,3 +1,16 @@
+# 0.5.8-preview.1 MacBook 原生 Fn／Ctrl 模式（2026-09-29）
+
+- 使用者確認完整互換：Fn／地球鍵 → 左 Ctrl，原左 Ctrl → Fn；通用控制會交替使用 MacBook 內建與 Mac mini 外接鍵盤。新增獨立、預設關閉的持久開關，schema 1／2 遷移到 3 保留原 App Profile 與功能選擇。
+- 採 Apple TN2450 的公開 IOHIDEventSystemClient／IOHIDServiceClient API；只對本機有實體電池、Built-In、Apple vendor 1452、SPI／ADB／USB 且非虛擬的鍵盤服務寫入暫存 UserKeyMapping。不修改系統偏好、全域映射、外接或通用控制虛擬服務；不需 root／Automator／新 Driver。
+- 主套件完整 **155 tests 通過**：34 InputSourceCore、50 BridgePlatform、71 BridgeCore。回歸涵蓋兩種 Apple Fn usage／左 Ctrl、虛擬及外接排除、Mac mini 拒絕、保留其他映射、系統修飾鍵映射組合衝突、讀回驗證、setter／通知失敗、session 與 HID 轉換、正常還原、外部並行修改、同 boot 重啟還原紀錄、不同 boot／重連不沿用舊服務所有權、服務讀取及還原失敗保留紀錄。還原未完成時阻止 HID 啟動，避免雙重交換。
+- **11 HID helper tests**／helper release build／self-check／strict signature verification，以及 **5 Python 資源計算 tests 通過**。未安裝 helper 或 Driver。Windows Event Tap callback、截圖 head／tail 修復、快捷鍵與 Profile 規則未變動。
+- 本機原生只讀 API 回報 portable=false、3 個鍵盤服務、0 個合格本機內建服務；實際 hidutil 另有通用控制 V-Apple Internal Keyboard／V-Karabiner 服務。這是正確排除 Mac mini／虛擬服務的證據，不能證明 MacBook Fn 按鍵已交換。原生 property 回讀也不能取代實體按鍵結果。
+- 新增鍵盤狀態／重新檢查／輪替診斷，只在設定動作、服務通知與生命週期查驗，不新增計時器、按鍵監聽或鍵流日誌。來源端內建 → 接收端，以及來源端外接 → MacBook 的通用控制結果、實體 Fn／Globe、登入／睡眠須依 AcceptanceGuide 分開驗收，尚未實測的不勾為通過。發行包、Hosted CI、安裝後 UI 及資源結果另記於 release／PR。
+
+以下保留歷史版本結果。
+
+---
+
 # 0.5.7-preview.1 截圖與 Ctrl 翻譯衝突修復（2026-09-29）
 
 - 原因已由正式 `KeyboardEventProcessor`／`EventRewriter` 重現：`Ctrl+Shift+S` 命中 `karabiner.20`，被改成 `Command+Shift+S`；兩個 session Tap 原本都用 head insert，後啟動的 Windows Tap 先處理，截圖 Tap 又未排除本程式來源。新回歸在修正前產生 **3 個失敗**，分別為錯誤開始截圖、吞掉 repeat、吞掉 release。

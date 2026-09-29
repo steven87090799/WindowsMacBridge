@@ -196,6 +196,7 @@ import InputSourceCore
         }
         if CommandLine.arguments.contains("--diagnose-backend") {
             print(HIDDeviceInventory.report())
+            print(NativeMacBookKeyboardBackend().diagnosticReport())
             return
         }
         guard InputSourceCoordinator.acquireSingleInstance() else { return }

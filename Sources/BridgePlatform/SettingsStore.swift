@@ -2,7 +2,7 @@ import Foundation
 import BridgeCore
 
 public struct BridgeSettings: Codable, Equatable, Sendable {
-    public var schemaVersion = 2
+    public var schemaVersion = 3
     public var enabled = true
     // This preset is for chat/text use. Remove it to restore Codex's IDE protection.
     public var overrides: [String: ApplicationMode] = ["com.openai.codex": .macOS]
@@ -17,6 +17,7 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     public var textNavigationEnabled = true
     public var altF4Enabled = false
     public var altF4QuitLastWindow = false
+    public var macBookFnControlSwap = false
     public init() {}
     public static var safeFallback: Self {
         var settings = Self()
@@ -29,6 +30,7 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case schemaVersion, enabled, overrides, keyboardScope, finderEnabled, allowIMEShortcuts, inputBackend, screenshotAutoCopy
         case windowSwitcherEnabled, windowThumbnailsEnabled, finderPermanentDeleteEnabled, textNavigationEnabled, altF4Enabled, altF4QuitLastWindow
+        case macBookFnControlSwap
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -47,6 +49,7 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         textNavigationEnabled = try values.decodeIfPresent(Bool.self, forKey: .textNavigationEnabled) ?? true
         altF4Enabled = try values.decodeIfPresent(Bool.self, forKey: .altF4Enabled) ?? false
         altF4QuitLastWindow = try values.decodeIfPresent(Bool.self, forKey: .altF4QuitLastWindow) ?? false
+        macBookFnControlSwap = try values.decodeIfPresent(Bool.self, forKey: .macBookFnControlSwap) ?? false
     }
 }
 
@@ -59,9 +62,9 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         if let data = defaults.data(forKey: "bridge.settings.v1") {
             do {
                 let loaded = try JSONDecoder().decode(BridgeSettings.self, from: data)
-                guard (1...2).contains(loaded.schemaVersion) else { throw CocoaError(.coderReadCorrupt) }
+                guard (1...3).contains(loaded.schemaVersion) else { throw CocoaError(.coderReadCorrupt) }
                 settings = loaded
-                settings.schemaVersion = 2
+                settings.schemaVersion = 3
             } catch {
                 settings = .safeFallback
                 errorMessage = "設定無法讀取，已使用停用的安全預設；原資料未覆寫。"
@@ -90,6 +93,7 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
             $0.textNavigationEnabled = preserved.textNavigationEnabled
             $0.altF4Enabled = preserved.altF4Enabled
             $0.altF4QuitLastWindow = preserved.altF4QuitLastWindow
+            $0.macBookFnControlSwap = preserved.macBookFnControlSwap
             $0.overrides.merge(existingOverrides) { _, existing in existing }
             $0.overrides["com.openai.codex"] = .macOS
         }

@@ -82,6 +82,21 @@ Chrome Remote Desktop 等瀏覽器分頁無法單靠 App ID 自動辨識；使�
 強制終止、真實 EventTap timeout 與 HID 接管測試需要專用測試時段及可用滑鼠／第二把鍵盤。
 HID 不在一般 DMG 的安裝流程內，不要為了完成本機快捷鍵驗收而安裝 Driver。
 
+## MacBook Fn／Ctrl 與通用控制
+
+先放開所有按鍵，用可丟棄的文字文件測試。MacBook 開啟 Fn／Ctrl 模式並確認「已交換」，Mac mini 應顯示等待、外接鍵盤不變。
+
+| 鍵盤來源 → 操作目標 | 必須確認 |
+| --- | --- |
+| MacBook 內建 → MacBook | Fn+C／V 執行 Ctrl 複製／貼上；原左 Ctrl+Delete／方向鍵執行 Fn 的前刪／Home／End 行為 |
+| MacBook 內建 → Mac mini（通用控制） | 相同按鍵結果；不重複交換，切回來源端不留下 Ctrl hold |
+| Mac mini 外接 → MacBook（通用控制） | Ctrl+C／V 仍使用外接 Ctrl，外接 Fn 不因接收端模式被交換 |
+| MacBook 外接 → 任一臺 | 保留外接配置；兩把鍵盤交替使用時沒有卡住的修飾鍵 |
+| 來源／接收端 Terminal、Remote、VM、Game | 交換後的 Ctrl 仍依既有 Profile 原樣通過，不發出本機 Windows 動作 |
+| 內建鍵盤模式關閉／正常退出／重開／睡眠／重新登入 | 關閉與退出還原；重開依保存選項套用；睡眠與登入恢復無按鍵殘留 |
+
+若任何跨機組合不一致，記錄來源與接收端版本、鍵盤、Profile 及開關狀態。原生 API 的讀回與虛擬服務排除不證明 Universal Control 實際轉送結果。
+
 ## 回報方式
 
 提供「版本、鍵盤、App／Profile、操作步驟、預期與實際結果、暫停 Bridge 後是否仍發生」。

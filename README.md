@@ -1,10 +1,10 @@
 # WindowsMacBridge
 
-Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.7 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
+Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.8 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
 
 主專案是這個 repository；`vchewing-input-helper` 已移入 `InputSourceCore` 與 `InputSourceSupport`，不需同時執行兩個 App。[整合與遷移](Docs/ProjectIntegration.md)。
 
-## 0.5.7 快速開始
+## 0.5.8 快速開始
 
 新安裝預設啟用 Windows 快捷鍵、EventTap／所有鍵盤、底層 ABC／U.S. 的中文／唯音快捷鍵、截圖自動複製，以及 Codex 的聊天／文字 Profile。Terminal、其他 IDE、Remote、VM、Game 保留原按鍵；Finder 加強、唯音守護及切換快捷鍵預設關閉。截圖功能會註冊登入啟動，仍可能需要 macOS 核准。更新保留已存設定，可從一般頁按「套用建議預設」。
 
@@ -26,7 +26,7 @@ Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macO
 
 ### Windows 視窗、Finder 與文字操作
 
-一般設定提供獨立開關：逐視窗 Alt+Tab、視窗縮圖、Finder 檔案操作、Finder 永久刪除、Windows 文字游標、Alt+F4、以及 Alt+F4 最後視窗退出 App。既有文字游標翻譯預設保持開啟；新的 Alt+Tab、Finder、Alt+F4 與永久刪除預設關閉。設定 schema v2 會讀取 v1 資料，保留原先的 App Profile、後端、Finder、截圖與輸入法選擇。
+一般設定提供獨立開關：逐視窗 Alt+Tab、視窗縮圖、Finder 檔案操作、Finder 永久刪除、Windows 文字游標、Alt+F4、以及 Alt+F4 最後視窗退出 App。既有文字游標翻譯預設保持開啟；新的 Alt+Tab、Finder、Alt+F4 與永久刪除預設關閉。設定 schema v3 會讀取 v1／v2 資料，保留原先的 App Profile、後端、Finder、截圖與輸入法選擇。
 
 - Alt+Tab 在 EventTap 的 Default macOS Profile 中列出每個視窗的 App 圖示和標題，包含最小化視窗；Alt+Shift+Tab 反向，放開 Alt 才啟用。啟用後以 Accessibility 視窗焦點通知維護 MRU，首次啟用時未觀察到的舊歷史以視窗目前的前後順序補足。選配縮圖在開啟且取得螢幕錄製權限後，才使用 ScreenCaptureKit 按需擷取最多 12 個視窗。無權限時仍可用圖示和標題切換。
 - Finder Mode 的 Ctrl+X／Ctrl+V 透過 Finder 原生複製與 `⌥⌘V` 移動；Enter、F2、Delete、Backspace、Ctrl+Shift+N、Ctrl+L 分別開啟、改名、移到垃圾桶、上一層、新增資料夾、前往資料夾。Shift+Delete 必須另行啟用，每次顯示確認，再交給 Finder 處理。文字欄位及未知焦點採保守處理。
@@ -52,6 +52,23 @@ App 改用黑色鍵盤／雙向箭頭圖示，Menu Bar 不再顯示文字；暫�
 「診斷 → 版本與編譯資訊」及 Menu Bar 顯示版本與 Build；診斷頁另顯示 UTC 編譯時間、完整 Git commit、原始碼狀態與 Bundle ID，可複製以便回報。`WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge --version` 也輸出相同資訊。這些欄位在建置時寫入已簽章 App 的 Info.plist；發行包應由乾淨的 Git commit 建置，確認狀態為 `clean` 且 commit 對應發行 tag。
 
 開啟 DMG，將 App 拖進 Applications，再開啟並授予輔助使用，即可測一般快捷鍵；**一般 EventTap 使用不需 Install.command 或 Driver**。無付費簽章／公證的下載版可能須在系統設定「仍要打開」；更新也可能要重新授權，不能宣稱完全免系統核准。Codex 預設針對不用內建終端機的用法；若要使用終端機，改回 IDE 或移除該規則。
+
+## MacBook Fn／Ctrl 模式與通用控制
+
+一般設定新增獨立、預設關閉的「MacBook 內建鍵盤：交換 Fn／地球鍵與左 Ctrl」。開啟後最左側 Fn → 左 Ctrl、原左 Ctrl → Fn；右 Ctrl、Command／Win、Option／Alt 保持原位。用 Apple [TN2450 的 IOKit API](https://developer.apple.com/library/archive/technotes/tn2450/_index.html) 對**本機實體 Apple 內建鍵盤**設定暫存 `UserKeyMapping`，不需要 Automator、額外 Driver、root 或全域 Event Tap 交換。外接 USB／Bluetooth、Magic Keyboard、Karabiner 及通用控制虛擬鍵盤均排除；Mac mini 上開啟只顯示等待，沒有鍵盤被修改。
+
+| 你正在使用的鍵盤 | Fn／Ctrl 模式作用位置 | 接收另一臺 Mac 時 |
+| --- | --- | --- |
+| MacBook 實體內建鍵盤 | 在該 MacBook 開啟 | 接收端不再交換虛擬鍵盤 |
+| Mac mini 或 MacBook 的外接鍵盤 | 保留外接鍵盤原配置 | MacBook 不會因為收到外接輸入而交換 Fn／Ctrl |
+
+這是鍵盤實體位置的選擇，獨立於 Windows 快捷鍵開關與 App Profile：例如 Terminal 仍收到 Ctrl，Remote／VM／Game 不新增本機快捷鍵翻譯。通用控制允許任一臺的鍵盤操控其他裝置，但 Apple 公開說明沒有保證自訂映射的傳送階段；**來源 MacBook → Mac mini 與來源外接鍵盤 → MacBook 必須各自實測**，不能把虛擬服務排除測試當成跨機驗收。兩臺可以安裝相同版本，通常只需在 MacBook 開啟此選項。
+
+套用前保存本程式擁有的映射，套用後讀回驗證，成功才顯示已交換。遇到系統 Fn／Ctrl 映射或其他工具的衝突，保留外部設定並顯示錯誤；其他按鍵的既有映射不會清除。關閉或正常退出時只還原仍屬於本程式的 entries。強制終止後暫存映射可能仍存在，重新開啟可依同一次開機的還原紀錄恢復；重新開機會清除暫存映射，登入啟動後依保存的開關重新套用。若系統拒絕還原，會保留紀錄並顯示待處理狀態，不宣稱已恢復。
+
+只在開關、開啟一般設定／按重新檢查、鍵盤服務通知、睡眠／session 恢復時查驗，沒有新增輪詢或按鍵監聽。狀態變更寫入 `~/Library/Logs/WindowsMacBridge/KeyboardMapping.log`，上限 256 KiB、保留一份 `.1`，不記錄按鍵或輸入內容。HID 進階後端本來就有 Fn／Ctrl 交換，選用 HID 時暫停原生交換以免疊加；原生還原尚未驗證成功時阻止 HID 啟動。請先放開所有按鍵再切換。設定 schema 1／2 會遷移到 3，保留原功能開關與 App 規則；建議預設不會重設 Fn／Ctrl 的選擇。
+
+開啟此功能會確保 App 登入註冊；若 macOS 要求核准，授權清單會顯示真實登入狀態。截圖與 Fn／Ctrl 都關閉時才移除由這些功能新增的登入註冊，原先手動啟用的項目保留。
 
 ## 進階 HID 整合測試
 

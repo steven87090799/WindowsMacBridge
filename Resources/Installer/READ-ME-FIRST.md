@@ -11,7 +11,7 @@ macOS 14+、Apple Silicon。唯音／ABC 守護與 Windows 快捷鍵在同一個
 3. 新安裝預設啟用 EventTap／所有鍵盤，Codex 的聊天與文字輸入使用 Default macOS。舊設定會保留，要套用這組設定請按「套用建議預設」。
 4. 先在測試文件確認 Ctrl+C／X／V，再測 Codex。新版預設也開啟底層 ABC／U.S. 的中文／唯音快捷鍵；Terminal／Remote／VM／Game 保持穿透，Finder 檔案加強仍需另行開啟。
 
-普通快捷鍵不需執行 Install.command，不需 root helper 或 Driver。每個設定已有說明，完整操作及預設值見包內 `UserGuide.md`，設定頁也可開啟。只有需要 Fn／Control、Option／Command 與亮度鍵映射時，才進行下方進階安裝。
+普通快捷鍵及本機 MacBook 的原生 Fn／Ctrl 交換不需執行 Install.command，不需 root helper 或 Driver。每個設定已有說明，完整操作及預設值見包內 `UserGuide.md`，設定頁也可開啟。需要進階 HID 的整組 Option／Command 與亮度鍵映射時，才進行下方安裝；選 HID 時原生 Fn／Ctrl 交換會先還原。
 
 ## 進階 HID 安裝（選用）
 

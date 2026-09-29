@@ -28,6 +28,7 @@ import FinderSync
     @Published var targetApp: ApplicationContext?
     @Published var hidStatus = HIDStatus()
     @Published var screenshotStatus = ScreenshotStatus()
+    @Published var macBookKeyboardStatus = MacBookKeyboardMappingStatus()
     @Published private(set) var permissionChecklist = PermissionChecklistState()
     var permissions: PermissionSnapshot { permissionChecklist.verified }
     @Published private(set) var permissionsCheckedAt: Date?
@@ -37,8 +38,10 @@ import FinderSync
     private let hid = HIDBackendClient()
     private let store = SettingsStore()
     private let screenshot = ScreenshotManager()
+    private let macBookKeyboard = MacBookKeyboardMapper()
     private let finderPublisher = FinderModePublisher()
     private let screenshotManagedLoginKey = "screenshot.loginManaged.v1"
+    private let macBookManagedLoginKey = "macbook.loginManaged.v1"
     private var registry: ApplicationRegistry?
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
@@ -56,6 +59,7 @@ import FinderSync
         if !settings.enabled { return "已停用" }
         if paused || status.emergencyPaused { return "已暫停" }
         if settings.inputBackend == .deviceHID {
+            if macBookKeyboardStatus.restorePending { return "等待 Fn／Ctrl 原生交換還原；HID 尚未啟動" }
             if settings.keyboardScope != .builtInAndApple834 { return "HID 後端僅支援指定鍵盤範圍" }
             if hidStatus.manualPassThrough { return "右 Option+P 穿透：ON" }
             if hidStatus.capturedDevices == 0 { return hidStatus.state }
@@ -84,6 +88,14 @@ import FinderSync
         catch { configurationError = "App 保護清單無法載入；翻譯已停用。" }
     }
     func start() {
+        macBookKeyboard.onChange = { [weak self] status in
+            guard let self else { return }
+            let wasPending = macBookKeyboardStatus.restorePending
+            macBookKeyboardStatus = status
+            if wasPending != status.restorePending { publish() }
+        }
+        macBookKeyboard.onDiagnostic = { KeyboardMappingDiagnostics.append($0) }
+        configureMacBookKeyboard()
         finderPublisher.start(enabled: settings.finderEnabled)
         inputSources.onChange = { [weak self] status in
             guard let self else { return }
@@ -113,6 +125,7 @@ import FinderSync
         screenshot.onPeriodicCheck = { [weak self] in self?.verifyScreenshotConfiguration() }
         screenshot.start(enabled: settings.screenshotAutoCopy)
         if settings.screenshotAutoCopy { ensureScreenshotLogin() }
+        if settings.macBookFnControlSwap { ensureMacBookLogin() }
         refreshPermissions()
         engine.start()
         hid.start()
@@ -134,6 +147,9 @@ import FinderSync
         observers.removeAll()
         inputSources.stop()
         screenshot.stop()
+        // Restoring a pending lease during quit must not re-enable the HID backend.
+        macBookKeyboard.onChange = nil
+        macBookKeyboard.stop()
         engine.stop()
         hid.stop()
     }
@@ -232,7 +248,24 @@ import FinderSync
     private func setSuspended(_ reason: SuspensionReason, _ suspended: Bool) {
         if suspended { suspensionReasons.insert(reason) } else { suspensionReasons.remove(reason) }
         if !suspended && settings.screenshotAutoCopy { screenshot.verifyAndRepair(reason: "Session 恢復") }
+        configureMacBookKeyboard()
         publish()
+    }
+    private func configureMacBookKeyboard() {
+        macBookKeyboard.configure(enabled: settings.macBookFnControlSwap,
+            eventTapBackend: settings.inputBackend == .eventTap, sessionActive: sessionActive)
+        macBookKeyboardStatus = macBookKeyboard.status
+    }
+    func setMacBookFnControlSwap(_ value: Bool) {
+        store.update { $0.macBookFnControlSwap = value }; settings = store.settings
+        configurationError = store.errorMessage
+        guard store.errorMessage == nil else { return }
+        configureMacBookKeyboard()
+        if value { ensureMacBookLogin() } else { releaseFeatureLoginIfUnused() }
+    }
+    func refreshMacBookKeyboard() {
+        macBookKeyboard.refresh()
+        macBookKeyboardStatus = macBookKeyboard.status
     }
     func setScreenshotAutoCopy(_ value: Bool) {
         store.update { $0.screenshotAutoCopy = value }
@@ -242,11 +275,23 @@ import FinderSync
         screenshot.setEnabled(value)
         if value {
             ensureScreenshotLogin()
-        } else if UserDefaults.standard.bool(forKey: screenshotManagedLoginKey) {
-            inputSources.setLoginEnabled(false)
-            if !inputSources.loginIsRegistered {
-                UserDefaults.standard.removeObject(forKey: screenshotManagedLoginKey)
-            }
+        } else { releaseFeatureLoginIfUnused() }
+    }
+    private func ensureMacBookLogin() {
+        let wasRegistered = inputSources.loginIsRegistered
+        if inputSources.ensureLoginEnabled(), !wasRegistered {
+            UserDefaults.standard.set(true, forKey: macBookManagedLoginKey)
+            KeyboardMappingDiagnostics.append("Fn／Ctrl 模式已註冊 App 登入啟動")
+        }
+    }
+    private func releaseFeatureLoginIfUnused() {
+        guard !settings.screenshotAutoCopy && !settings.macBookFnControlSwap,
+              UserDefaults.standard.bool(forKey: screenshotManagedLoginKey) ||
+                UserDefaults.standard.bool(forKey: macBookManagedLoginKey) else { return }
+        inputSources.setLoginEnabled(false)
+        if !inputSources.loginIsRegistered {
+            UserDefaults.standard.removeObject(forKey: screenshotManagedLoginKey)
+            UserDefaults.standard.removeObject(forKey: macBookManagedLoginKey)
         }
     }
     private func ensureScreenshotLogin() {
@@ -299,7 +344,7 @@ import FinderSync
         config.windowThumbnailsEnabled = settings.windowThumbnailsEnabled
         config.altF4Enabled = settings.altF4Enabled
         config.altF4QuitLastWindow = settings.altF4QuitLastWindow
-        hid.update(config, active: settings.inputBackend == .deviceHID)
+        hid.update(config, active: settings.inputBackend == .deviceHID && !macBookKeyboardStatus.restorePending)
         config.enabled = config.enabled && settings.inputBackend == .eventTap
         engine.update(config)
         inputSources.updateProtection(sourceSuspension(for: context))
@@ -314,6 +359,7 @@ import FinderSync
         settings = store.settings; configurationError = store.errorMessage
         if let error = store.errorMessage { presetNotice = error; publish(); return }
         syncFinderExtensionPreference()
+        configureMacBookKeyboard()
         refreshApplication()
         resume()
         presetNotice = "已套用建議預設並恢復引擎。"
@@ -327,6 +373,8 @@ import FinderSync
             $0.keyboardScope = value == .deviceHID ? .builtInAndApple834 : .allKeyboards
         }
         settings = store.settings; configurationError = store.errorMessage
+        // Restore native layout before starting HID, which already swaps these physical keys.
+        configureMacBookKeyboard()
         restartToken &+= 1; publish()
     }
     func openHelperLocation() {
