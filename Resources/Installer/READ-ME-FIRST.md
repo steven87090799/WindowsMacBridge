@@ -26,7 +26,7 @@ macOS 14+、Apple Silicon。唯音／ABC 守護與 Windows 快捷鍵在同一個
 ## 本版行為
 
 - 僅內建或 Apple VID 1452 / PID 834 的支援鍵盤服務；排除 virtual／mouse／multitouch、非布林輸入或未知 descriptor，最多 16 個服務。並非所有 HID 硬體皆已確認相容。
-- 本機 macOS 模式：Fn ↔ 左 Control、左右 Option ↔ Command；29 組一般規則、19 組瀏覽器規則、Finder／系統動作、亮度增加 consumer 鍵→Enter。Alt+Tab 的 Command 持有會保留至實體 Option 放開。
+- 本機 macOS 模式：Fn ↔ 左 Control 僅用於已啟用開關的內建鍵盤；Win=Command 時交換接管裝置的 Option／Command，Win=Option 時保留原位。29 組一般規則、19 組瀏覽器規則及 Finder／系統動作依對應設定執行，亮度增加 consumer 鍵→Enter 保留為進階規則。兩種 Win 配置的實體 Alt+Tab 都交由 macOS 原生 `⌘Tab`，Command 持有至實體 Alt 放開。HID 模式暫停截圖自動複製，以免未接管鍵盤的 Alt 誤觸。
 - Terminal／IDE／Remote／VM／Game／Disabled：整個 HID 按鍵維持原樣。這刻意比原始 Karabiner 的 Terminal 僅排除部分 Ctrl 規則更保守，保護 Unix／遠端語意。本機／Terminal 保留右 Option+P 穿透與 Ctrl+Option+Command+P 緊急暫停。Remote／VM／Game／Disabled 直接釋放實體鍵盤，這些情境請用 Menu Bar 暫停；未在其原生鍵流攔截保留熱鍵。
 - 本機切入遠端若正按住按鍵，先釋放舊虛擬輸出並交回實體鍵盤。返回本機時等所有實體鍵放開才再次接管；不把舊的 Command 持有搬進遠端。前景通知與鍵盤仍非原子同步。
 - 手動穿透涵蓋 Fn、consumer 與所有本機動作。Menu Bar 暫停／結束會釋放擷取。

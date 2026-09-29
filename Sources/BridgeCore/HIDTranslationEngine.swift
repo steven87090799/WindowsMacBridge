@@ -47,11 +47,16 @@ public struct HIDTranslationEngine: Sendable {
         var suppressed = false
     }
     private var devices = [UInt64?](repeating: nil, count: 16)
+    private var builtIn = [Bool](repeating: false, count: 16)
     private var physical = [UInt16](repeating: 0, count: 16)
     private var consumed = [UInt16](repeating: 0, count: 16)
     private var presses = [Press?](repeating: nil, count: 256)
     private var context = ApplicationContext()
     private var layoutSupported = false, finderEnabled = false
+    private var finderPermanentDeleteEnabled = false, textNavigationEnabled = true, altF4Enabled = false
+    private var windowsKeyModifier: WindowsKeyModifier = .option
+    private var macBookFnControlSwap = false
+    private var winRunEnabled = false, winSettingsEnabled = false, winTaskViewEnabled = false
     private var waitingForNeutral = false
     public private(set) var manualPassThrough = false
     public private(set) var emergencyPaused = false
@@ -59,21 +64,35 @@ public struct HIDTranslationEngine: Sendable {
     public private(set) var processed: UInt64 = 0, translated: UInt64 = 0
     public private(set) var lastRuleID: String?
     public init() { _ = RuleEngine.windows; _ = RuleEngine.finder; _ = RuleEngine.browser; _ = RuleEngine.system; _ = HIDKeyMap.usage }
-    public mutating func register(_ id: UInt64) -> Bool {
-        if devices.contains(id) { return true }
+    public mutating func register(_ id: UInt64, builtIn isBuiltIn: Bool = false) -> Bool {
+        if let i = devices.firstIndex(of: id) { return builtIn[i] == isBuiltIn }
         guard let i = devices.firstIndex(of: nil) else { return false }
-        devices[i] = id; return true
+        devices[i] = id; builtIn[i] = isBuiltIn; return true
     }
     public mutating func disconnect(_ id: UInt64) {
         guard let i = devices.firstIndex(of: id) else { return }
-        devices[i] = nil; physical[i] = 0; consumed[i] = 0
+        devices[i] = nil; builtIn[i] = false; physical[i] = 0; consumed[i] = 0
         for j in presses.indices where presses[j]?.device == id { presses[j] = nil }
         suppressShortcutsMissingModifiers()
         reconcile()
     }
-    public mutating func configure(context: ApplicationContext, layoutSupported: Bool, finderEnabled: Bool) {
-        if self.context != context || self.layoutSupported != layoutSupported || self.finderEnabled != finderEnabled { invalidate() }
+    public mutating func configure(context: ApplicationContext, layoutSupported: Bool, finderEnabled: Bool,
+                                   finderPermanentDeleteEnabled: Bool = false, textNavigationEnabled: Bool = true,
+                                   altF4Enabled: Bool = false, windowsKeyModifier: WindowsKeyModifier = .option,
+                                   macBookFnControlSwap: Bool = false, winRunEnabled: Bool = false,
+                                   winSettingsEnabled: Bool = false, winTaskViewEnabled: Bool = false) {
+        if self.context != context || self.layoutSupported != layoutSupported || self.finderEnabled != finderEnabled ||
+            self.finderPermanentDeleteEnabled != finderPermanentDeleteEnabled ||
+            self.textNavigationEnabled != textNavigationEnabled || self.altF4Enabled != altF4Enabled ||
+            self.windowsKeyModifier != windowsKeyModifier || self.macBookFnControlSwap != macBookFnControlSwap ||
+            self.winRunEnabled != winRunEnabled || self.winSettingsEnabled != winSettingsEnabled ||
+            self.winTaskViewEnabled != winTaskViewEnabled { invalidate() }
         self.context = context; self.layoutSupported = layoutSupported; self.finderEnabled = finderEnabled
+        self.finderPermanentDeleteEnabled = finderPermanentDeleteEnabled
+        self.textNavigationEnabled = textNavigationEnabled; self.altF4Enabled = altF4Enabled
+        self.windowsKeyModifier = windowsKeyModifier; self.macBookFnControlSwap = macBookFnControlSwap
+        self.winRunEnabled = winRunEnabled; self.winSettingsEnabled = winSettingsEnabled
+        self.winTaskViewEnabled = winTaskViewEnabled
     }
     public mutating func restart() { manualPassThrough = false; emergencyPaused = false; faulted = false; invalidate() }
     public mutating func invalidate() {
@@ -95,7 +114,7 @@ public struct HIDTranslationEngine: Sendable {
     }
     private var aggregate: UInt16 { physical.reduce(0, |) }
     private mutating func suppressShortcutsMissingModifiers() {
-        let held = Self.flags(aggregate)
+        let held = matchingFlags
         for i in presses.indices {
             if let press = presses[i], !press.trigger.isEmpty,
                !held.isSuperset(of: press.trigger) {
@@ -104,6 +123,37 @@ public struct HIDTranslationEngine: Sendable {
         }
     }
     private var local: Bool { context.mode == .macOS && layoutSupported && !manualPassThrough && !emergencyPaused }
+    private func inputModifier(_ modifier: HIDModifier, slot: Int) -> HIDModifier {
+        guard builtIn[slot] && macBookFnControlSwap else { return modifier }
+        switch modifier {
+        case .fn: return .leftControl
+        case .leftControl: return .fn
+        default: return modifier
+        }
+    }
+    private func outputModifier(_ modifier: HIDModifier, slot: Int) -> HIDModifier {
+        let value = inputModifier(modifier, slot: slot)
+        guard windowsKeyModifier == .command else { return value }
+        switch value {
+        case .leftOption: return .leftCommand
+        case .rightOption: return .rightCommand
+        case .leftCommand: return .leftOption
+        case .rightCommand: return .rightOption
+        default: return value
+        }
+    }
+    /// Rules see the physical Win/Alt key, but the built-in Fn/Ctrl exchange
+    /// takes effect before Ctrl shortcut matching.
+    private var matchingFlags: Modifiers {
+        if !macBookFnControlSwap || !builtIn.contains(true) { return Self.flags(aggregate) }
+        var result: Modifiers = []
+        for slot in physical.indices {
+            for modifier in HIDModifier.allCases where physical[slot] & modifier.bit != 0 {
+                result.formUnion(Self.flags(inputModifier(modifier, slot: slot).bit))
+            }
+        }
+        return result
+    }
     private static func flags(_ bits: UInt16) -> Modifiers {
         var result: Modifiers = []
         for m in HIDModifier.allCases where bits & m.bit != 0 {
@@ -116,6 +166,59 @@ public struct HIDTranslationEngine: Sendable {
             }
         }
         return result
+    }
+    private func match(key: UInt16, flags: Modifiers) -> ShortcutRule? {
+        let system = windowsKeyModifier == .option ? RuleEngine.system : RuleEngine.systemCommand
+        if let rule = system.match(keyCode: key, modifiers: flags) {
+            if flags != windowsKeyModifier.flag { return rule }
+            let left = windowsKeyModifier == .option ? HIDModifier.leftOption.bit : HIDModifier.leftCommand.bit
+            let right = windowsKeyModifier == .option ? HIDModifier.rightOption.bit : HIDModifier.rightCommand.bit
+            if aggregate & left != 0 && aggregate & right == 0 { return rule }
+        }
+        let extras = windowsKeyModifier == .option ? RuleEngine.systemExtras : RuleEngine.systemExtrasCommand
+        if flags == windowsKeyModifier.flag {
+            let left = windowsKeyModifier == .option ? HIDModifier.leftOption.bit : HIDModifier.leftCommand.bit
+            let right = windowsKeyModifier == .option ? HIDModifier.rightOption.bit : HIDModifier.rightCommand.bit
+            if aggregate & left != 0 && aggregate & right == 0,
+               let rule = extras.match(keyCode: key, modifiers: flags) {
+                switch rule.id {
+                case "windows.winR" where winRunEnabled: return rule
+                case "windows.winI" where winSettingsEnabled: return rule
+                case "windows.winTab" where winTaskViewEnabled: return rule
+                default: break
+                }
+            }
+        }
+        if altF4Enabled && key == 118 && flags == windowsKeyModifier.altFlag {
+            return windowsKeyModifier == .option ? WindowsCompatibilityRules.altF4Command : WindowsCompatibilityRules.altF4
+        }
+        if context.bundleID == "com.apple.finder" {
+            if finderEnabled {
+                let finder = windowsKeyModifier == .option ? RuleEngine.finderCommandAlt : RuleEngine.finder
+                if let rule = finder.match(keyCode: key, modifiers: flags) { return rule }
+                if let rule = RuleEngine.finderExtras.match(keyCode: key, modifiers: flags) {
+                    return rule.action == .finder(.permanentDelete) && !finderPermanentDeleteEnabled ? nil : rule
+                }
+                if textNavigationEnabled {
+                    if let rule = RuleEngine.textNavigation.match(keyCode: key, modifiers: flags) { return rule }
+                    if let rule = RuleEngine.windows.match(keyCode: key, modifiers: flags), Self.isTextNavigation(rule) { return rule }
+                }
+                return nil
+            }
+            if key == 7 { return nil }
+        }
+        if context.isBrowser {
+            let browser = windowsKeyModifier == .option ? RuleEngine.browserCommandAlt : RuleEngine.browser
+            if let rule = browser.match(keyCode: key, modifiers: flags) { return rule }
+        }
+        if textNavigationEnabled,
+           let rule = RuleEngine.textNavigation.match(keyCode: key, modifiers: flags) { return rule }
+        let rule = RuleEngine.windows.match(keyCode: key, modifiers: flags)
+        if let rule, !textNavigationEnabled && Self.isTextNavigation(rule) { return nil }
+        return rule
+    }
+    private static func isTextNavigation(_ rule: ShortcutRule) -> Bool {
+        (32...41).contains(Int(rule.id.split(separator: ".").last ?? "") ?? -1)
     }
     /// Return an allow-listed non-keyboard action once per physical down.
     public mutating func observe(device: UInt64, page: UInt32, usage: UInt16, down: Bool) -> ShortcutAction? {
@@ -138,7 +241,7 @@ public struct HIDTranslationEngine: Sendable {
         guard let free = presses.firstIndex(of: nil) else { faulted = true; invalidate(); return nil }
         var press = Press(device: device, page: page, usage: usage, outputPage: page, outputUsage: usage,
                           suppressed: waitingForNeutral || emergencyPaused)
-        let flags = Self.flags(aggregate)
+        let flags = matchingFlags
         if page == 7 && usage == 0x13 && !waitingForNeutral {
             if flags == [.control,.option,.command] {
                 presses[free] = press; emergencyPaused = true; invalidate(); return nil
@@ -149,13 +252,7 @@ public struct HIDTranslationEngine: Sendable {
         }
         var rule: ShortcutRule?
         if local && !waitingForNeutral, page == 7, Int(usage) < HIDKeyMap.carbon.count, let key = HIDKeyMap.carbon[Int(usage)] {
-            rule = RuleEngine.system.match(keyCode: key, modifiers: flags)
-            if flags == .option && (aggregate & HIDModifier.leftOption.bit == 0 || aggregate & HIDModifier.rightOption.bit != 0) { rule = nil }
-            if rule == nil && context.bundleID == "com.apple.finder" && finderEnabled { rule = RuleEngine.finder.match(keyCode: key, modifiers: flags) }
-            if rule == nil && context.isBrowser { rule = RuleEngine.browser.match(keyCode: key, modifiers: flags) }
-            if rule == nil && !(context.bundleID == "com.apple.finder" && key == 7 && !finderEnabled) {
-                rule = RuleEngine.windows.match(keyCode: key, modifiers: flags)
-            }
+            rule = match(key: key, flags: flags)
         }
         // Rule #77: consumer brightness increment -> Enter, only while local mapping is enabled.
         if local && !waitingForNeutral && page == 0x0c && usage == 0x6f {
@@ -167,7 +264,8 @@ public struct HIDTranslationEngine: Sendable {
             press.trigger = rule.input.modifiers
             press.modifiers = rule.output.modifiers
             for i in physical.indices {
-                for m in HIDModifier.allCases where physical[i] & m.bit != 0 && !Self.flags(m.bit).intersection(rule.input.modifiers).isEmpty {
+                for m in HIDModifier.allCases where physical[i] & m.bit != 0 &&
+                    !Self.flags(inputModifier(m, slot: i).bit).intersection(rule.input.modifiers).isEmpty {
                     consumed[i] |= m.bit
                 }
             }
@@ -189,13 +287,13 @@ public struct HIDTranslationEngine: Sendable {
         guard !waitingForNeutral && !emergencyPaused && !faulted else { return !faulted }
         for i in physical.indices {
             for m in HIDModifier.allCases where physical[i] & ~consumed[i] & m.bit != 0 {
-                let mapped = local ? m.windowsMapping : m
+                let mapped = local ? outputModifier(m, slot: i) : m
                 if mapped == .fn { output.fn = true; continue }
                 let usb: [UInt8] = [1,16,8,128,4,64,2,32,0]
                 output.modifiers |= usb[mapped.rawValue]
             }
         }
-        let live = Self.flags(aggregate)
+        let live = matchingFlags
         for press in presses {
             guard let press, !press.suppressed else { continue }
             guard live.isSuperset(of: press.trigger) else { continue }

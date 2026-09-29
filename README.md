@@ -1,16 +1,16 @@
 # WindowsMacBridge
 
-Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.12 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
+Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.13 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
 
 主專案是這個 repository；`vchewing-input-helper` 已移入 `InputSourceCore` 與 `InputSourceSupport`，不需同時執行兩個 App。[整合與遷移](Docs/ProjectIntegration.md)。
 
-## 0.5.12 快速開始
+## 0.5.13 快速開始
 
 新安裝預設啟用 Windows 快捷鍵、EventTap／所有鍵盤、底層 ABC／U.S. 的中文／唯音快捷鍵、截圖自動複製，以及 Codex 的聊天／文字 Profile。MacBook 新安裝會自動啟用只作用於內建鍵盤的 Fn／左 Ctrl 交換；外接和通用控制虛擬鍵盤保留原鍵位。Terminal、其他 IDE、Remote、VM、Game 保留原按鍵；Finder 加強、唯音守護及切換快捷鍵預設關閉。截圖功能會註冊登入啟動，仍可能需要 macOS 核准。更新保留已存設定，可從一般頁按「套用建議預設」。
 
 ### 授權清單
 
-開啟設定時先顯示獨立「授權」頁，以簡潔清單列出輔助使用、事件輸出、App 輸入監控、螢幕錄製、Finder 擴充功能及登入啟動。**綠色勾勾表示已取得／啟用，紅色叉叉表示尚未取得／啟用**，每個缺少項目都有可單獨點擊、Tab 選取及 VoiceOver 操作的「前往開啟」按鈕，直接進入對應 macOS 設定。螢幕錄製明確標為視窗縮圖的選用權限；使用 HID 時另外顯示 helper 的輸入監控。
+開啟設定時先顯示獨立「授權」頁，以簡潔清單列出輔助使用、事件輸出、App 輸入監控、螢幕錄製、Finder 擴充功能及登入啟動。**綠色勾勾表示已取得／啟用，紅色叉叉表示尚未取得／啟用**，每個缺少項目都有可單獨點擊、Tab 選取及 VoiceOver 操作的「前往開啟」按鈕，直接進入對應 macOS 設定。螢幕錄製保留作截圖相關權限診斷；使用 HID 時另外顯示 helper 的輸入監控。
 
 狀態依目前版本的原生 API 檢查結果顯示，不把系統清單裡的舊開關當成已授權。App 啟動、打開設定、回到前景或按「重新檢查」時更新；鍵盤權限變更只觸發一次原生重新查驗，沒有新增輪詢計時器，也不在 SwiftUI 重繪時反覆查詢螢幕錄製權限。可用 `WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge --diagnose-permissions` 取得只讀狀態報告，不會提出授權要求或啟動截圖。命令列啟動可能沿用終端機的 TCC 身分，App 的實際授權請以執行中 App 的授權頁為準。唯音守護直接使用本版本設定；舊版助手的程序偵測、避讓、結束及偏好匯入已移除。
 
@@ -26,14 +26,14 @@ Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macO
 
 ### Windows 視窗、Finder 與文字操作
 
-一般設定提供獨立開關：逐視窗 Alt+Tab、視窗縮圖、Finder 檔案操作、Finder 永久刪除、Windows 文字游標、Alt+F4、以及 Alt+F4 最後視窗退出 App。既有文字游標翻譯預設保持開啟；新的 Alt+Tab、Finder、Alt+F4 與永久刪除預設關閉。設定 schema v3 會讀取 v1／v2 資料，保留原先的 App Profile、後端、Finder、截圖與輸入法選擇。
+一般設定提供獨立開關：Finder 檔案操作、Finder 永久刪除、Windows 文字游標、Alt+F4、以及 Alt+F4 最後視窗退出 App。既有文字游標翻譯預設保持開啟；Finder、Alt+F4 與永久刪除預設關閉。設定 schema v4 會讀取 v1／v2／v3 資料，保留 App Profile、後端、Finder、截圖與輸入法選擇；已移除的自製切換器設定在下次儲存時清除。
 
-- Alt+Tab 在 EventTap 的 Default macOS Profile 中列出每個視窗的 App 圖示和標題，包含最小化視窗；Alt+Shift+Tab 反向，放開 Alt 才啟用。啟用後以 Accessibility 視窗焦點通知維護 MRU，首次啟用時未觀察到的舊歷史以視窗目前的前後順序補足。選配縮圖在開啟且取得螢幕錄製權限後，才使用 ScreenCaptureKit 按需擷取最多 12 個視窗。無權限時仍可用圖示和標題切換。
+- Alt+Tab 不再由本 App 攔截。這臺 Mac 的實體 Alt 送出 Command 時，使用 macOS 原生 `⌘Tab` 逐 App 切換；macOS 的 `⌘\`` 可在同一 App 內逐視窗切換。原自製的逐視窗 MRU、縮圖、AX 視窗觀察器及相關選項均已移除。macOS 原生逐 App 切換不會獨立列出同一 App 的每個視窗或最小化視窗；若鍵盤的 Alt 送出 Option，請使用實際的 Command 鍵操作原生切換器。
 - Finder Mode 的 Ctrl+X／Ctrl+V 透過 Finder 原生複製與 `⌥⌘V` 移動；Enter、F2、Delete、Backspace、Ctrl+Shift+N、Ctrl+L 分別開啟、改名、移到垃圾桶、上一層、新增資料夾、前往資料夾。Shift+Delete 必須另行啟用，每次顯示確認，再交給 Finder 處理。文字欄位及未知焦點採保守處理。
 - Finder 右鍵路徑選單由內含的 Finder Sync 擴充功能提供，使用 Finder 的 selected/targeted URL。可複製目前資料夾或選取項目的 POSIX 路徑；「顯示目前資料夾路徑」子選單優先顯示所選項目的完整路徑，並提供「複製此路徑」。只有按下複製才寫入剪貼簿。首次安裝請到「系統設定 → 一般 → 登入項目與擴充功能 → Finder」啟用 WindowsMacBridge Finder；Finder Mode 關閉時選單不顯示。
 - Windows 文字游標提供 Ctrl+左右方向鍵按單字移動、Ctrl+Backspace／Delete 按單字刪除、Home／End 行首行尾、Ctrl+Home／End 文件首尾，並支援 Shift 選取組合。Alt+F4 發出 App 原生 `⌘W`；選配最後一個主要視窗時發出 `⌘Q`，保留 App 的未儲存內容確認。
 
-這些新動作只在本機 Default macOS Profile 啟用；Terminal、IDE、Remote、VM、Game 維持原樣通過。鍵盤 callback 只處理有界狀態並將 AX、Finder、AppKit 工作送到最多 16 筆的動作佇列。視窗 MRU 用通知更新，縮圖只在顯示切換器時擷取，沒有新增加的長期輪詢。HID 後端保留既有實體鍵位交換語意；新視窗切換器只適用 EventTap。授權頁顯示實際取得的權限，缺少時可直接開啟對應系統設定，仍須由使用者在 macOS 核准。
+這些新動作只在本機 Default macOS Profile 啟用；Terminal、IDE、Remote、VM、Game 維持原樣通過。鍵盤 callback 只處理有界狀態並將 AX、Finder、AppKit 工作送到最多 16 筆的動作佇列。移除自製切換器後不再為視窗焦點註冊 AX 觀察器或擷取縮圖。授權頁顯示實際取得的權限，缺少時可直接開啟對應系統設定，仍須由使用者在 macOS 核准。
 
 0.5.5 修正 Finder 選單的設定同步。macOS 15+ 會拒絕未經 provisioning 驗證的免費簽章擴充功能讀取 App Group；因此改用原生 DistributedNotificationCenter，僅傳送版本化的開／關字串，userInfo 為 nil，沒有檔案路徑或剪貼簿資料。App 啟動／開關改動與擴充功能的初始化／資料夾／選單事件才交換狀態，沒有背景輪詢；主設定照常持久保存，App 未執行時不顯示選單。擴充功能維持 App Sandbox。依據 [Apple 的 App Group 存取規則](https://developer.apple.com/documentation/xcode/accessing-app-group-containers) 與 [沙盒通知 API](https://developer.apple.com/documentation/foundation/distributednotificationcenter/post%28name%3Aobject%3Auserinfo%3A%29)。
 
@@ -41,11 +41,11 @@ Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macO
 
 0.5.10 增加生命週期保護：關閉／重開或退出後，上一輪框選及圖片轉換不能再寫入剪貼簿；已儲存的圖片保留。截圖保持單一工作，原生框選仍以 Esc 取消。圖片轉換在背景工作與局部 autorelease pool 執行，PNG 沿用已儲存的編碼，剪貼簿寫入才回到主執行緒，避免大圖轉換阻塞截圖 Event Tap。60 秒內第三次 Tap 停用會停止自動重試並提供可見錯誤，重新開啟開關可檢查恢復。
 
-「一般 → 截圖」的開關預設開啟；舊設定沒有此欄位時也視為開啟，使用者明確關閉的選擇會持久保存，套用建議預設也不會重設。開啟後，`Shift+Win+S` 進入 macOS 的互動框選（Esc 取消）；完成時圖片存到系統截圖指定的資料夾，並以 PNG／TIFF 圖片格式寫入剪貼簿，可立即按 `⌘V`。會盡量沿用 macOS 截圖的儲存位置與格式；不支援的格式採 PNG，指定資料夾不可寫時改存桌面。原本的 `⇧⌘4` 永遠交由 macOS 處理。關閉開關會移除專屬 Event Tap，不改系統快捷鍵設定，也不使用 Automator。
+「一般 → 截圖」的開關預設開啟；舊設定沒有此欄位時也視為開啟，使用者明確關閉的選擇會持久保存，套用建議預設也不會重設。開啟後，`Shift+Win+S` 進入 macOS 的互動框選（Esc 取消）；完成時圖片存到系統截圖指定的資料夾，並以單一 PNG 圖片格式寫入剪貼簿，可立即按 `⌘V`。PNG 原檔直接使用映射讀取，其他格式經 ImageIO 轉成 PNG，不再同時保存 TIFF 副本。會盡量沿用 macOS 截圖的儲存位置與格式；不支援的格式採 PNG，指定資料夾不可寫時改存桌面。原本的 `⇧⌘4` 永遠交由 macOS 處理。關閉開關會移除專屬 Event Tap，不改系統快捷鍵設定，也不使用 Automator。
 
 一般頁可選「這臺 Mac 收到的 Windows 鍵」：`Option (⌥)` 或 `Command (⌘)`。Mac mini 預設 Option，與原有 Win+E／Win+L 系統動作一致；MacBook 預設 Command。舊設定沒有這個欄位時依本機機型選擇，明確存過的選擇不被更新覆蓋。這只選出 Win／Alt 專用操作的輸入，不交換所有按鍵。EventTap 只看到 macOS 處理後的修飾鍵，無法從它推回鍵帽、來源裝置或通用控制的來源 Mac；同一臺 Mac 交替使用兩種映射的鍵盤時需手動切換，此限制不應以同時接受 Option 與 Command 來掩蓋，否則 Alt 也可能誤觸截圖。
 
-同一選擇也用於 EventTap 的 Win+E／Win+L，以及選配的 Win+R（macOS Spotlight）、Win+I（系統設定）、Win+Tab（Mission Control）；上述三項各有獨立、預設關閉的開關。Alt+Tab、Alt+F4 與瀏覽器 Alt+左／右方向鍵使用另一個修飾鍵，Ctrl 文字功能維持原來的 Ctrl。Mac mini 目前接到的 Win 若為 Option，就選 Option；MacBook 內建 Command 當 Win 則選 Command。這些對應只在本機 Default macOS Profile 生效，Terminal、IDE、Remote、VM、Game 原樣通過；進階 HID 後端尚未採用此選擇。Win+R／Tab 依賴 macOS 仍保留 ⌘Space／⌃↑ 系統快捷鍵。
+同一選擇也用於 EventTap 的 Win+E／Win+L，以及選配的 Win+R（macOS Spotlight）、Win+I（系統設定）、Win+Tab（Mission Control）；上述三項各有獨立、預設關閉的開關。Alt+F4 與瀏覽器 Alt+左／右方向鍵使用另一個修飾鍵，Ctrl 文字功能維持原來的 Ctrl。Mac mini 目前接到的 Win 若為 Option，就選 Option；MacBook 內建 Command 當 Win 則選 Command。這些對應只在本機 Default macOS Profile 生效，Terminal、IDE、Remote、VM、Game 原樣通過；進階 HID 後端尚未採用此選擇。Win+R／Tab 依賴 macOS 仍保留 ⌘Space／⌃↑ 系統快捷鍵。
 
 Windows 使用者常見的其他差異包括 Win+D 顯示桌面、Win+方向鍵排列視窗、Win+V 剪貼簿歷史、Print Screen，以及 Win+Space 輸入法切換。本版保留原生 macOS 功能與可選輸入法熱鍵，沒有用全域鍵位互換或剪貼簿讀取去模仿全部行為；先完成 Win 鍵位置和每項操作的實體測試，再逐項啟用。對照 [Microsoft 快捷鍵](https://support.microsoft.com/en-us/windows/keyboard-shortcuts-in-windows-dcc61a57-8ff0-cffe-9796-cb9706c75eec)、[Apple macOS 快捷鍵](https://support.apple.com/en-au/102650) 與 [Karabiner Windows 鍵位範例](https://github.com/venkatarangan/karabiner-mac-to-windows)。
 
@@ -85,9 +85,11 @@ App 改用黑色鍵盤／雙向箭頭圖示，Menu Bar 不再顯示文字；暫�
 App 已接上驗證身分的 XPC、指定 IOHIDDevice 擷取與官方 VirtualHID 輸出。下載包包含 App、helper、官方已公證的 Driver 套件、安裝／停止／移除工具。App/helper 仍是未公證的 ad-hoc 開發版，尚待實體鍵盤與遠端驗收，不能宣稱完整替代完成。
 
 - 29 組一般規則、19 組瀏覽器規則、Finder 剪下／移動與系統動作。
-- HID 後端只抓取支援的內建或 Apple 1452/834 服務；Fn／左 Control、左右 Option／Command 交換、完整持有的 Alt+Tab、consumer 亮度增加→Enter。
+- HID 後端只抓取支援的內建或 Apple 1452/834 服務。Fn／左 Control 只在啟用 MacBook 開關且服務標記為內建時交換；Win=Command 時才在接管的裝置上交換 Option／Command，Win=Option 時維持原鍵位。兩種配置都讓實體 Alt 對應 macOS 原生 `⌘Tab`；consumer 亮度增加→Enter 仍是進階測試規則。
 - Terminal／IDE／Remote／VM／Game／Disabled 的 HID 事件原樣通過；保留右 Option+P 與緊急暫停。不同 descriptor、Caps Lock／Globe／IME、Remote Client 仍需逐項驗收。
 - 與唯音／ABC 輸入法守護整合；CGEventTap 預覽後端可另選，兩個後端不會同時翻譯。
+
+HID 與 EventTap 現在共用 Win 鍵位置及 Finder／文字／Alt+F4／Win+R/I/Tab 開關；helper IPC 版本升至 2，舊 helper 會安全拒絕新設定，須用同版本安裝包更新。HID 接管時暫停 Shift+Win+S 截圖攔截：未接管外接鍵盤與虛擬鍵盤可能同時送出另一種修飾鍵，CGEventTap 無法辨識來源；切回 EventTap 即依原設定恢復。HID 在 Remote／VM／Game 會交還實體鍵盤，Fn／Ctrl 實體交換在這些 Profile 尚未實機驗證。
 
 安裝與實機檢查：[READ-ME-FIRST](Resources/Installer/READ-ME-FIRST.md)。接線、授權與驗收邊界：[HIDIntegration](Docs/HIDIntegration.md)。原始 78 規則與 upstream 研究：[KarabinerReplacement](Docs/KarabinerReplacement.md)。下載／建置不會啟動引擎；HID 需使用者另行安裝及選擇，不能宣稱完整取代 Karabiner。
 
@@ -126,7 +128,7 @@ Windows 翻譯需於 **系統設定 → 隱私權與安全性 → 輔助使用**
 - Finder 使用 AX role/parent metadata，未知焦點不猜測；Clipboard 只使用 changeCount/types，不讀內容、不讀檔案 URL、不保留歷史。Clipboard 與 Finder IPC 並非原子交易；不能宣稱 move 成功。
 - Finder action mailbox 最多 16 筆，請求有期限並綁定前景 PID 與 epoch。完整 down/up 發往目標 PID，private source/marker 防自身循環，沒有全域持續合成 modifier。
 - 非 ABC/U.S. ASCII layout 仍原樣通過。選用 IME 模式不表示已可靠知道是否正在組字。
-- Remote Profile 只決定不改鍵，不能保證 Client 將 Alt+Tab、Ctrl+Alt+Delete 或 Clipboard 傳至遠端。
+- Remote Session Profile 對 Windows、Mac 與未知目標一律保守原樣通過；前景 Client 的 bundle ID 無法可靠揭露遠端作業系統或連線狀態。不能保證 Client 將 Alt+Tab、Ctrl+Alt+Delete 或 Clipboard 傳至遠端。舊設定值 `remoteWindows` 保留相容。
 - NSWorkspace 與按鍵非原子同步、Finder 焦點競態、IME 組字、各 Client 與真實硬體都須實機驗收。
 
 ## 隱私與驗證

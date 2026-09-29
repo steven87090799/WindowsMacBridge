@@ -36,18 +36,38 @@ public enum InputBackend: String, Codable, CaseIterable, Sendable {
             configuration.mode != engine.context.mode || configuration.isBrowser != engine.context.isBrowser ||
             configuration.enabled != effectiveEnabled ||
             configuration.layoutSupported != engine.layoutSupported || configuration.finderEnabled != engine.finderEnabled ||
+            configuration.finderPermanentDeleteEnabled != engine.finderPermanentDeleteEnabled ||
+            configuration.textNavigationEnabled != engine.textNavigationEnabled ||
+            configuration.altF4Enabled != engine.altF4Enabled ||
+            configuration.altF4QuitLastWindow != engine.altF4QuitLastWindow ||
+            configuration.windowsKeyModifier != engine.windowsKeyModifier ||
+            configuration.macBookFnControlSwap != engine.macBookFnControlSwap ||
+            configuration.winRunEnabled != engine.winRunEnabled ||
+            configuration.winSettingsEnabled != engine.winSettingsEnabled ||
+            configuration.winTaskViewEnabled != engine.winTaskViewEnabled ||
             configuration.sessionActive != engine.sessionActive || configuration.restartToken != engine.restartToken || backendActive != active
         if changed { generation &+= 1; actions.cancelPending() }
         backendActive = active
         configuration.enabled = effectiveEnabled
         configuration.sessionActive = engine.sessionActive; configuration.layoutSupported = engine.layoutSupported
         configuration.finderEnabled = engine.finderEnabled; configuration.processID = engine.context.processID
+        configuration.finderPermanentDeleteEnabled = engine.finderPermanentDeleteEnabled
+        configuration.textNavigationEnabled = engine.textNavigationEnabled
+        configuration.altF4Enabled = engine.altF4Enabled
+        configuration.altF4QuitLastWindow = engine.altF4QuitLastWindow
+        configuration.windowsKeyModifier = engine.windowsKeyModifier
+        configuration.macBookFnControlSwap = engine.macBookFnControlSwap
+        configuration.winRunEnabled = engine.winRunEnabled
+        configuration.winSettingsEnabled = engine.winSettingsEnabled
+        configuration.winTaskViewEnabled = engine.winTaskViewEnabled
         configuration.diagnostics = engine.diagnostics
         configuration.bundleID = engine.context.bundleID; configuration.mode = engine.context.mode
         configuration.isBrowser = engine.context.isBrowser; configuration.generation = generation
         configuration.restartToken = engine.restartToken
         _ = actions.update(context: configuration.context, enabled: configuration.enabled && !status.manualPassThrough,
-                           finderEnabled: configuration.finderEnabled, epoch: generation)
+                           finderEnabled: configuration.finderEnabled,
+                           finderPermanentDeleteEnabled: configuration.finderPermanentDeleteEnabled,
+                           altF4QuitLastWindow: configuration.altF4QuitLastWindow, epoch: generation)
         if !active {
             if wasActive || timer != nil || connection != nil {
                 timer?.invalidate(); timer = nil
@@ -103,7 +123,9 @@ public enum InputBackend: String, Codable, CaseIterable, Sendable {
                 self.status = status
                 _ = self.actions.update(context: self.configuration.context,
                     enabled: self.configuration.enabled && !status.manualPassThrough && !status.emergencyPaused,
-                    finderEnabled: self.configuration.finderEnabled, epoch: self.generation)
+                    finderEnabled: self.configuration.finderEnabled,
+                    finderPermanentDeleteEnabled: self.configuration.finderPermanentDeleteEnabled,
+                    altF4QuitLastWindow: self.configuration.altF4QuitLastWindow, epoch: self.generation)
                 if sentGeneration != self.generation { self.tick() }
             }
         }

@@ -43,7 +43,7 @@ callback 不查 NSWorkspace、AX、JSON、檔案或網路；只讀已編譯 poli
 
 開啟觀察前要求 enabled、session、permission、controller lease、virtual keyboard ready。非獨占觀察確定 neutral，再 close/reopen seize，seize 後立刻再次 probe；gap 內有鍵按下時 partial cleanup 並要求重啟。加入／移除支援服務會停止當前擷取，等所有鍵 neutral 再接管。未知 descriptor 不擷取；避免把 mouse/multitouch 或非鍵的 axis 當成鍵盤。
 
-#4 對應 builtIn 或 keyboard VID1452/PID834；#5–10 對應 physical modifier 到指定左右輸出；#13–60 對應既有 compiled shortcut rules。規則根據 physical input 匹配，輸出不再匹配，避免複雜規則遞迴。譯出的 shortcut 消耗該次實體修飾鍵的 mapped output，直到實體釋放；其他裝置所有權獨立。Alt+Tab 保留 output Command，直到 physical Option up。Fn 使用 Apple top-case report，不偽裝成 CGEvent modifier。
+#4 對應 builtIn 或 keyboard VID1452/PID834；#5–10 依保存的 Win 鍵位置及 MacBook Fn／Ctrl 開關配置：只有標記為內建且開關啟用的服務交換 Fn／左 Ctrl，Win=Command 才交換接管裝置的 Option／Command。#13–60 及 Finder／文字／Alt+F4／Win+R/I/Tab 開關由版本 2 的 helper IPC 傳入。規則根據實體 Win／Alt 位置及已選的 Fn／Ctrl 模式匹配，輸出不再匹配，避免複雜規則遞迴。譯出的 shortcut 消耗該次實體修飾鍵的 mapped output，直到實體釋放；其他裝置所有權獨立。兩種 Win 配置下，實體 Alt+Tab 均輸出原生 Command+Tab 並持有 Command 至 Alt 放開。Fn 使用 Apple top-case report，不偽裝成 CGEvent modifier。
 
 #61–76 經固定 action IPC 到現有 Finder dispatcher；沒有 clipboard payload 進 helper。#77 只轉換 local consumer brightness increment 0x6f；其他支援 consumer/top-case/vendor/desktop usage 保持各自 report。#11 左 Option+L 是 HID keyboard chord，#12/#78 是固定系統 App 動作。
 

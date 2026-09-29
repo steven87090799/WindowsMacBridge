@@ -22,15 +22,20 @@ struct HIDProtocolTests {
         policy.processID = 42; policy.bundleID = "com.apple.Safari"; #expect(policy.valid)
         policy.bundleID = String(repeating: "a", count: 257); #expect(!policy.valid)
         policy.bundleID = "com.apple.Safari"; policy.version = 999; #expect(!policy.valid)
-        policy.version = 1; policy.processID = -1; #expect(!policy.valid)
+        policy.version = HIDService.protocolVersion; policy.processID = -1; #expect(!policy.valid)
+        policy.processID = 42; policy.version = 1; #expect(!policy.valid)
     }
     @Test func remotePolicyAndGenerationRoundTripWithoutKeyboardPayload() throws {
         var policy = HIDConfiguration()
         policy.enabled = true; policy.processID = 42; policy.bundleID = "remote.test"; policy.mode = .remoteWindows
         policy.generation = 7; policy.restartToken = 2
+        policy.windowsKeyModifier = .command; policy.macBookFnControlSwap = true
+        policy.altF4Enabled = true; policy.textNavigationEnabled = false
         let data = try JSONEncoder().encode(policy); #expect(data.count < 4096)
         let next = try JSONDecoder().decode(HIDConfiguration.self, from: data)
         #expect(next.valid); #expect(next.context.mode == .remoteWindows); #expect(next.generation == 7)
+        #expect(next.windowsKeyModifier == .command && next.macBookFnControlSwap)
+        #expect(next.altF4Enabled && !next.textNavigationEnabled)
     }
     @Test func onlyFixedActionsAreDecoded() {
         for value in FinderAction.allCases { #expect(HIDActionCodec.decode(HIDActionCodec.encode(.finder(value))) == .finder(value)) }

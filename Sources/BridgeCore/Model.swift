@@ -61,7 +61,7 @@ public enum ApplicationMode: String, CaseIterable, Codable, Sendable {
         switch self {
         case .macOS: "Default macOS"
         case .terminal: "Terminal — Pass-through"
-        case .remoteWindows: "Remote Windows — Pass-through"
+        case .remoteWindows: "Remote Session — Pass-through"
         case .virtualMachine: "Virtual Machine — Pass-through"
         case .game: "Game — Pass-through"
         case .ide: "IDE — Pass-through"
@@ -135,7 +135,7 @@ public enum FinderAction: String, Sendable, CaseIterable {
 }
 public enum SystemAction: String, Sendable, CaseIterable { case openFinder, openSettings, activityMonitor }
 public enum WindowAction: Equatable, Sendable {
-    case advance(reverse: Bool), commit, close
+    case close
 }
 public enum ShortcutAction: Equatable, Sendable {
     case finder(FinderAction)

@@ -6,7 +6,7 @@
 
 ## 準備（約兩分鐘）
 
-0.5.12 鍵位驗收：先看「這臺 Mac 收到的 Windows 鍵」。Mac mini 的現有 Win 若送出 Option，選 Option；MacBook 內建 Command 當 Win 時選 Command。分別實測 Shift+Win+S 會截圖、Shift+Alt+S 不會截圖、Win+E 開 Finder、Win+L 鎖定，以及啟用時 Alt+Tab／Alt+F4 使用實體 Alt。若用通用控制換了來源鍵盤，在接收端再核對一次。截圖框選期間關閉再重開開關，上一輪不應覆寫剪貼簿。這些需實體操作，純核心測試不替代它。
+0.5.13 鍵位驗收：先看「這臺 Mac 收到的 Windows 鍵」。Mac mini 的現有 Win 若送出 Option，選 Option；MacBook 內建 Command 當 Win 時選 Command。分別實測 Shift+Win+S 會截圖、Shift+Alt+S 不會截圖、Win+E 開 Finder、Win+L 鎖定，以及 Alt+Tab 是否直接顯示 macOS 原生 App 切換器、啟用時 Alt+F4 是否使用實體 Alt。若實體 Alt 送出 Option，原生切換器需改按 Command+Tab。若用通用控制換了來源鍵盤，在接收端再核對一次。截圖框選期間關閉再重開開關，上一輪不應覆寫剪貼簿。這些需實體操作，純核心測試不替代它。
 
 1. 從 Applications 啟動 App；診斷應顯示 EventTap Active、Secure Input OFF。
 2. 記下 App 版本、macOS 版本、鍵盤型號、輸入來源。先關掉 Karabiner 中重複的規則。
@@ -28,7 +28,7 @@
 | 左右 Ctrl／Shift | 分別測試；放開一邊但仍按著另一邊時狀態正確 |
 | Ctrl+Y 先放 Ctrl、Y 暫時不放 | 不應連續輸入 Z，也不應在重按 Ctrl 後復活連發；放開全部後新快捷鍵正常 |
 | Ctrl 按住切 App | 在新 App 先放開全部按鍵，再按新快捷鍵才開始翻譯；不重播前個 App 的動作 |
-| 本機視窗切換 | 預設 Alt+Tab 原樣通過；啟用逐視窗開關後，Alt+Tab／Alt+Shift+Tab 選擇不同視窗，放開 Alt 才切換；最小化及多螢幕也要測。HID 模式另測舊有持有式映射。 |
+| 本機視窗切換 | Tab 始終由 macOS 處理；按 `⌘Tab` 應顯示原生逐 App 切換器，`⌘\`` 切換同一 App 的視窗。若實體 Alt 送出 Command，再確認 Alt+Tab 顯示相同原生介面。HID 模式須另外驗證其修飾鍵映射。 |
 | 框選截圖 | 在一般設定確認截圖自動複製已開、Win 鍵位置選對，實際按 `Shift+Win+S`，框選 App 視窗中一小塊非敏感區域；確認圖片照常存檔，且直接按 `⌘V` 能貼上圖片。另按 `Shift+Alt+S` 和 `Ctrl+Shift+S`，確認都沒有進入截圖；再按 `⇧⌘4`，確認維持 macOS 原本行為。取消框選時剪貼簿不變。 |
 | Win+R／I／Tab | 各自開啟設定後，依序應顯示 Spotlight／系統設定／Mission Control；關閉開關則不攔截，Remote／VM／Terminal Profile 也應原樣通過。 |
 

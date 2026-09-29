@@ -33,7 +33,6 @@ import FinderSync
     var permissions: PermissionSnapshot { permissionChecklist.verified }
     @Published private(set) var permissionsCheckedAt: Date?
     var finderExtensionEnabled: Bool { permissions.finderExtension }
-    var screenRecordingGranted: Bool { permissions.screenRecording }
     private let engine = InputEngine()
     private let hid = HIDBackendClient()
     private let store = SettingsStore()
@@ -124,7 +123,7 @@ import FinderSync
         screenshot.onChange = { [weak self] status in self?.screenshotStatus = status }
         screenshot.onPeriodicCheck = { [weak self] in self?.verifyScreenshotConfiguration() }
         screenshot.setWindowsKeyModifier(settings.windowsKeyModifier)
-        screenshot.start(enabled: settings.screenshotAutoCopy)
+        screenshot.start(enabled: settings.screenshotAutoCopy && settings.inputBackend == .eventTap)
         if settings.screenshotAutoCopy { ensureScreenshotLogin() }
         if settings.macBookFnControlSwap { ensureMacBookLogin() }
         refreshPermissions()
@@ -181,7 +180,7 @@ import FinderSync
              previousListening != next.listenAccess) {
             refreshPermissions()
         }
-        if previousAccessibility != next.accessibility && settings.screenshotAutoCopy {
+        if previousAccessibility != next.accessibility && settings.screenshotAutoCopy && settings.inputBackend == .eventTap {
             screenshot.verifyAndRepair(reason: next.accessibility ? "輔助使用權限恢復" : "輔助使用權限失效")
         }
         if previousPassThrough != status.manualPassThrough {
@@ -251,7 +250,9 @@ import FinderSync
     }
     private func setSuspended(_ reason: SuspensionReason, _ suspended: Bool) {
         if suspended { suspensionReasons.insert(reason) } else { suspensionReasons.remove(reason) }
-        if !suspended && settings.screenshotAutoCopy { screenshot.verifyAndRepair(reason: "Session 恢復") }
+        if !suspended && settings.screenshotAutoCopy && settings.inputBackend == .eventTap {
+            screenshot.verifyAndRepair(reason: "Session 恢復")
+        }
         configureMacBookKeyboard()
         publish()
     }
@@ -266,6 +267,7 @@ import FinderSync
         guard store.errorMessage == nil else { return }
         configureMacBookKeyboard()
         if value { ensureMacBookLogin() } else { releaseFeatureLoginIfUnused() }
+        publish()
     }
     func refreshMacBookKeyboard() {
         macBookKeyboard.refresh()
@@ -276,7 +278,7 @@ import FinderSync
         settings = store.settings
         configurationError = store.errorMessage
         guard store.errorMessage == nil else { return }
-        screenshot.setEnabled(value)
+        screenshot.setEnabled(value && settings.inputBackend == .eventTap)
         if value {
             ensureScreenshotLogin()
         } else { releaseFeatureLoginIfUnused() }
@@ -329,7 +331,7 @@ import FinderSync
         }
     }
     private func verifyScreenshotConfiguration() {
-        guard settings.screenshotAutoCopy else { return }
+        guard settings.screenshotAutoCopy && settings.inputBackend == .eventTap else { return }
         let stored = SettingsStore().settings
         if !stored.screenshotAutoCopy {
             store.update { $0.screenshotAutoCopy = true }
@@ -364,11 +366,10 @@ import FinderSync
         config.finderEnabled = settings.finderEnabled
         config.finderPermanentDeleteEnabled = settings.finderPermanentDeleteEnabled
         config.textNavigationEnabled = settings.textNavigationEnabled
-        config.windowSwitcherEnabled = settings.windowSwitcherEnabled
-        config.windowThumbnailsEnabled = settings.windowThumbnailsEnabled
         config.altF4Enabled = settings.altF4Enabled
         config.altF4QuitLastWindow = settings.altF4QuitLastWindow
         config.windowsKeyModifier = settings.windowsKeyModifier
+        config.macBookFnControlSwap = settings.macBookFnControlSwap
         config.winRunEnabled = settings.winRunEnabled
         config.winSettingsEnabled = settings.winSettingsEnabled
         config.winTaskViewEnabled = settings.winTaskViewEnabled
@@ -403,6 +404,10 @@ import FinderSync
         settings = store.settings; configurationError = store.errorMessage
         // Restore native layout before starting HID, which already swaps these physical keys.
         configureMacBookKeyboard()
+        // HID virtual output and uncaptured external keyboards can have different
+        // Win modifiers. A session tap cannot identify which device sent S, so
+        // do not claim Shift+Alt+S from another keyboard as a screenshot.
+        screenshot.setEnabled(settings.screenshotAutoCopy && value == .eventTap)
         restartToken &+= 1; publish()
     }
     func openHelperLocation() {
@@ -435,17 +440,6 @@ import FinderSync
     func setTextNavigationEnabled(_ value: Bool) {
         store.update { $0.textNavigationEnabled = value }; settings = store.settings
         configurationError = store.errorMessage; publish()
-    }
-    func setWindowSwitcherEnabled(_ value: Bool) {
-        store.update { $0.windowSwitcherEnabled = value }; settings = store.settings
-        configurationError = store.errorMessage; publish()
-    }
-    func setWindowThumbnailsEnabled(_ value: Bool) {
-        store.update { $0.windowThumbnailsEnabled = value }; settings = store.settings
-        configurationError = store.errorMessage
-        if value && !CGPreflightScreenCaptureAccess() { _ = CGRequestScreenCaptureAccess() }
-        refreshPermissions()
-        publish()
     }
     func setAltF4Enabled(_ value: Bool) {
         store.update { $0.altF4Enabled = value }; settings = store.settings

@@ -11,9 +11,11 @@ import VirtualHID
 /// Everything mutable is owned by the main CFRunLoop, including device callbacks.
 final class DeviceCapture {
     private final class Device {
-        let hid: IOHIDDevice, id: UInt64, elements: [IOHIDElement]
+        let hid: IOHIDDevice, id: UInt64, builtIn: Bool, elements: [IOHIDElement]
         var seized = false, observed = false
-        init(_ hid: IOHIDDevice, id: UInt64, elements: [IOHIDElement]) { self.hid = hid; self.id = id; self.elements = elements }
+        init(_ hid: IOHIDDevice, id: UInt64, builtIn: Bool, elements: [IOHIDElement]) {
+            self.hid = hid; self.id = id; self.builtIn = builtIn; self.elements = elements
+        }
     }
     private let manager = IOHIDManagerCreate(kCFAllocatorDefault, 0)
     private var devices: [Device] = [] // Membership changes only on discovery, never during input processing.
@@ -46,7 +48,8 @@ final class DeviceCapture {
         }, Unmanaged.passUnretained(self).toOpaque())
         IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
         if let all = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> { for device in all { added(device) } }
-        Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.tick() }
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.tick() }
+        timer.tolerance = 0.025
     }
     static func consoleUID() -> uid_t? {
         var uid: uid_t = 0, gid: gid_t = 0
@@ -61,7 +64,16 @@ final class DeviceCapture {
         if config.generation != next.generation { actions.removeAll(keepingCapacity: true) }
         config = next
         if !next.diagnostics { status.lastRule = nil }
-        engine.configure(context: next.context, layoutSupported: next.layoutSupported, finderEnabled: next.finderEnabled)
+        engine.configure(context: next.context, layoutSupported: next.layoutSupported,
+                         finderEnabled: next.finderEnabled,
+                         finderPermanentDeleteEnabled: next.finderPermanentDeleteEnabled,
+                         textNavigationEnabled: next.textNavigationEnabled,
+                         altF4Enabled: next.altF4Enabled,
+                         windowsKeyModifier: next.windowsKeyModifier,
+                         macBookFnControlSwap: next.macBookFnControlSwap,
+                         winRunEnabled: next.winRunEnabled,
+                         winSettingsEnabled: next.winSettingsEnabled,
+                         winTaskViewEnabled: next.winTaskViewEnabled)
         if !next.enabled || !next.sessionActive { stopCapture() }
         else if devices.contains(where: { $0.seized }) { sendOutput() }
         tick()
@@ -80,7 +92,8 @@ final class DeviceCapture {
         guard !product.localizedCaseInsensitiveContains("virtual"), number(kIOHIDVendorIDKey) != 0x16c0,
               !IOHIDDeviceConformsTo(hid, UInt32(kHIDPage_GenericDesktop), UInt32(kHIDUsage_GD_Mouse)),
               !IOHIDDeviceConformsTo(hid, 0x0d, 5) else { return }
-        let targeted = number(kIOHIDBuiltInKey) != 0 || (number(kIOHIDVendorIDKey) == 1452 && number(kIOHIDProductIDKey) == 834)
+        let builtIn = number(kIOHIDBuiltInKey) != 0
+        let targeted = builtIn || (number(kIOHIDVendorIDKey) == 1452 && number(kIOHIDProductIDKey) == 834)
         guard targeted, let all = IOHIDDeviceCopyMatchingElements(hid, nil, 0) as? [IOHIDElement] else { return }
         let input = all.filter { (element: IOHIDElement) -> Bool in
             let t = IOHIDElementGetType(element).rawValue
@@ -91,8 +104,8 @@ final class DeviceCapture {
               IOHIDDeviceConformsTo(hid, 1, 6) || keys.contains(where: { IOHIDElementGetUsagePage($0) == 0x0c || Self.isFn($0) }),
               input.allSatisfy({ Self.supported($0) || IOHIDElementGetUsage($0) == 0 }) else { return }
         var id: UInt64 = 0; _ = IORegistryEntryGetRegistryEntryID(IOHIDDeviceGetService(hid), &id)
-        guard id != 0, engine.register(id) else { return }
-        let device = Device(hid, id: id, elements: keys); devices.append(device)
+        guard id != 0, engine.register(id, builtIn: builtIn) else { return }
+        let device = Device(hid, id: id, builtIn: builtIn, elements: keys); devices.append(device)
         IOHIDDeviceRegisterInputValueCallback(hid, { context, result, _, value in
             guard let context else { return }
             Unmanaged<DeviceCapture>.fromOpaque(context).takeUnretainedValue().received(result, value: value)
@@ -138,7 +151,7 @@ final class DeviceCapture {
                 for device in devices where device.seized || device.observed {
                     IOHIDDeviceClose(device.hid, device.seized ? IOOptionBits(kIOHIDOptionsTypeSeizeDevice) : 0)
                     device.seized = false; device.observed = false
-                    engine.disconnect(device.id); _ = engine.register(device.id)
+                    engine.disconnect(device.id); _ = engine.register(device.id, builtIn: device.builtIn)
                 }
             case .openPhysicalDevices:
                 var success = !devices.isEmpty
