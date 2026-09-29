@@ -1,8 +1,9 @@
 import Foundation
 
-/// Only the physical 4 key with exactly Command and Shift is claimed. The
+/// Only the physical S key with exactly Command (Win on a PC keyboard) and Shift is claimed. The
 /// corresponding key-up is consumed even if the modifiers were released first.
 public struct ScreenshotShortcut: Sendable {
+    public static let keyCode: UInt16 = 1
     private var pressed = false
     public init() {}
 
@@ -10,7 +11,7 @@ public struct ScreenshotShortcut: Sendable {
 
     public mutating func handle(keyCode: UInt16, isDown: Bool, isRepeat: Bool,
                                 command: Bool, shift: Bool, option: Bool, control: Bool) -> ScreenshotDecision {
-        guard keyCode == 21 else { return .passThrough }
+        guard keyCode == Self.keyCode else { return .passThrough }
         if !isDown {
             guard pressed else { return .passThrough }
             pressed = false

@@ -1,10 +1,10 @@
 # WindowsMacBridge
 
-Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.5 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
+Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.6 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
 
 主專案是這個 repository；`vchewing-input-helper` 已移入 `InputSourceCore` 與 `InputSourceSupport`，不需同時執行兩個 App。[整合與遷移](Docs/ProjectIntegration.md)。
 
-## 0.5.5 快速開始
+## 0.5.6 快速開始
 
 新安裝預設啟用 Windows 快捷鍵、EventTap／所有鍵盤、底層 ABC／U.S. 的中文／唯音快捷鍵、截圖自動複製，以及 Codex 的聊天／文字 Profile。Terminal、其他 IDE、Remote、VM、Game 保留原按鍵；Finder 加強、唯音守護及切換快捷鍵預設關閉。截圖功能會註冊登入啟動，仍可能需要 macOS 核准。更新保留已存設定，可從一般頁按「套用建議預設」。
 
@@ -39,9 +39,9 @@ Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macO
 
 ## 截圖自動複製
 
-「一般 → 截圖」的開關預設開啟；舊設定沒有此欄位時也視為開啟，使用者明確關閉的選擇會持久保存，套用建議預設也不會重設。開啟後，`⇧⌘4` 仍進入 macOS 的互動框選（可按空白鍵切換視窗、Esc 取消）；完成時圖片存到系統截圖指定的資料夾，並以圖片寫入剪貼簿，可立即按 `⌘V`。會盡量沿用 macOS 截圖的儲存位置與格式；不支援的格式採 PNG，指定資料夾不可寫時改存桌面。關閉開關會移除專屬 Event Tap，`⇧⌘4` 由 macOS 原樣處理，不改系統快捷鍵設定，也不使用 Automator。
+「一般 → 截圖」的開關預設開啟；舊設定沒有此欄位時也視為開啟，使用者明確關閉的選擇會持久保存，套用建議預設也不會重設。開啟後，`Shift+Win+S`（Win 鍵在 macOS 對應 Command，即 `⇧⌘S`）進入 macOS 的互動框選（Esc 取消）；完成時圖片存到系統截圖指定的資料夾，並以 PNG／TIFF 圖片格式寫入剪貼簿，可立即按 `⌘V`。會盡量沿用 macOS 截圖的儲存位置與格式；不支援的格式採 PNG，指定資料夾不可寫時改存桌面。原本的 `⇧⌘4` 永遠交由 macOS 處理。關閉開關會移除專屬 Event Tap，不改系統快捷鍵設定，也不使用 Automator。
 
-此功能使用 `/usr/sbin/screencapture` 啟動原生互動截圖。開啟時會立即檢查可執行檔、儲存位置、輔助使用權限及攔截狀態；往後每 30 天用一次性計時器檢查，遇到 tap 停用、session 恢復或權限恢復也會嘗試修復。診斷寫入 `~/Library/Logs/WindowsMacBridge/Screenshot.log`，只記錄狀態、錯誤及儲存路徑，不記錄圖片內容或普通按鍵。Esc 取消不動剪貼簿；若儲存成功但複製失敗，圖片仍留在磁碟，設定頁會顯示錯誤。
+此功能使用 `/usr/sbin/screencapture -i -s` 啟動原生選取截圖。開啟時會立即檢查可執行檔、儲存位置、輔助使用權限及攔截狀態；往後每 30 天用一次性計時器檢查，遇到 tap 停用、session 恢復或權限恢復也會嘗試修復。診斷寫入 `~/Library/Logs/WindowsMacBridge/Screenshot.log`，只記錄接收此快捷鍵、狀態、錯誤及儲存路徑，不記錄圖片內容或普通按鍵。Esc 取消不動剪貼簿；若儲存成功但複製失敗，圖片仍留在磁碟，設定頁會顯示錯誤。
 
 為了重新登入與開機後繼續生效，開啟時會註冊 App 的 macOS 登入項目；若 macOS 顯示待核准，需到系統設定核准。關閉時只移除由此功能新增的登入註冊，原本手動開啟的登入項目保留。App 必須持續執行且已獲得所需權限；更新後若 macOS 要求重新授權，需再次核准。離線單元測試無法驗證實機截圖 UI、螢幕錄製權限提示、實際儲存與貼上。
 

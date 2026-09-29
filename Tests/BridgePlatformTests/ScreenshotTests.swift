@@ -6,39 +6,39 @@ import BridgePlatform
 struct ScreenshotShortcutTests {
     @Test func exactShortcutClaimsOneBalancedPair() {
         var shortcut = ScreenshotShortcut()
-        #expect(shortcut.handle(keyCode: 21, isDown: true, isRepeat: false,
+        #expect(shortcut.handle(keyCode: 1, isDown: true, isRepeat: false,
                                 command: true, shift: true, option: false, control: false) == .capture)
-        #expect(shortcut.handle(keyCode: 21, isDown: true, isRepeat: true,
+        #expect(shortcut.handle(keyCode: 1, isDown: true, isRepeat: true,
                                 command: true, shift: true, option: false, control: false) == .suppress)
-        #expect(shortcut.handle(keyCode: 21, isDown: false, isRepeat: false,
+        #expect(shortcut.handle(keyCode: 1, isDown: false, isRepeat: false,
                                 command: false, shift: false, option: false, control: false) == .suppress)
-        #expect(shortcut.handle(keyCode: 21, isDown: false, isRepeat: false,
+        #expect(shortcut.handle(keyCode: 1, isDown: false, isRepeat: false,
                                 command: false, shift: false, option: false, control: false) == .passThrough)
     }
 
     @Test func otherChordsAndResetPassThrough() {
         var shortcut = ScreenshotShortcut()
         for (key, command, shift, option, control) in [
-            (UInt16(20), true, true, false, false),
-            (UInt16(21), false, true, false, false),
-            (UInt16(21), true, false, false, false),
-            (UInt16(21), true, true, true, false),
-            (UInt16(21), true, true, false, true)
+            (UInt16(21), true, true, false, false),
+            (UInt16(1), false, true, false, false),
+            (UInt16(1), true, false, false, false),
+            (UInt16(1), true, true, true, false),
+            (UInt16(1), true, true, false, true)
         ] {
             #expect(shortcut.handle(keyCode: key, isDown: true, isRepeat: false,
                                     command: command, shift: shift, option: option, control: control) == .passThrough)
         }
-        #expect(shortcut.handle(keyCode: 21, isDown: true, isRepeat: false,
+        #expect(shortcut.handle(keyCode: 1, isDown: true, isRepeat: false,
                                 command: true, shift: true, option: false, control: false) == .capture)
         shortcut.reset()
-        #expect(shortcut.handle(keyCode: 21, isDown: false, isRepeat: false,
+        #expect(shortcut.handle(keyCode: 1, isDown: false, isRepeat: false,
                                 command: false, shift: false, option: false, control: false) == .passThrough)
     }
 
     @Test func missedReleaseCanRecoverOnFreshDown() {
         var shortcut = ScreenshotShortcut()
         for _ in 0..<2 {
-            #expect(shortcut.handle(keyCode: 21, isDown: true, isRepeat: false,
+            #expect(shortcut.handle(keyCode: 1, isDown: true, isRepeat: false,
                                     command: true, shift: true, option: false, control: false) == .capture)
         }
     }
@@ -67,6 +67,24 @@ struct ScreenshotShortcutTests {
         defer { pasteboard.releaseGlobally() }
         #expect(ScreenshotClipboard.copyImage(at: path, to: pasteboard) == .success)
         #expect(NSImage(pasteboard: pasteboard) != nil)
+        #expect(pasteboard.data(forType: NSPasteboard.PasteboardType("public.png")) != nil)
+        #expect(pasteboard.data(forType: .tiff) != nil)
+        let changeCount = pasteboard.changeCount
         #expect(ScreenshotClipboard.copyImage(at: path.appendingPathExtension("missing"), to: pasteboard) == .unreadableImage)
+        #expect(pasteboard.changeCount == changeCount)
+    }
+
+    @Test func jpegScreenshotIsConvertedToPasteablePNG() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("BridgeScreenshot-\(UUID().uuidString).jpg")
+        defer { try? FileManager.default.removeItem(at: path) }
+        let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2,
+                                      bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false,
+                                      isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0,
+                                      bitsPerPixel: 0)
+        try #require(bitmap?.representation(using: .jpeg, properties: [:])).write(to: path)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("BridgeScreenshot-\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        #expect(ScreenshotClipboard.copyImage(at: path, to: pasteboard) == .success)
+        #expect(pasteboard.data(forType: NSPasteboard.PasteboardType("public.png")) != nil)
     }
 }

@@ -1,3 +1,13 @@
+# 0.5.6-preview.1 截圖快捷鍵與剪貼簿（2026-09-29）
+
+- 依使用者回報將截圖框選快捷鍵改為實體 `Shift+Win+S`（macOS `⇧⌘S`）；`⇧⌘4` 恢復系統原樣。只匹配 S 的 keycode、精確修飾鍵和配對 key-up；一般 S 不查詢安全輸入或輔助使用權限。
+- 仍以 `/usr/sbin/screencapture` 開啟原生互動框選，改用 `-i -s` 限定選取模式。只要目標圖片已產生且非空，即使截圖工具回傳非零代碼也嘗試複製。Clipboard 明確提供 PNG 和 TIFF 圖片資料，JPEG 儲存格式也會轉成可貼上的 PNG；圖片解析失敗時不動既有剪貼簿。日誌增加快捷鍵已接收紀錄，方便區分攔截失敗和存檔／複製失敗。
+- 0.5.5 已安裝版的開關、六項權限與 Tap 狀態均顯示正常，但截至 2026-09-29T09:11:36Z 的 Screenshot.log 沒有任何截圖完成事件。CUA 自動化送鍵未能證明事件經過全域 Event Tap；新版實體 `Shift+Win+S` 的框選、存檔與 `⌘V` 貼上須獨立記錄實機結果，不以單元測試代替。
+
+以下保留歷史版本結果。
+
+---
+
 # 0.5.5-preview.1 Finder 實測修復（2026-09-29）
 
 - 主套件 **132 tests 通過**：34 InputSourceCore、32 BridgePlatform、66 BridgeCore，保留 0.5.4 的全部授權與 NSTextView 回歸。另 **11 HID helper tests**／release helper build／self-check／signature verification、**5 Python 資源計算 tests 通過**，不安裝 helper／driver。

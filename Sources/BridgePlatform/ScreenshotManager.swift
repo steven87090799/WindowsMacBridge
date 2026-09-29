@@ -13,9 +13,16 @@ public enum ScreenshotClipboardResult: Equatable, Sendable {
 
 @MainActor public enum ScreenshotClipboard {
     public static func copyImage(at url: URL, to pasteboard: NSPasteboard) -> ScreenshotClipboardResult {
-        guard let image = NSImage(contentsOf: url) else { return .unreadableImage }
+        guard let image = NSImage(contentsOf: url),
+              let tiff = image.tiffRepresentation,
+              let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else {
+            return .unreadableImage
+        }
+        let item = NSPasteboardItem()
+        guard item.setData(png, forType: NSPasteboard.PasteboardType("public.png")),
+              item.setData(tiff, forType: .tiff) else { return .writeFailed }
         pasteboard.clearContents()
-        return pasteboard.writeObjects([image]) ? .success : .writeFailed
+        return pasteboard.writeObjects([item]) ? .success : .writeFailed
     }
 }
 
@@ -180,12 +187,8 @@ public struct ScreenshotStatus: Equatable, Sendable {
         }
         guard enabled, type == .keyDown || type == .keyUp else { return Unmanaged.passUnretained(event) }
         let key = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
-        guard key == 21 else { return Unmanaged.passUnretained(event) }
+        guard key == ScreenshotShortcut.keyCode else { return Unmanaged.passUnretained(event) }
         let flags = event.flags
-        if type == .keyDown && (IsSecureEventInputEnabled() || !AXIsProcessTrusted()) {
-            shortcut.reset()
-            return Unmanaged.passUnretained(event)
-        }
         let decision = shortcut.handle(keyCode: key, isDown: type == .keyDown,
             isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
             command: flags.contains(.maskCommand), shift: flags.contains(.maskShift),
@@ -194,6 +197,10 @@ public struct ScreenshotStatus: Equatable, Sendable {
         case .passThrough: return Unmanaged.passUnretained(event)
         case .suppress: return nil
         case .capture:
+            if IsSecureEventInputEnabled() || !AXIsProcessTrusted() {
+                shortcut.reset()
+                return Unmanaged.passUnretained(event)
+            }
             if !captureInProgress {
                 captureInProgress = true
                 DispatchQueue.main.async { [weak self] in self?.beginCapture() }
@@ -205,9 +212,11 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private func beginCapture() {
         guard enabled else { captureInProgress = false; return }
         let destination = captureURL()
+        setStatus(issue: nil, result: "正在框選截圖")
+        log("快捷鍵已接收，開始框選截圖")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        process.arguments = ["-i", "-J", "selection", "-t", destination.pathExtension, destination.path]
+        process.arguments = ["-i", "-s", "-t", destination.pathExtension, destination.path]
         process.terminationHandler = { [weak self] finished in
             let code = finished.terminationStatus
             Task { @MainActor [weak self] in self?.finishCapture(exitCode: code, url: destination) }
@@ -224,13 +233,13 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private func finishCapture(exitCode: Int32, url: URL) {
         captureInProgress = false
         guard enabled else { return }
-        guard exitCode == 0,
-              let size = (try? fileManager.attributesOfItem(atPath: url.path)[.size]) as? NSNumber,
+        guard let size = (try? fileManager.attributesOfItem(atPath: url.path)[.size]) as? NSNumber,
               size.intValue > 0 else {
             if exitCode != 0 { log("截圖已取消或失敗，結束碼 \(exitCode)") }
             setStatus(issue: nil, result: "截圖已取消")
             return
         }
+        if exitCode != 0 { log("截圖工具結束碼 \(exitCode)，但已產生圖片；繼續複製") }
         switch ScreenshotClipboard.copyImage(at: url, to: .general) {
         case .unreadableImage:
             setStatus(issue: "圖片已儲存，但無法讀取以複製到剪貼簿。", result: "儲存成功、複製失敗")

@@ -190,10 +190,10 @@ struct SettingsView: View {
                 explanation("逐視窗切換、視窗縮圖、Alt+F4 與新增 Finder／文字鍵位使用 EventTap；進階 HID 後端保留原有實體鍵位規則。")
             }
             Section("截圖") {
-                Toggle("截圖自動複製（⇧⌘4）", isOn: Binding(
+                Toggle("截圖自動複製（Shift+Win+S／⇧⌘S）", isOn: Binding(
                     get: { controller.settings.screenshotAutoCopy },
                     set: { controller.setScreenshotAutoCopy($0) }))
-                explanation("預設開啟。仍可框選，截圖照常存到 macOS 指定位置，完成時也複製圖片供 ⌘V 貼上；Esc 取消時不改剪貼簿。關閉會移除截圖攔截。")
+                explanation("預設開啟。Win 鍵在 macOS 對應 Command；框選完成後存檔並複製 PNG 圖片供 ⌘V 貼上。原本的 ⇧⌘4 交由 macOS 處理；Esc 取消時不改剪貼簿。")
                 LabeledContent("截圖狀態", value: controller.screenshotStatus.lastResult)
                 if let issue = controller.screenshotStatus.issue { Text(issue).foregroundStyle(.orange) }
                 explanation("啟用時立即檢查，之後每 30 天檢查與修復。此功能需要輔助使用與登入啟動；macOS 若要求核准登入項目或權限，請在系統設定完成。")
