@@ -1,4 +1,15 @@
-# 0.5.8-preview.1 MacBook 原生 Fn／Ctrl 模式（2026-09-29）
+# 0.5.9-preview.1 原生通知修復（2026-09-29）
+
+- 0.5.8 本機首次開啟 Fn／Ctrl 開關時發生 EXC_BAD_ACCESS；崩潰紀錄定位於 NativeMacBookKeyboardBackend.observeChanges 的 CFDictionarySetValue。臨時橋接的 CFString 經 Unmanaged.passUnretained 傳遞，未保證在字典讀取 hash 前仍有效。改用強引用及 withExtendedLifetime 同時保留鍵與值。
+- 0.5.8 發行已改回 Draft、撤回公開下載，原 tag／二進位保留供追查，不覆寫發行資產。修正版為 0.5.9 build 21。
+- 完整 **156 tests 通過**：34 InputSourceCore、51 BridgePlatform、71 BridgeCore。新增直接呼叫公開 IOKit 的通知註冊／停止循環，僅 metadata、不開啟／接管／映射鍵盤或監聽輸入；另在 **release 最佳化模式執行該 1 項測試並通過**，以涵蓋 ARC 生命週期。主套件包含 0.5.8 的全部映射與還原回歸。
+- MacBook 實體 Fn／Globe、Universal Control 兩個來源方向、登入／睡眠仍待真實裝置驗收。新版 UI、發行及資源證據記於 release／PR；單元與原生通知註冊不替代實體輸入驗收。
+
+以下保留首次實作及歷史結果。
+
+---
+
+# 0.5.8-preview.1 MacBook 原生 Fn／Ctrl 模式（2026-09-29，已撤回公開下載）
 
 - 使用者確認完整互換：Fn／地球鍵 → 左 Ctrl，原左 Ctrl → Fn；通用控制會交替使用 MacBook 內建與 Mac mini 外接鍵盤。新增獨立、預設關閉的持久開關，schema 1／2 遷移到 3 保留原 App Profile 與功能選擇。
 - 採 Apple TN2450 的公開 IOHIDEventSystemClient／IOHIDServiceClient API；只對本機有實體電池、Built-In、Apple vendor 1452、SPI／ADB／USB 且非虛擬的鍵盤服務寫入暫存 UserKeyMapping。不修改系統偏好、全域映射、外接或通用控制虛擬服務；不需 root／Automator／新 Driver。

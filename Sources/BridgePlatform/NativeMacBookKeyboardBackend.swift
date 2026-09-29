@@ -80,8 +80,13 @@ import BridgeCore
             // Kernel built-in services only; never Universal Control's virtual services.
             guard let matching = IOServiceMatching("IOHIDEventService") else { stopObserving(); return false }
             let properties = [kIOHIDBuiltInKey: true] as CFDictionary
-            CFDictionarySetValue(matching, Unmanaged.passUnretained(kIOPropertyMatchKey as CFString).toOpaque(),
-                                 Unmanaged.passUnretained(properties).toOpaque())
+            let propertyKey = kIOPropertyMatchKey as CFString
+            // Unmanaged does not retain its argument. The optimizer may release a
+            // temporary bridged NSString before CFDictionarySetValue reads its hash.
+            withExtendedLifetime((propertyKey, properties)) {
+                CFDictionarySetValue(matching, Unmanaged.passUnretained(propertyKey).toOpaque(),
+                                     Unmanaged.passUnretained(properties).toOpaque())
+            }
             var iterator: io_iterator_t = 0
             let result = IOServiceAddMatchingNotification(created, notification, matching, { pointer, iterator in
                 while case let service = IOIteratorNext(iterator), service != 0 { IOObjectRelease(service) }

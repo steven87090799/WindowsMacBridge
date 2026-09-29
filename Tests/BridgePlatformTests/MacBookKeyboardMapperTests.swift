@@ -195,4 +195,14 @@ import BridgeCore
         mapper.stop()
         #expect(backend.rows[0].userMapping == [])
     }
+    @Test func nativeServiceNotificationRegistrationRetainsBridgedKeys() {
+        // Real property/notification API only. No keyboard is opened, seized, remapped,
+        // or observed for input. Run in release mode too to cover ARC optimization.
+        let native = NativeMacBookKeyboardBackend()
+        for _ in 0..<4 {
+            #expect(native.observeChanges {})
+            native.stopObserving()
+        }
+        #expect(native.services() != nil)
+    }
 }
