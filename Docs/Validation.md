@@ -1,3 +1,16 @@
+# 0.5.7-preview.1 截圖與 Ctrl 翻譯衝突修復（2026-09-29）
+
+- 原因已由正式 `KeyboardEventProcessor`／`EventRewriter` 重現：`Ctrl+Shift+S` 命中 `karabiner.20`，被改成 `Command+Shift+S`；兩個 session Tap 原本都用 head insert，後啟動的 Windows Tap 先處理，截圖 Tap 又未排除本程式來源。新回歸在修正前產生 **3 個失敗**，分別為錯誤開始截圖、吞掉 repeat、吞掉 release。
+- 本次只讀核對實際連接的 Logitech USB Receiver（vendor 1133／product 50504）：沒有 hidutil UserKeyMapping 或 HIDKeyboardModifierMappingPairs；該裝置的持久 Ctrl／Command 設定為原位。其他已離線 Logitech 裝置有交換設定，未變更。這不能取代實體 Win 鍵事件驗收。
+- 截圖仍在一般權限的 session head，Windows 翻譯改為 session tail，先辨識原始修飾鍵，不受啟動、開關與 Tap 重建順序影響。EventTap 與 HID action dispatcher 共用程序來源標記，截圖 adapter 在變更按鍵配對狀態前排除本程式事件。輔助使用檢查移出截圖 callback，以既有權限變化與生命週期檢查更新快取；撤銷時會移除 Tap 並清除按鍵狀態，沒有新增輪詢或 privileged HID Tap。
+- 主套件完整 **136 tests 通過**：34 InputSourceCore、36 BridgePlatform、66 BridgeCore。新增三個回歸涵蓋真正的 Ctrl 另存新檔翻譯、原始 Command／Win 截圖、兩種 Tap 路由順序、repeat／modifier 先放開／自己的 key-up 不污染實體配對、其他來源 metadata 保留。事件採 private CGEventSource、沒有全域送鍵或讀取使用者輸入。
+- 另 **11 HID helper tests**／helper release build／codec self-check／strict signature verification，以及 **5 Python 資源計算 tests 通過**；沒有安裝 helper 或 driver。設定 schema 沒有改動，既有 Profile／唯音守護／輸入法設定保持。
+- 本機更新版、Hosted CI、授權 UI 與實體按鍵的結果另記於 release／PR。CUA 自動化送鍵不能證明實體鍵盤經過 Event Tap，未收到實體測試結果前不宣稱 Win 鍵、Remote／VM、睡眠或登入行為已驗收。
+
+以下保留歷史版本結果。
+
+---
+
 # 0.5.6-preview.1 截圖快捷鍵與剪貼簿（2026-09-29）
 
 - 依使用者回報將截圖框選快捷鍵改為實體 `Shift+Win+S`（macOS `⇧⌘S`）；`⇧⌘4` 恢復系統原樣。只匹配 S 的 keycode、精確修飾鍵和配對 key-up；一般 S 不查詢安全輸入或輔助使用權限。

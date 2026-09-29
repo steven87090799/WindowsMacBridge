@@ -47,6 +47,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private let logURL: URL
     private let lastCheckKey = "screenshot.lastCheck.v1"
     private var enabled = false
+    private var accessibilityTrusted = false
     private var shortcut = ScreenshotShortcut()
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
@@ -54,6 +55,8 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private var captureInProgress = false
 
     public init(defaults: UserDefaults = .standard, fileManager: FileManager = .default) {
+        // Initialize the shared marker outside the native event callback.
+        _ = EventRewriter.generatedEventMarker
         self.defaults = defaults
         self.fileManager = fileManager
         logURL = fileManager.homeDirectoryForCurrentUser
@@ -89,11 +92,13 @@ public struct ScreenshotStatus: Equatable, Sendable {
         destroyTap()
         shortcut.reset()
         enabled = false
+        accessibilityTrusted = false
     }
 
     public func verifyAndRepair(reason: String) {
         guard enabled else { return }
         status.lastCheck = Date()
+        accessibilityTrusted = AXIsProcessTrusted()
         guard fileManager.isExecutableFile(atPath: "/usr/sbin/screencapture") else {
             destroyTap()
             setStatus(issue: "找不到可執行的 macOS 截圖工具。", result: "檢查失敗")
@@ -106,7 +111,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
             log("\(reason)：截圖儲存位置不可寫")
             return
         }
-        guard AXIsProcessTrusted() else {
+        guard accessibilityTrusted else {
             destroyTap()
             setStatus(issue: "截圖攔截需要輔助使用權限；授權後重新開啟 App 或開關。", result: "檢查失敗")
             log("\(reason)：輔助使用權限不可用")
@@ -162,6 +167,8 @@ public struct ScreenshotStatus: Equatable, Sendable {
             let manager = Unmanaged<ScreenshotManager>.fromOpaque(userInfo).takeUnretainedValue()
             return MainActor.assumeIsolated { TapResult(event: manager.handle(type, event: event)) }.event
         }
+        // Before the Windows translation tap (.tailAppendEventTap), independently
+        // of startup, toggle and recovery order. No privileged HID event tap.
         guard let newTap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap,
                                             options: .defaultTap, eventsOfInterest: CGEventMask(mask),
                                             callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque()),
@@ -177,6 +184,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
         tap = nil; source = nil
         status.tapActive = false
+        shortcut.reset()
     }
 
     private func handle(_ type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -188,16 +196,12 @@ public struct ScreenshotStatus: Equatable, Sendable {
         guard enabled, type == .keyDown || type == .keyUp else { return Unmanaged.passUnretained(event) }
         let key = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
         guard key == ScreenshotShortcut.keyCode else { return Unmanaged.passUnretained(event) }
-        let flags = event.flags
-        let decision = shortcut.handle(keyCode: key, isDown: type == .keyDown,
-            isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
-            command: flags.contains(.maskCommand), shift: flags.contains(.maskShift),
-            option: flags.contains(.maskAlternate), control: flags.contains(.maskControl))
+        let decision = shortcut.handle(type: type, event: event)
         switch decision {
         case .passThrough: return Unmanaged.passUnretained(event)
         case .suppress: return nil
         case .capture:
-            if IsSecureEventInputEnabled() || !AXIsProcessTrusted() {
+            if IsSecureEventInputEnabled() || !accessibilityTrusted {
                 shortcut.reset()
                 return Unmanaged.passUnretained(event)
             }

@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 /// Only the physical S key with exactly Command (Win on a PC keyboard) and Shift is claimed. The
 /// corresponding key-up is consumed even if the modifiers were released first.
@@ -8,6 +9,20 @@ public struct ScreenshotShortcut: Sendable {
     public init() {}
 
     public mutating func reset() { pressed = false }
+
+    /// The same native event adapter used by the screenshot tap and regression tests.
+    public mutating func handle(type: CGEventType, event: CGEvent) -> ScreenshotDecision {
+        // Check provenance before touching the held-key ledger, including key-up.
+        // Event taps may be recreated in either order after permission/session recovery.
+        guard !EventRewriter.isGeneratedByBridge(event) else { return .passThrough }
+        guard type == .keyDown || type == .keyUp else { return .passThrough }
+        let flags = event.flags
+        return handle(keyCode: UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode)),
+                      isDown: type == .keyDown,
+                      isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
+                      command: flags.contains(.maskCommand), shift: flags.contains(.maskShift),
+                      option: flags.contains(.maskAlternate), control: flags.contains(.maskControl))
+    }
 
     public mutating func handle(keyCode: UInt16, isDown: Bool, isRepeat: Bool,
                                 command: Bool, shift: Bool, option: Bool, control: Bool) -> ScreenshotDecision {

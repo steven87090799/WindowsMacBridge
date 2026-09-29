@@ -163,8 +163,8 @@ import FinderSync
              previousListening != next.listenAccess) {
             refreshPermissions()
         }
-        if !previousAccessibility && next.accessibility && settings.screenshotAutoCopy {
-            screenshot.verifyAndRepair(reason: "輔助使用權限恢復")
+        if previousAccessibility != next.accessibility && settings.screenshotAutoCopy {
+            screenshot.verifyAndRepair(reason: next.accessibility ? "輔助使用權限恢復" : "輔助使用權限失效")
         }
         if previousPassThrough != status.manualPassThrough {
             inputSources.updateProtection(sourceSuspension(for: context))

@@ -86,7 +86,7 @@ public final class InputEngine: @unchecked Sendable {
     private var altTabActive = false
 
     public init() {
-        let marker = Int64.random(in: 1...Int64.max)
+        let marker = EventRewriter.generatedEventMarker
         self.marker = marker; actions = ShortcutActionDispatcher(marker: marker)
         // Compile every table before an event callback can run.
         _ = RuleEngine.browser; _ = RuleEngine.finder; _ = RuleEngine.finderExtras
@@ -250,7 +250,9 @@ public final class InputEngine: @unchecked Sendable {
             let engine = Unmanaged<InputEngine>.fromOpaque(userInfo).takeUnretainedValue()
             return engine.handle(type, event: event)
         }
-        guard let created = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap,
+        // Screenshot claims the original Win+Shift+S at the session head. Keep
+        // Ctrl translations at the tail even when either tap is recreated.
+        guard let created = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .tailAppendEventTap,
                                               options: .defaultTap, eventsOfInterest: CGEventMask(mask),
                                               callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque()),
               let runSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, created, 0) else {

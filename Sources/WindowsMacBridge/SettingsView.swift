@@ -193,7 +193,7 @@ struct SettingsView: View {
                 Toggle("截圖自動複製（Shift+Win+S／⇧⌘S）", isOn: Binding(
                     get: { controller.settings.screenshotAutoCopy },
                     set: { controller.setScreenshotAutoCopy($0) }))
-                explanation("預設開啟。Win 鍵在 macOS 對應 Command；框選完成後存檔並複製 PNG 圖片供 ⌘V 貼上。原本的 ⇧⌘4 交由 macOS 處理；Esc 取消時不改剪貼簿。")
+                explanation("預設開啟。Win 鍵在 macOS 對應 Command；框選完成後存檔並複製 PNG 圖片供 ⌘V 貼上。Ctrl+Shift+S 不會觸發截圖。原本的 ⇧⌘4 交由 macOS 處理；Esc 取消時不改剪貼簿。")
                 LabeledContent("截圖狀態", value: controller.screenshotStatus.lastResult)
                 if let issue = controller.screenshotStatus.issue { Text(issue).foregroundStyle(.orange) }
                 explanation("啟用時立即檢查，之後每 30 天檢查與修復。此功能需要輔助使用與登入啟動；macOS 若要求核准登入項目或權限，請在系統設定完成。")

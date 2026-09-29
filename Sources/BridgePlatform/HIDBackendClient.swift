@@ -10,7 +10,7 @@ public enum InputBackend: String, Codable, CaseIterable, Sendable {
 @MainActor public final class HIDBackendClient: NSObject, HIDControllerProtocol {
     public private(set) var status = HIDStatus()
     public var actionStatus: String { actions.status() }
-    private let actions = ShortcutActionDispatcher(marker: Int64.random(in: 1...Int64.max))
+    private let actions = ShortcutActionDispatcher(marker: EventRewriter.generatedEventMarker)
     private var connection: NSXPCConnection?
     private var configuration = HIDConfiguration()
     private var generation: UInt64 = 0
