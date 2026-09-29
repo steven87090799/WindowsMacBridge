@@ -28,7 +28,8 @@ import FinderSync
     @Published var targetApp: ApplicationContext?
     @Published var hidStatus = HIDStatus()
     @Published var screenshotStatus = ScreenshotStatus()
-    @Published private(set) var permissions = PermissionStatus()
+    @Published private(set) var permissionChecklist = PermissionChecklistState()
+    var permissions: PermissionSnapshot { permissionChecklist.verified }
     @Published private(set) var permissionsCheckedAt: Date?
     var finderExtensionEnabled: Bool { permissions.finderExtension }
     var screenRecordingGranted: Bool { permissions.screenRecording }
@@ -137,6 +138,8 @@ import FinderSync
     private func tick() {
         let previousPassThrough = status.manualPassThrough
         let previousAccessibility = status.accessibility
+        let previousPosting = status.postAccess
+        let previousListening = status.listenAccess
         var next = engine.snapshot()
         if settings.inputBackend == .deviceHID {
             if hidStatus != hid.status { hidStatus = hid.status }
@@ -151,12 +154,13 @@ import FinderSync
         // Publishing identical snapshots wakes SwiftUI even when no window is visible.
         let changed = status != next
         if changed { status = next }
-        // Reuse the engine's existing checks; no additional permission polling.
-        var nextPermissions = permissions
-        nextPermissions.accessibility = next.accessibility
-        nextPermissions.posting = next.postAccess
-        nextPermissions.listening = next.listenAccess
-        if permissions != nextPermissions { permissions = nextPermissions }
+        // A cached engine snapshot is not proof of authorization. A transition
+        // triggers a native recheck, never an optimistic green checkmark.
+        if permissionChecklist.awaitingVerification.isEmpty &&
+            (previousAccessibility != next.accessibility || previousPosting != next.postAccess ||
+             previousListening != next.listenAccess) {
+            refreshPermissions()
+        }
         if !previousAccessibility && next.accessibility && settings.screenshotAutoCopy {
             screenshot.verifyAndRepair(reason: "輔助使用權限恢復")
         }
@@ -196,9 +200,27 @@ import FinderSync
         publish()
     }
     func refreshPermissions() {
-        let next = PermissionStatus.current()
-        if permissions != next { permissions = next }
+        // A source/login notification in the background must not confirm a
+        // settings link. Verify once the user returns, or explicitly rechecks.
+        if !permissionChecklist.awaitingVerification.isEmpty && !NSApp.isActive { return }
+        var next = permissionChecklist
+        next.verify(PermissionStatus.current())
+        if permissionChecklist != next { permissionChecklist = next }
         permissionsCheckedAt = Date()
+    }
+    func openPermissionSettings(_ kind: PermissionKind) {
+        var next = permissionChecklist
+        next.beginNavigation(to: kind)
+        permissionChecklist = next
+        // These links only navigate. Request APIs and login registration belong
+        // to explicit feature controls, and their return values are not grants.
+        switch kind {
+        case .accessibility, .posting: openPermissions()
+        case .listening: openInputMonitoring()
+        case .screenRecording: openScreenRecording()
+        case .finderExtension: openFinderExtensionSettings()
+        case .loginItem: inputSources.openLoginSettings()
+        }
     }
     private func sourceSuspension(for app: ApplicationContext) -> InputSourceSuspension? {
         InputSourcePolicy.suspension(context: app,

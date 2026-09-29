@@ -1,4 +1,4 @@
-# WindowsMacBridge 0.5.3：唯音輔助整合
+# WindowsMacBridge 0.5.4：唯音輔助整合
 
 ## 主專案與來源
 

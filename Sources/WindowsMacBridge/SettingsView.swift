@@ -56,28 +56,27 @@ struct SettingsView: View {
                 VStack(spacing: 0) {
                     permissionRow("輔助使用", granted: controller.permissions.accessibility,
                                   detail: "鍵盤翻譯、截圖及視窗操作") {
-                        controller.requestAccessibility(); controller.openPermissions()
+                        controller.openPermissionSettings(.accessibility)
                     }
                     permissionRow("事件輸出", granted: controller.permissions.posting,
                                   detail: "送出翻譯後的按鍵；與輔助使用共用授權頁") {
-                        controller.openPermissions()
+                        controller.openPermissionSettings(.posting)
                     }
                     permissionRow("輸入監控", granted: controller.permissions.listening,
                                   detail: "允許此 App 接收鍵盤事件") {
-                        controller.requestListening(); controller.openInputMonitoring()
+                        controller.openPermissionSettings(.listening)
                     }
                     permissionRow("螢幕錄製", granted: controller.permissions.screenRecording,
                                   detail: "選用：只有視窗縮圖需要") {
-                        controller.requestScreenRecording(); controller.openScreenRecording()
+                        controller.openPermissionSettings(.screenRecording)
                     }
                     permissionRow("Finder 擴充功能", granted: controller.permissions.finderExtension,
                                   detail: "選用：Finder 右鍵路徑選單", enabledLabel: "已啟用", disabledLabel: "未啟用") {
-                        controller.openFinderExtensionSettings()
+                        controller.openPermissionSettings(.finderExtension)
                     }
                     permissionRow("登入時啟動", granted: controller.permissions.loginItem,
                                   detail: "重新登入或開機後繼續執行", enabledLabel: "已核准", disabledLabel: "未核准") {
-                        controller.inputSources.setLoginEnabled(true)
-                        controller.inputSources.openLoginSettings()
+                        controller.openPermissionSettings(.loginItem)
                     }
                     if controller.settings.inputBackend == .deviceHID {
                         permissionRow("HID helper 輸入監控", granted: controller.hidStatus.permissions,

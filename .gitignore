@@ -2,6 +2,8 @@
 .swiftpm/
 build/
 .DS_Store
+__pycache__/
+*.pyc
 *.xcuserstate
 xcuserdata/
 Tools/HIDBackend/SDK

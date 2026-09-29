@@ -1,3 +1,17 @@
+# 0.5.4-preview.1 授權查驗與功能回歸（2026-09-29）
+
+- 主套件完整 **129 tests 通過**：34 InputSourceCore、31 BridgePlatform、64 BridgeCore。另有 **11 HID helper tests**、helper release build／codec self-check／strict signature verification，以及 **4 Python 資源計算 tests 通過**；沒有安裝 helper 或 driver。
+- 授權連結與授權成功改為獨立狀態。六項連結只導航，不呼叫 request API、不註冊登入項目、不採用引擎快照判定成功。啟動／回到 App／手動重新檢查時，由目前程序的原生 read-only API 更新清單；背景通知不能確認尚未完成的導航。五個回歸測試覆蓋未授權導航、只取消被檢查項目、取消／拒絕、實際核准、撤銷與重啟。
+- 本機先以 0.5.3 撤銷本 App 的螢幕錄製，依 macOS「結束並重新打開」套用後，App 顯示未取得；只按前往開啟、未授權並返回仍為未取得。本次沒有重現原回報的立即誤變綠色，修正採保守查驗；不得把原生導航／request 返回值當成權限。
+- 新增四個程序內 NSTextView tests，14 種結果涵蓋 Ctrl 單字移動、Shift 單字選取、前後單字刪除、Home／End 行首尾、Ctrl Home／End 文件首尾與全部 Shift 組合。事件經正式 processor／EventRewriter，指定私有未顯示視窗，再送該文字元件的 keyDown；不注入使用者 App。測試先發現無視窗事件未進文字處理流程，修正測試 fixture 後全部通過。
+- 既有完整套件覆蓋 Alt+Tab 逐窗 MRU／反向與放開提交的模型、Finder 剪下狀態／移動 metadata／路徑選擇／永久刪除獨立閘門、Alt+F4 啟用與受保護 Profile、設定 migration、輸入法手動保留／暫停期限／統計、截圖快捷鍵平衡／30 天排程／圖片貼入私有 pasteboard、bounded 動作佇列及 100,000+ 事件壓測。
+- 外部資源採樣以相同 PID 的累積 CPU time 差計算，重啟／時鐘或計數倒退不混算；單調時鐘限制期間。主程式與 Finder extension 分開，低頻額外保存系統 CPU／swap／壓縮記憶體。RSS 與 physical footprint 分開，磁碟版本以 installed_* 標示。沒有把採樣器加入 App、新增權限輪詢或記錄鍵盤文字／剪貼簿內容。
+- 以上是單元、程序內 AppKit 與離線 helper 證據。多實體螢幕、Remote／VM／Game 客戶端、實體 Alt 持有與 Event Tap 路由、真實重新登入／開機及長期資源狀態須各有本機證據；不能用模型或自動化輸入取代。新版發行包、Hosted CI、授權 UI 與資源 CSV 的實測結果記錄於該版本 release／PR。
+
+以下保留歷史版本結果。
+
+---
+
 # 0.5.3-preview.1 手動輸入法保留（2026-09-29）
 
 - `bash scripts/test.sh` 完整 **120 tests 通過**：34 InputSourceCore、27 BridgePlatform、59 BridgeCore。另 `bash scripts/build-hid-helper.sh` 的 **11 tests**、release helper build、codec self-check 與 strict signature verification 通過；沒有安裝 helper 或 driver。

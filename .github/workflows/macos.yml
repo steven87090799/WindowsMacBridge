@@ -32,6 +32,8 @@ jobs:
         run: swift --version
       - name: Unit and in-process AppKit tests
         run: bash scripts/test.sh
+      - name: Resource measurement regressions
+        run: python3 -m unittest discover -s Tests/MonitoringTests -v
       - name: Build and verify development app
         run: bash scripts/build-app.sh
       - name: Package app

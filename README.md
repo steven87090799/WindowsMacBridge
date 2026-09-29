@@ -1,10 +1,10 @@
 # WindowsMacBridge
 
-Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.3 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
+Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.4 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
 
 主專案是這個 repository；`vchewing-input-helper` 已移入 `InputSourceCore` 與 `InputSourceSupport`，不需同時執行兩個 App。[整合與遷移](Docs/ProjectIntegration.md)。
 
-## 0.5.3 快速開始
+## 0.5.4 快速開始
 
 新安裝預設啟用 Windows 快捷鍵、EventTap／所有鍵盤、底層 ABC／U.S. 的中文／唯音快捷鍵、截圖自動複製，以及 Codex 的聊天／文字 Profile。Terminal、其他 IDE、Remote、VM、Game 保留原按鍵；Finder 加強、唯音守護及切換快捷鍵預設關閉。截圖功能會註冊登入啟動，仍可能需要 macOS 核准。更新保留已存設定，可從一般頁按「套用建議預設」。
 
@@ -12,7 +12,9 @@ Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macO
 
 開啟設定時先顯示獨立「授權」頁，以簡潔清單列出輔助使用、事件輸出、App 輸入監控、螢幕錄製、Finder 擴充功能及登入啟動。**綠色勾勾表示已取得／啟用，紅色叉叉表示尚未取得／啟用**，每個缺少項目都有可單獨點擊、Tab 選取及 VoiceOver 操作的「前往開啟」按鈕，直接進入對應 macOS 設定。螢幕錄製明確標為視窗縮圖的選用權限；使用 HID 時另外顯示 helper 的輸入監控。
 
-狀態依目前版本的原生 API 檢查結果顯示，不把系統清單裡的舊開關當成已授權。App 啟動、打開設定、回到前景或按「重新檢查」時更新；鍵盤權限沿用現有引擎快照，沒有新增輪詢計時器，也不在 SwiftUI 重繪時反覆查詢螢幕錄製權限。可用 `WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge --diagnose-permissions` 取得只讀狀態報告，不會提出授權要求或啟動截圖。命令列啟動可能沿用終端機的 TCC 身分，App 的實際授權請以執行中 App 的授權頁為準。唯音守護直接使用本版本設定；舊版助手的程序偵測、避讓、結束及偏好匯入已移除。
+狀態依目前版本的原生 API 檢查結果顯示，不把系統清單裡的舊開關當成已授權。App 啟動、打開設定、回到前景或按「重新檢查」時更新；鍵盤權限變更只觸發一次原生重新查驗，沒有新增輪詢計時器，也不在 SwiftUI 重繪時反覆查詢螢幕錄製權限。可用 `WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge --diagnose-permissions` 取得只讀狀態報告，不會提出授權要求或啟動截圖。命令列啟動可能沿用終端機的 TCC 身分，App 的實際授權請以執行中 App 的授權頁為準。唯音守護直接使用本版本設定；舊版助手的程序偵測、避讓、結束及偏好匯入已移除。
+
+0.5.4 的「前往開啟」只跳到 macOS 設定，不提出隱含授權要求或註冊登入項目；按下不會得到綠勾。回到 App 或按「重新檢查」後，必須由當前 App 的只讀原生檢查確認才顯示綠勾，背景引擎快照不會覆蓋此結果。取消／拒絕仍為紅叉。macOS 若提示「結束並重新打開」才能套用權限變更，請依系統提示重啟；App 不讀取 TCC 資料庫或系統設定 UI 來推測權限。
 
 ### 輸入法手動選擇、暫停與統計
 
@@ -98,8 +100,17 @@ Windows 翻譯需於 **系統設定 → 隱私權與安全性 → 輔助使用**
 
 ## 隱私與驗證
 
+外部資源取樣工具可同步記錄主程式、Finder extension 與系統 CPU／swap／壓縮記憶體，CPU 用同一 PID 的累積時間差計算，重啟重新建立基線；RSS 與 physical footprint 分開保存。`installed_*` 欄位是取樣時磁碟上的版本識別，若程序未重啟，不能據此推定它已載入新版。此工具不加入 App 的執行路徑，結束指定期間後自動停止，檔案預設只讓使用者讀寫。以單調時鐘限制時間，系統時間調整不延長採樣。系統總 CPU 是整台 Mac 的觀測值，不能歸因為此 App 的消耗。
+
+```sh
+python3 -m unittest discover -s Tests/MonitoringTests -v
+python3 scripts/monitor-runtime.py --duration-seconds 10800 --interval-seconds 60 \
+  --footprint-every 5 --include-finder --include-system --phase background \
+  --output "$HOME/Library/Logs/WindowsMacBridge/resources-$(date -u +%Y%m%dT%H%M%SZ).csv"
+```
+
 不讀取 Unicode 輸入、不保存普通 keyDown 序列、不讀既有 Clipboard payload、不網路上傳。啟用截圖自動複製時只將剛儲存的圖片寫入 Clipboard。診斷最多 128 筆、5 分鐘、只在記憶體保存命中的規則和延遲；普通打字不記錄。唯音模組只保留來源切換狀態日誌與計數，最多兩份約 512 KiB。
 
-測試包含原始設定比對、事件配對與 100,000+ 事件壓測、裝置 ledger、Finder metadata state 和程序內 AppKit menu。這些不能證明實機 CPU/RSS、端到端延遲、Remote 相容性或完整替代完成。詳見 [2026-09-28 正式上線前驗收](Docs/ReleaseReadiness-2026-09-28.md)、[Validation](Docs/Validation.md) 與 [替代驗收](Docs/KarabinerReplacement.md)。
+測試包含原始設定比對、事件配對與 100,000+ 事件壓測、裝置 ledger、Finder metadata state、程序內 AppKit menu 與 NSTextView 的單字移動／刪除及 Shift／Home／End 選取結果。這些不能證明實體鍵盤經 Event Tap 的端到端操作、實機 CPU/RSS、Remote 相容性或完整替代完成。詳見 [2026-09-28 正式上線前驗收](Docs/ReleaseReadiness-2026-09-28.md)、[Validation](Docs/Validation.md) 與 [替代驗收](Docs/KarabinerReplacement.md)。
 
 移植輸入法模組採 MIT，聲明見 [VChewingGuard license](Resources/Licenses/VChewingGuard.txt)。Karabiner 原始碼研究的來源與架構界線記錄於替代文件；下載安裝包包含固定版原廠簽署的獨立 Driver/daemon 套件及 SDK/vendor 授權聲明。
