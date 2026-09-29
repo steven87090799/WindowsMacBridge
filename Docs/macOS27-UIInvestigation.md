@@ -53,3 +53,27 @@ Accessibility，EventTap Inactive；此结果不能代表引擎啟用後的端�
 F／Escape 的翻譯。新增兩個回歸測試，在已同步的 modifier 狀態下確認原生
 全螢幕／視窗快捷鍵保留，以及 Ctrl+C 完整放開後 F、Escape、K、Space、M、
 方向鍵保留。這些程序內測試不等同實體鍵盤或 Safari 播放器驗收。
+
+### 2026-09-29 授權後的對照
+
+使用者完成 macOS 系統驗證後，重新加入 `/Applications/WindowsMacBridge.app`，
+正常結束再開啟以刷新權限。0.4.2 build 8 顯示 Accessibility 已授權、posting／listening
+可用、EventTap Active、Secure Input OFF。沒有調整其他 App 的 TCC 或輸入設定。
+
+| 操作 | 工具 Active | 工具正常退出、程序不存在 |
+| --- | --- | --- |
+| Safari 綠色按鈕進入視窗全螢幕 | 成功，選單顯示「離開全螢幕」 | 成功，同樣確認選單 |
+| Safari 選單離開全螢幕 | 成功，回到標準視窗 | 成功，回到標準視窗 |
+| Control+Command+F | 成功進入視窗全螢幕 | 未重複此項 |
+| YouTube 聚焦播放器後 F | 成功，AX 出現全螢幕播放器 | 成功，同樣確認播放器狀態 |
+| YouTube 退出全螢幕 | Escape 成功 | 點播放器退出按鈕成功 |
+
+以上由介面自動化操作；自動化按鍵沒有增加引擎處理／翻譯計數（0/0），因此只證明
+工具運作時 UI 可以完成這些操作，不證明實體 Ctrl／modifier 經 tap 的完整路徑。
+原嗶聲未重現，尚無證據將當時故障歸因於工具或先前對話框；實體操作仍待使用者確認。
+不為未重現故障加入猜測性的全域 modifier 清除、Safari 特例或安全設定變更。
+
+同一程序另完成八次設定頁切換；15 分鐘內限定該 PID 的日誌查詢，CoreUI bundle、
+Publishing changes 與 negative size 均為零。本次沒有重現負尺寸 warning，但先前
+已取得的 108 筆 AppKit 分享指示器證據仍保留，不能將一次無警告寫成已修復系統 bug。
+結束對照後重新開啟 App，確認 Active／Secure Input OFF 並關閉設定視窗。

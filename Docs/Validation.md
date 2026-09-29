@@ -23,9 +23,26 @@
   DMG 唯讀掛載後 App signature／self-check 通過，Applications link 正確，內建兩份指南存在，
   executable 與指南逐位元比對 /Applications 安裝版相同。
 - DMG 906,059 bytes，SHA-256 `3c7fed1eb90bf3fab8f7e285cbd714cb5f808623759d7e8f74a07f8c924ae9c1`。
-  0.4.2 build 8 已放入 /Applications；最後檢查仍待 macOS 重新授權，不把安裝等同啟用成功。
-- Safari 視窗進入／離開全螢幕可在未啟用 tap 時操作成功；當時有未處理的開啟 Codex 對話框，
-  已取消。尚不能確定原回報的提示音根因，亦尚未完成 tap Active／完全退出的 YouTube 對照。
+  0.4.2 build 8 已放入 /Applications。2026-09-29 使用者完成系統驗證後重新加入本 App，
+  正常重啟後 Accessibility 已授權、event posting/listening 可用、EventTap Active、Secure Input OFF。
+- 本機授權後以介面自動化完成 Safari 對照：工具 Active 與正常結束（確認程序不存在）時，
+  綠色按鈕均能進入視窗全螢幕，選單顯示「離開全螢幕」並可退出；YouTube 聚焦播放器後
+  F 均能進入播放器全螢幕。Active 時 Escape 退出、結束工具時播放器退出按鈕操作成功。
+  Active 時原生 Control+Command+F 亦切入 Safari 視窗全螢幕。動畫結束後確認返回標準視窗。
+  **這是引擎運作期間的 UI 共存測試：自動化按鍵沒有增加 EventTap 的處理／翻譯計數（0/0），
+  因此不是實體按鍵經攔截引擎的端到端驗收。** 原回報的嗶聲未重現，根因仍未確定，
+  不將上述結果宣稱為修復了原故障。初查曾取消開啟 Codex 的對話框，沒有自動允許網站權限。
+- 同一授權後程序的設定頁依序切換八次；限定該 PID 的 15 分鐘日誌查詢未找到 CoreUI、
+  Publishing changes 或 negative size 訊息。這是本次操作結果，不推翻先前已重現的 AppKit
+  分享指示器警告。測試後恢復 App 背景執行，確認 EventTap Active、Secure Input OFF、短期診斷關閉。
+- artifact source `01c03444f199d3e2b993b82eb1ef0268ef30f745` 的 GitHub Actions
+  [run 36503942520](https://github.com/steven87090799/WindowsMacBridge/actions/runs/36503942520)
+  主程式／DMG job（91 tests）與獨立 HID 打包 job（11 helper tests）皆成功。
+- 0.4.2 授權後關閉設定視窗的 **60 秒短期**背景樣本（2026-09-29 01:18:02–01:19:02 UTC）：
+  5 筆／每 15 秒，同一 PID 57646；CPU time 1.29 → 1.33 秒，增量 0.04 秒，
+  平均單核心 CPU 0.067%。RSS 130.27 → 105.78 MiB、最大 130.27 MiB；
+  `vmmap` physical footprint 起迄皆 48.9M（保留工具原單位）。採樣程序已正常結束。
+  此樣本主要閒置，不代表三小時、實體高頻輸入或長期記憶體驗收。
 - 真實遠端依使用者要求延後，驗收流程已附在 App。實體鍵盤、IME 組字、HID、睡眠／故障恢復
   仍需逐項記錄；上一版的三小時閒置數據不能當成本版本的新三小時驗收。
 
