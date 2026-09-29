@@ -1,6 +1,7 @@
 import SwiftUI
 import BridgeCore
 import InputSourceSupport
+import InputSourceCore
 import BridgePlatform
 
 enum SettingsPage: String, CaseIterable {
@@ -229,8 +230,11 @@ struct SettingsView: View {
             Section("唯音繁體／ABC") {
                 Text(controller.sourceStatus.summary).font(.headline)
                 Toggle("啟用輸入法守護", isOn: Binding(get: { controller.sourceStatus.enabled }, set: { controller.inputSources.setEnabled($0) }))
-                explanation("預設關閉，不會改變你原本的輸入法。開啟後優先維持唯音繁體；手動切到 ABC 會維持英文，直到下次切換、重新啟用或重啟 App。唯音輸入法本體需另行安裝。")
-                LabeledContent("目前來源", value: controller.sourceStatus.current)
+                explanation("預設關閉。從狀態欄或 macOS 快捷鍵手動切換後會保持；喚醒、恢復或重啟 App 也保留目前輸入法。唯音輸入法本體需另行安裝。")
+                LabeledContent("目前輸入法", value: controller.sourceStatus.currentName)
+                if controller.sourceStatus.preservedSourceIdentifier != nil {
+                    Text("手動切換已保留").foregroundStyle(.green)
+                }
                 HStack {
                     Button("唯音繁體") { controller.inputSources.select(.vChewing) }
                     Button("ABC") { controller.inputSources.select(.abc) }
@@ -238,6 +242,27 @@ struct SettingsView: View {
                 }.disabled(controller.sourceStatus.suspension != nil)
                 explanation("前兩個按鈕立即切換輸入法；「重新偵測」用於剛安裝唯音或新增 ABC 之後。Remote、VM、Game、Disabled 或暫停期間不切換；Secure Input 期間延後切換。")
                 if let issue = controller.sourceStatus.issue { Text(issue).foregroundStyle(.orange).textSelection(.enabled) }
+            }
+            Section("暫停自動偵測") {
+                Picker("停止偵測多久", selection: Binding(get: { controller.sourceStatus.pauseDuration }, set: { controller.inputSources.setPauseDuration($0) })) {
+                    ForEach(GuardPauseDuration.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                HStack {
+                    Button("暫停偵測") { controller.inputSources.pauseDetection(controller.sourceStatus.pauseDuration) }
+                    if controller.sourceStatus.detectionPaused {
+                        Button("恢復偵測") { controller.inputSources.resumeDetection() }
+                    }
+                }
+                if controller.sourceStatus.detectionPaused {
+                    if controller.sourceStatus.detectionPauseIndefinite {
+                        Text("已暫停，直到手動恢復").foregroundStyle(.orange)
+                    } else if let until = controller.sourceStatus.detectionPauseUntil {
+                        Text("已暫停至 \(until.formatted(date: .abbreviated, time: .shortened))").foregroundStyle(.orange)
+                    }
+                } else {
+                    Text("目前沒有暫停偵測").foregroundStyle(.secondary)
+                }
+                explanation("只暫停輸入法自動修正，Windows 快捷鍵照常。到期或按恢復後保持當前輸入法；暫停狀態會保存，更新及重啟後仍有效。")
             }
             Section("輸入法切換快捷鍵") {
                 Toggle("啟用唯音／ABC 切換快捷鍵", isOn: Binding(get: { controller.sourceStatus.hotkeyEnabled }, set: { controller.inputSources.setHotkeyEnabled($0) }))
@@ -249,9 +274,30 @@ struct SettingsView: View {
                 LabeledContent("快捷鍵註冊", value: controller.sourceStatus.hotkeyRegistered ? "已註冊" : "未註冊／暫停")
                 explanation("「已註冊」才表示快捷鍵能使用；未註冊可能是功能未開啟、目前 App 使用穿透，或組合被占用。")
             }
+            Section("輸入法統計") {
+                let statistics = controller.sourceStatus.statistics
+                LabeledContent("自動修正成功", value: "\(statistics.automaticCorrections) 次")
+                LabeledContent("程式切回唯音", value: "\(statistics.vChewingRestores) 次")
+                LabeledContent("保留來源切換", value: "\(statistics.preservedExternalSelections) 次")
+                LabeledContent("切換失敗", value: "\(statistics.failedSelections) 次")
+                LabeledContent("Secure Input 等待", value: "\(statistics.secureInputWaits) 次")
+                LabeledContent("最後成功切換", value: statistics.lastSuccessfulSelection?.formatted(date: .abbreviated, time: .standard) ?? "尚無")
+                LabeledContent("記憶體", value: controller.sourceMemoryUsage)
+                if statistics.previousStatisticsImported {
+                    Text("已接續舊版唯音助手的統計資料").font(.caption).foregroundStyle(.secondary)
+                }
+                if !statistics.recentVChewingRestores.isEmpty {
+                    Text("最近程式切回唯音").font(.callout)
+                    Text(statistics.recentVChewingRestores.suffix(8).reversed().map {
+                        $0.formatted(date: .abbreviated, time: .standard)
+                    }.joined(separator: "\n")).font(.caption).foregroundStyle(.secondary)
+                }
+                Button("重新整理統計") { controller.refreshSourceStatistics() }
+                explanation("統計會持久保存，唯音恢復時間最多保留 20 筆。記憶體只在開啟此頁或按重新整理時讀取；不記錄輸入文字。")
+            }
             Section("守護等待時間") {
                 Stepper("修正延遲：\(controller.sourceStatus.debounceMilliseconds) ms", value: Binding(get: { controller.sourceStatus.debounceMilliseconds }, set: { controller.inputSources.setDebounce($0) }), in: 200...1200, step: 50)
-                explanation("預設 400 ms，範圍 200–1200 ms。輸入來源變化後等待多久才重新確認／修正；較短反應快，較長可減少與 App 切換輸入法互相干擾。只影響守護，不增加鍵盤翻譯延遲。")
+                explanation("預設 400 ms，範圍 200–1200 ms。用於程式自身切換失敗後的有界重試；手動切換會立即保留，不等待這個延遲。")
                 Stepper("啟動等待：\(controller.sourceStatus.startupDelayMilliseconds) ms", value: Binding(get: { controller.sourceStatus.startupDelayMilliseconds }, set: { controller.inputSources.setStartupDelay($0) }), in: 0...5000, step: 250)
                 explanation("預設 1500 ms，範圍 0–5000 ms。App 啟動後先等待輸入法服務準備，再開始守護。登入時來源偵測不穩，可增加等待；Windows 快捷鍵不受此值影響。")
             }
@@ -267,6 +313,7 @@ struct SettingsView: View {
                 explanation("守護日誌只含來源 ID、切換結果與狀態；最多兩個約 512 KiB 檔案，不保存輸入文字。")
             }
         }.formStyle(.grouped)
+        .onAppear { controller.refreshSourceStatistics() }
     }
 
     private var profiles: some View {

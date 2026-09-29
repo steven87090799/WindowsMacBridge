@@ -18,6 +18,24 @@ public enum SourceChangeResponse: Equatable, Sendable {
     case scheduleDebounce(milliseconds: Int)
 }
 
+public enum SourceNotificationDecision: Equatable, Sendable {
+    case ownSelectionConfirmed
+    case preserveExternalSelection
+    case unchanged
+
+    /// TIS provides no initiator. A different notification cancels pending
+    /// intent even when the user has selected the same source they started on.
+    public static func evaluate(current: String?, pendingTarget: String?,
+                                waitingForExplicitSelection: Bool, lastObserved: String?) -> Self {
+        guard let current else { return .unchanged }
+        if current == pendingTarget { return .ownSelectionConfirmed }
+        if current != lastObserved || pendingTarget != nil || waitingForExplicitSelection {
+            return .preserveExternalSelection
+        }
+        return .unchanged
+    }
+}
+
 /// The small, deterministic policy core. All macOS event handling and TIS calls
 /// live in the app target; this type makes desired-state and retry rules testable.
 public struct GuardStateMachine: Sendable {
@@ -25,6 +43,7 @@ public struct GuardStateMachine: Sendable {
     public private(set) var isEnabled: Bool
     public private(set) var debounceMilliseconds: Int
     public let maximumSelectionAttempts: Int
+    public private(set) var preservedSelection: ObservedInputSource?
     private(set) var selectionAttempts = 0
     private var hasMismatchTransaction = false
 
@@ -46,21 +65,26 @@ public struct GuardStateMachine: Sendable {
 
     @discardableResult
     public mutating func request(_ source: DesiredInputSource) -> DesiredInputSource {
+        preservedSelection = nil
         desired = source
         selectionAttempts = 0
         hasMismatchTransaction = true
         return desired
     }
 
-    /// Resuming deliberately restores vChewing priority; the last ABC choice is
-    /// never persisted across app launches or a Guard pause/resume cycle.
+    /// Enabling detection keeps the user's last choice. Only an explicit source
+    /// request releases a preserved external selection.
     public mutating func setEnabled(_ enabled: Bool) {
         isEnabled = enabled
         selectionAttempts = 0
         hasMismatchTransaction = false
-        if enabled {
-            desired = .vChewing
-        }
+    }
+
+    public mutating func preserveExternalSelection(_ source: ObservedInputSource) {
+        preservedSelection = source
+        if source == .vChewing { desired = .vChewing }
+        if source == .abc { desired = .abc }
+        selectionSucceeded()
     }
 
     public mutating func setDebounce(milliseconds: Int) {
@@ -72,6 +96,9 @@ public struct GuardStateMachine: Sendable {
         isInternalSwitch: Bool
     ) -> SourceChangeResponse {
         guard isEnabled, !isInternalSwitch else { return .ignored }
+        if let preservedSelection {
+            return current == preservedSelection ? .alreadySatisfied : .ignored
+        }
         guard current != desired.observedSource else {
             selectionAttempts = 0
             hasMismatchTransaction = false
@@ -85,7 +112,7 @@ public struct GuardStateMachine: Sendable {
     /// Returns the 1-based attempt number, or nil once the bounded retry budget
     /// is exhausted. Delays after attempt one follow 400, 800, 1600 ms.
     public mutating func beginSelectionAttempt() -> Int? {
-        guard isEnabled, hasMismatchTransaction, selectionAttempts < maximumSelectionAttempts else { return nil }
+        guard isEnabled, preservedSelection == nil, hasMismatchTransaction, selectionAttempts < maximumSelectionAttempts else { return nil }
         selectionAttempts += 1
         return selectionAttempts
     }

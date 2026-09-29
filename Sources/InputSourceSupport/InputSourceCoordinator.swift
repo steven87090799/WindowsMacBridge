@@ -13,6 +13,7 @@ public struct InputSourceStatus: Equatable, Sendable {
     public var desired = DesiredInputSource.vChewing
     public var summary = "輸入法守護未啟動"
     public var current = "unknown"
+    public var currentName = "尚未偵測"
     public var traditional = "尚未偵測"
     public var abc = "尚未偵測"
     public var issue: String?
@@ -22,6 +23,12 @@ public struct InputSourceStatus: Equatable, Sendable {
     public var loginStatus = "Off"
     public var loginRegistered = false
     public var loginIssue: String?
+    public var detectionPaused = false
+    public var detectionPauseUntil: Date?
+    public var detectionPauseIndefinite = false
+    public var pauseDuration = GuardPauseDuration.fifteenMinutes
+    public var preservedSourceIdentifier: String?
+    public var statistics = InputSourceStatistics()
     public init() {}
 }
 
@@ -105,6 +112,9 @@ public struct InputSourceStatus: Equatable, Sendable {
         AppSettings.setDebounce(milliseconds); controller.debounceSettingChanged(); emit()
     }
     public func setStartupDelay(_ milliseconds: Int) { AppSettings.setStartupDelay(milliseconds); emit() }
+    public func setPauseDuration(_ duration: GuardPauseDuration) { AppSettings.setPauseDuration(duration); emit() }
+    public func pauseDetection(_ duration: GuardPauseDuration) { controller.pauseDetection(duration); emit() }
+    public func resumeDetection() { controller.resumeDetection(); emit() }
     public func rediscover() { issue = nil; controller.refreshAndReconcile(reason: "User refreshed input sources"); emit() }
     public func setLoginEnabled(_ enabled: Bool) {
         do { try LoginItemManager.setEnabled(enabled); loginIssue = nil }
@@ -130,7 +140,9 @@ public struct InputSourceStatus: Equatable, Sendable {
         result.desired = controller.desired
         result.suspension = suspension
         result.summary = suspension?.rawValue ?? controller.statusText
-        result.current = controller.inputSources.currentIdentifier ?? "unknown"
+        let current = controller.inputSources.currentSource()
+        result.current = current.identifier ?? "unknown"
+        result.currentName = current.localizedName ?? result.current
         result.traditional = controller.inputSources.discovery.traditional?.summary ?? "未找到唯音繁體"
         result.abc = controller.inputSources.discovery.abc?.summary ?? "未找到 ABC"
         result.issue = issue ?? hotkeyIssue ?? (controller.isEnabled ? controller.issueDescription : nil)
@@ -139,10 +151,18 @@ public struct InputSourceStatus: Equatable, Sendable {
         result.loginStatus = LoginItemManager.statusDescription
         result.loginRegistered = LoginItemManager.isRegistered
         result.loginIssue = loginIssue
+        result.detectionPaused = controller.isDetectionPaused
+        result.detectionPauseUntil = controller.detectionPauseUntil
+        result.detectionPauseIndefinite = controller.detectionPauseIndefinite
+        result.pauseDuration = AppSettings.pauseDuration
+        result.preservedSourceIdentifier = controller.preservedSourceIdentifier
+        result.statistics = DiagnosticMetrics.shared.statistics
         return result
     }
     public var diagnostics: String { controller.diagnostics + "\nHost policy: \(suspension?.rawValue ?? "Local")\nHotkey registered: \(hotkeyRegistered)" }
     public var recentLog: String { FileLogger.shared.recentText() }
+    /// Resource measurements run only when settings are opened or refreshed.
+    public var memoryUsageDescription: String { DiagnosticMetrics.currentMemorySnapshot()?.description ?? "無法讀取" }
 
     public static func acquireSingleInstance() -> Bool {
         if SingleInstanceGuard.shared.acquire() { return true }

@@ -13,6 +13,7 @@ import FinderSync
     let inputSources = InputSourceCoordinator()
     @Published var sourceStatus = InputSourceStatus()
     @Published var sourceDiagnostics = ""
+    @Published var sourceMemoryUsage = "尚未讀取"
     @Published var sourceLog = ""
     @Published var status = EngineStatus()
     @Published var context = ApplicationContext()
@@ -253,6 +254,10 @@ import FinderSync
         sourceDiagnostics = inputSources.diagnostics
         sourceLog = inputSources.recentLog
         sourceStatus = inputSources.status
+    }
+    func refreshSourceStatistics() {
+        sourceStatus = inputSources.status
+        sourceMemoryUsage = inputSources.memoryUsageDescription
     }
     private func publish() {
         var config = EngineConfiguration()

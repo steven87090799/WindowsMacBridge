@@ -3,6 +3,7 @@ import ApplicationServices
 import SwiftUI
 import BridgePlatform
 import InputSourceSupport
+import InputSourceCore
 
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     private var controller: BridgeController!
@@ -94,6 +95,16 @@ import InputSourceSupport
         label("輸入法：\(controller.sourceStatus.summary)", in: menu)
         let guardItem = action("啟用唯音輸入法守護", #selector(toggleGuard), in: menu)
         guardItem.state = controller.sourceStatus.enabled ? .on : .off
+        let detectionPause = NSMenuItem(title: "暫停輸入法偵測", action: nil, keyEquivalent: "")
+        let detectionMenu = NSMenu()
+        for duration in GuardPauseDuration.allCases {
+            let entry = action(duration.title, #selector(pauseSourceDetection(_:)), in: detectionMenu)
+            entry.representedObject = duration.rawValue
+        }
+        detectionPause.submenu = detectionMenu; menu.addItem(detectionPause)
+        if controller.sourceStatus.detectionPaused {
+            action("恢復輸入法偵測", #selector(resumeSourceDetection), in: menu)
+        }
         let chinese = action("切換至唯音繁體", #selector(selectChinese), in: menu)
         let english = action("切換至 ABC", #selector(selectEnglish), in: menu)
         chinese.isEnabled = controller.sourceStatus.suspension == nil
@@ -113,6 +124,11 @@ import InputSourceSupport
     @objc private func toggleGuard() { controller.inputSources.setEnabled(!controller.sourceStatus.enabled) }
     @objc private func selectChinese() { controller.inputSources.select(.vChewing) }
     @objc private func selectEnglish() { controller.inputSources.select(.abc) }
+    @objc private func pauseSourceDetection(_ item: NSMenuItem) {
+        guard let raw = item.representedObject as? String, let duration = GuardPauseDuration(rawValue: raw) else { return }
+        controller.inputSources.pauseDetection(duration)
+    }
+    @objc private func resumeSourceDetection() { controller.inputSources.resumeDetection() }
     @objc private func toggleEnabled() { controller.setEnabled(!controller.settings.enabled) }
     @objc private func resume() { controller.resume() }
     @objc private func pauseTimed(_ item: NSMenuItem) { controller.pause(minutes: item.tag) }

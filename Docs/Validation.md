@@ -1,3 +1,16 @@
+# 0.5.3-preview.1 手動輸入法保留（2026-09-29）
+
+- `bash scripts/test.sh` 完整 **120 tests 通過**：34 InputSourceCore、27 BridgePlatform、59 BridgeCore。另 `bash scripts/build-hid-helper.sh` 的 **11 tests**、release helper build、codec self-check 與 strict signature verification 通過；沒有安裝 helper 或 driver。
+- 新回歸覆蓋外部 ABC／第三方來源保留、待處理重試被取消、重新啟用保留選擇、明確請求釋放保留、延遲自己的通知、快速選回前一來源及 Secure Input 意圖被外部通知取消。
+- 暫停測試覆蓋絕對期限、睡眠／重啟不延長、直到手動恢復、重設期限、到期不釋放已保留的 ABC；實作只排一個帶 generation 的到期工作，沒有新增週期輪詢。
+- 統計使用隔離 UserDefaults suite 測試一次性合併、重開不重複、舊設定不匯入、日期／紀錄排序與 20 筆上限、手動保留與恢復分開計數、損壞值略過、Int 飽和防溢位、缺少舊資料保留現有統計。
+- 版本改為 0.5.3 build 13；App 與 Finder extension 由同一 Info.plist 版本建置。README、包內 UserGuide 與整合說明已同步手動選擇、暫停與統計行為。
+- 原本 Windows 引擎、Event Tap callback、Profile 及 Remote／VM／Game 規則沒有改動。以上是單元／程序內 AppKit 與離線 helper 證據；實體鍵盤、IME 組字、跨重新登入／開機、Remote／VM／HID 及長期資源量測需獨立驗收。發行包、Hosted CI 與本機 UI 證據以該版本 release／PR 紀錄為準。
+
+以下保留歷史版本結果。
+
+---
+
 # 0.4.2-preview.1 拖曳安裝版（2026-09-28／29）
 
 - 使用者不申請付費 Developer ID，改為免費個人測試版；ad-hoc 簽章與無公證仍如實揭露。

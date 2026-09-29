@@ -1,4 +1,4 @@
-# WindowsMacBridge 0.5.2：唯音輔助整合
+# WindowsMacBridge 0.5.3：唯音輔助整合
 
 ## 主專案與來源
 
@@ -46,6 +46,10 @@ WindowsMacBridge executable (Swift 6 / MainActor)
 
 切換輸入來源前先發布 `selectionInProgress` 關閉新快捷鍵翻譯，等待 TIS 通知或驗證結果。TIS 通知會更新 keyboard layout cache；不再由 UI timer 每 0.5 秒查詢 TIS。返回 ABC 時，現有鍵盤引擎要求 modifier neutral 才接受新翻譯。TIS／Workspace 通知與鍵盤事件並非 macOS 原子交易，仍存在短暫通知競態，不能宣稱完整消除。
 
+0.5.3 保守保留所有外部來源變更。`preservedSelection` 取消 state machine 的重試交易；adapter 同時取消 debounce、verification、startup、Secure Input 意圖與衝突冷卻。TIS 通知不提供發起者，不能可靠區分手動與系統切換；即使外部選回前一來源、而本程式確認尚未到達，也優先取消待處理請求。啟動／喚醒／恢復採用實際當前 TIS 來源，只有本程式的明確請求釋放保留狀態。通知只讀來源 metadata，沒有新增逐鍵觀察。
+
+輸入法偵測暫停使用 `GuardDetectionPause` 的絕對 Date／indefinite，持久保存在 `inputSource.pause*`；到期用一個可取消的 DispatchWorkItem 與 generation 驗證，重新啟動／喚醒會檢查是否已到期。沒有倒數 timer 或額外輪詢。這與原本停止全部快捷鍵的 global pause 分開，原本 Profile／pass-through／Event Tap callback 不變。
+
 每次真正選擇來源，以及 Carbon hotkey callback，都再次檢查當下前景 Profile 與暫停狀態。NSWorkspace 快取僅供鍵盤 hot path 使用；昂貴的即時檢查位於低頻 TIS 操作前。切換到遠端時 Carbon unregister 依 Workspace 通知處理，通知到達前的極短期間仍可能吃掉已註冊組合，這是實機驗收項目。瀏覽器內遠端、Coherence、未知 Client 需使用者指定整個 App Profile。
 
 ## 設定、遷移與登入項目
@@ -54,6 +58,7 @@ WindowsMacBridge executable (Swift 6 / MainActor)
 - 初次使用：Windows Mode 與截圖自動複製預設開啟；唯音守護、全域切換快捷鍵預設關閉。截圖功能註冊登入項目；授權清單顯示原生檢查結果。
 - 唯音功能不需要 Accessibility。Windows 快捷鍵才需原有權限流程。
 - 本版本直接使用自己的輸入法偏好；舊版助手程序偵測、避讓、結束與偏好匯入已移除。正式使用時把 App 放到固定 Applications 路徑，再設定一個登入項目。
+- 統計單獨接續：`InputSourceStatisticsStore` 首次從 `com.local.VChewingGuard` 的六個 `diagnostics.*` 欄位合併計數、日期與最多 20 筆去重紀錄，使用完成標記避免重複。不讀用戶輸入、不匯入舊偏好、不依賴舊程式是否安裝或執行。原有 `inputSource.diagnostics.*` 計數鍵保留；不需要更改 Windows Settings schema。
 - 唯音輸入法本體仍需另行安裝；整合的是輔助工具，不是重製或內嵌輸入法。
 
 ## 隱私與驗證邊界

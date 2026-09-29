@@ -1,10 +1,10 @@
 # WindowsMacBridge
 
-Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.2 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
+Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.3 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
 
 主專案是這個 repository；`vchewing-input-helper` 已移入 `InputSourceCore` 與 `InputSourceSupport`，不需同時執行兩個 App。[整合與遷移](Docs/ProjectIntegration.md)。
 
-## 0.5.2 快速開始
+## 0.5.3 快速開始
 
 新安裝預設啟用 Windows 快捷鍵、EventTap／所有鍵盤、底層 ABC／U.S. 的中文／唯音快捷鍵、截圖自動複製，以及 Codex 的聊天／文字 Profile。Terminal、其他 IDE、Remote、VM、Game 保留原按鍵；Finder 加強、唯音守護及切換快捷鍵預設關閉。截圖功能會註冊登入啟動，仍可能需要 macOS 核准。更新保留已存設定，可從一般頁按「套用建議預設」。
 
@@ -13,6 +13,14 @@ Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macO
 開啟設定時先顯示獨立「授權」頁，以簡潔清單列出輔助使用、事件輸出、App 輸入監控、螢幕錄製、Finder 擴充功能及登入啟動。**綠色勾勾表示已取得／啟用，紅色叉叉表示尚未取得／啟用**，每個缺少項目都有可單獨點擊、Tab 選取及 VoiceOver 操作的「前往開啟」按鈕，直接進入對應 macOS 設定。螢幕錄製明確標為視窗縮圖的選用權限；使用 HID 時另外顯示 helper 的輸入監控。
 
 狀態依目前版本的原生 API 檢查結果顯示，不把系統清單裡的舊開關當成已授權。App 啟動、打開設定、回到前景或按「重新檢查」時更新；鍵盤權限沿用現有引擎快照，沒有新增輪詢計時器，也不在 SwiftUI 重繪時反覆查詢螢幕錄製權限。可用 `WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge --diagnose-permissions` 取得只讀狀態報告，不會提出授權要求或啟動截圖。命令列啟動可能沿用終端機的 TCC 身分，App 的實際授權請以執行中 App 的授權頁為準。唯音守護直接使用本版本設定；舊版助手的程序偵測、避讓、結束及偏好匯入已移除。
+
+### 輸入法手動選擇、暫停與統計
+
+從 macOS 狀態欄或系統快捷鍵切換輸入法後，App 立即保留目前選擇並取消待處理的自動修正、重試及 Secure Input 切換意圖。ABC 和第三方輸入法都適用；重新啟用守護、重新偵測、喚醒及重啟 App 也採用當前來源。只有明確使用 WindowsMacBridge 的來源按鈕或切換快捷鍵，才建立新的切換請求。TIS 通知無法判斷是使用者、系統還是另一個 App 發起，因此所有非本程式確認的切換都保守保留，不讀取鍵盤文字來猜測意圖。
+
+「輸入法 → 暫停自動偵測」可選 **5／15／30 分鐘、1 小時、直到手動恢復**，Menu Bar 也提供相同選項。此項只暫停輸入法自動修正，Windows 快捷鍵與既有 Profile 規則維持原設定。暫停截止時間和選項持久保存；使用一次性到期工作，沒有倒數輪詢。更新、重啟或睡眠不延長截止時間，到期或恢復後仍保持目前輸入法。
+
+「輸入法 → 輸入法統計」顯示自動修正成功、程式切回唯音、保留來源切換、失敗、Secure Input 等待、最後成功時間與近期恢復紀錄。首次執行 0.5.3 時，只從舊版 `com.local.VChewingGuard` 的六個 `diagnostics.*` 統計欄位接續資料：計數與本版本相加、成功時間取最新、恢復紀錄合併去重並保留最近 20 筆；匯入完成標記避免重啟重複累加。不存在或損壞的舊資料會略過，現有設定與統計保留。這不會恢復舊版程序偵測或匯入舊版偏好。記憶體 Resident／Physical footprint 只在開啟此頁、按重新整理或讀取診斷時量測，不持續採樣。
 
 ### Windows 視窗、Finder 與文字操作
 
