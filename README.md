@@ -1,12 +1,23 @@
 # WindowsMacBridge
 
-Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.4.3 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
+Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.0 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
 
 主專案是這個 repository；`vchewing-input-helper` 已移入 `InputSourceCore` 與 `InputSourceSupport`，不需同時執行兩個 App。[整合與遷移](Docs/ProjectIntegration.md)。
 
-## 0.4.3 快速開始
+## 0.5.0 快速開始
 
 新安裝預設啟用 Windows 快捷鍵、EventTap／所有鍵盤、底層 ABC／U.S. 的中文／唯音快捷鍵、截圖自動複製，以及 Codex 的聊天／文字 Profile。Terminal、其他 IDE、Remote、VM、Game 保留原按鍵；Finder 加強、唯音守護及切換快捷鍵預設關閉。截圖功能會註冊登入啟動，仍可能需要 macOS 核准。更新保留已存設定，可從一般頁按「套用建議預設」。
+
+### Windows 視窗、Finder 與文字操作
+
+一般設定提供獨立開關：逐視窗 Alt+Tab、視窗縮圖、Finder 檔案操作、Finder 永久刪除、Windows 文字游標、Alt+F4、以及 Alt+F4 最後視窗退出 App。既有文字游標翻譯預設保持開啟；新的 Alt+Tab、Finder、Alt+F4 與永久刪除預設關閉。設定 schema v2 會讀取 v1 資料，保留原先的 App Profile、後端、Finder、截圖與輸入法選擇。
+
+- Alt+Tab 在 EventTap 的 Default macOS Profile 中列出每個視窗的 App 圖示和標題，包含最小化視窗；Alt+Shift+Tab 反向，放開 Alt 才啟用。啟用後以 Accessibility 視窗焦點通知維護 MRU，首次啟用時未觀察到的舊歷史以視窗目前的前後順序補足。選配縮圖在開啟且取得螢幕錄製權限後，才使用 ScreenCaptureKit 按需擷取最多 12 個視窗。無權限時仍可用圖示和標題切換。
+- Finder Mode 的 Ctrl+X／Ctrl+V 透過 Finder 原生複製與 `⌥⌘V` 移動；Enter、F2、Delete、Backspace、Ctrl+Shift+N、Ctrl+L 分別開啟、改名、移到垃圾桶、上一層、新增資料夾、前往資料夾。Shift+Delete 必須另行啟用，每次顯示確認，再交給 Finder 處理。文字欄位及未知焦點採保守處理。
+- Finder 右鍵路徑選單由內含的 Finder Sync 擴充功能提供，使用 Finder 的 selected/targeted URL。可複製目前資料夾或選取項目的 POSIX 路徑，也可顯示路徑後按「複製」。只在按下複製時才寫入剪貼簿。首次安裝請到「系統設定 → 一般 → 登入項目與擴充功能 → Finder」啟用 WindowsMacBridge Finder；Finder Mode 關閉時選單不顯示。
+- Windows 文字游標提供 Ctrl+左右方向鍵按單字移動、Ctrl+Backspace／Delete 按單字刪除、Home／End 行首行尾、Ctrl+Home／End 文件首尾，並支援 Shift 選取組合。Alt+F4 發出 App 原生 `⌘W`；選配最後一個主要視窗時發出 `⌘Q`，保留 App 的未儲存內容確認。
+
+這些新動作只在本機 Default macOS Profile 啟用；Terminal、IDE、Remote、VM、Game 維持原樣通過。鍵盤 callback 只處理有界狀態並將 AX、Finder、AppKit 工作送到最多 16 筆的動作佇列。視窗 MRU 用通知更新，縮圖只在顯示切換器時擷取，沒有新增加的長期輪詢。HID 後端保留既有實體鍵位交換語意；新視窗切換器只適用 EventTap。設定頁以勾選顯示當下輔助使用、事件輸出、輸入監控及縮圖所需螢幕錄製權限，缺少時可直接開啟對應系統設定，仍須由使用者在 macOS 核准。
 
 ## 截圖自動複製
 

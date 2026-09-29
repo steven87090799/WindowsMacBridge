@@ -123,10 +123,14 @@ public enum EventDecision: Equatable, Sendable {
 }
 
 public enum FinderAction: String, Sendable, CaseIterable {
-    case copy, cut, paste, open, rename, trash
+    case copy, cut, paste, open, rename, trash, permanentDelete, parentFolder, newFolder, goToFolder
 }
 public enum SystemAction: String, Sendable, CaseIterable { case openFinder, activityMonitor }
+public enum WindowAction: Equatable, Sendable {
+    case advance(reverse: Bool), commit, close
+}
 public enum ShortcutAction: Equatable, Sendable {
     case finder(FinderAction)
     case system(SystemAction)
+    case window(WindowAction)
 }

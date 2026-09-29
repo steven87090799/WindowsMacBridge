@@ -91,4 +91,18 @@ import BridgePlatform
         settings.overrides.removeValue(forKey: "com.openai.codex")
         #expect(try ApplicationRegistry().mode(for: "com.openai.codex", overrides: settings.overrides) == .ide)
     }
+    @Test func schemaOneMigratesWithoutLosingChoices() throws {
+        let (name, defaults) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let legacy = Data(#"{"schemaVersion":1,"enabled":false,"overrides":{"example.remote":"remoteWindows"},"finderEnabled":true,"allowIMEShortcuts":false,"screenshotAutoCopy":false}"#.utf8)
+        defaults.set(legacy, forKey: "bridge.settings.v1")
+        let store = SettingsStore(defaults: defaults)
+        #expect(store.settings.schemaVersion == 2)
+        #expect(!store.settings.enabled && store.settings.finderEnabled)
+        #expect(store.settings.overrides["example.remote"] == .remoteWindows)
+        #expect(!store.settings.screenshotAutoCopy && !store.settings.allowIMEShortcuts)
+        #expect(store.settings.textNavigationEnabled && !store.settings.windowSwitcherEnabled)
+        store.update { $0.altF4Enabled = true }
+        #expect(SettingsStore(defaults: defaults).settings.altF4Enabled)
+    }
 }

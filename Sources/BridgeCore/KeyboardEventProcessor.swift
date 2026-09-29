@@ -15,6 +15,9 @@ public struct KeyboardEventProcessor: Sendable {
     private var layoutSupported = false
     private var controlsEnabled = true
     private var finderEnabled = false
+    private var finderPermanentDeleteEnabled = false
+    private var textNavigationEnabled = true
+    private var altF4Enabled = false
     public private(set) var manualPassThrough = false
     private var awaitingNeutral = true
     private var pressCount = 0
@@ -28,7 +31,10 @@ public struct KeyboardEventProcessor: Sendable {
 
     public mutating func configure(context newContext: ApplicationContext, enabled: Bool,
                                    layoutSupported: Bool, controlsEnabled: Bool = true,
-                                   finderEnabled: Bool = false) {
+                                   finderEnabled: Bool = false,
+                                   finderPermanentDeleteEnabled: Bool = false,
+                                   textNavigationEnabled: Bool = true,
+                                   altF4Enabled: Bool = false) {
         let changedContext = context.processID != newContext.processID ||
             context.bundleID != newContext.bundleID || context.mode != newContext.mode ||
             context.isBrowser != newContext.isBrowser
@@ -37,11 +43,15 @@ public struct KeyboardEventProcessor: Sendable {
             for i in presses.indices where presses[i]?.rule != nil { presses[i]?.suppress = true }
         }
         if changedContext || self.enabled != enabled || self.layoutSupported != layoutSupported ||
-            self.finderEnabled != finderEnabled {
+            self.finderEnabled != finderEnabled ||
+            self.finderPermanentDeleteEnabled != finderPermanentDeleteEnabled ||
+            self.textNavigationEnabled != textNavigationEnabled || self.altF4Enabled != altF4Enabled {
             awaitingNeutral = true
         }
         context = newContext; self.enabled = enabled; self.layoutSupported = layoutSupported
         self.controlsEnabled = controlsEnabled; self.finderEnabled = finderEnabled
+        self.finderPermanentDeleteEnabled = finderPermanentDeleteEnabled
+        self.textNavigationEnabled = textNavigationEnabled; self.altF4Enabled = altF4Enabled
     }
 
     public mutating func resumeManualPassThrough() { manualPassThrough = false; invalidate() }
@@ -156,16 +166,44 @@ public struct KeyboardEventProcessor: Sendable {
             return system
         }
         guard context.mode.allowsTranslation else { return nil }
+        if altF4Enabled && event.keyCode == 118 && event.modifiers == .option {
+            return WindowsCompatibilityRules.altF4
+        }
         if context.bundleID == "com.apple.finder" {
-            if finderEnabled { return RuleEngine.finder.match(keyCode: event.keyCode, modifiers: event.modifiers) }
+            if finderEnabled {
+                if let rule = RuleEngine.finder.match(keyCode: event.keyCode, modifiers: event.modifiers) {
+                    return rule
+                }
+                if let rule = RuleEngine.finderExtras.match(keyCode: event.keyCode, modifiers: event.modifiers) {
+                    if rule.action == .finder(.permanentDelete) && !finderPermanentDeleteEnabled { return nil }
+                    return rule
+                }
+                if textNavigationEnabled {
+                    if let extra = RuleEngine.textNavigation.match(keyCode: event.keyCode, modifiers: event.modifiers) { return extra }
+                    if let general = rules.match(keyCode: event.keyCode, modifiers: event.modifiers),
+                       Self.isTextNavigation(general) { return general }
+                }
+                return nil
+            }
             // Keep the old, non-stateful fallback until Finder actions are enabled.
             if event.keyCode == 7 { return nil }
-            return rules.match(keyCode: event.keyCode, modifiers: event.modifiers)
+            return localRule(event)
         }
         if context.isBrowser, let browser = RuleEngine.browser.match(keyCode: event.keyCode, modifiers: event.modifiers) {
             return browser
         }
-        return rules.match(keyCode: event.keyCode, modifiers: event.modifiers)
+        return localRule(event)
+    }
+
+    private func localRule(_ event: KeyboardEvent) -> ShortcutRule? {
+        if textNavigationEnabled, let rule = RuleEngine.textNavigation.match(keyCode: event.keyCode, modifiers: event.modifiers) { return rule }
+        let rule = rules.match(keyCode: event.keyCode, modifiers: event.modifiers)
+        if !textNavigationEnabled, let rule, Self.isTextNavigation(rule) { return nil }
+        return rule
+    }
+
+    private static func isTextNavigation(_ rule: ShortcutRule) -> Bool {
+        (32...41).contains(Int(rule.id.split(separator: ".").last ?? "") ?? -1)
     }
 
     private func rewrite(_ event: KeyboardEvent, rule: ShortcutRule) -> EventDecision {

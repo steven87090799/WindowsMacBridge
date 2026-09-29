@@ -12,6 +12,12 @@ public struct EngineConfiguration: Sendable {
     public var restartToken: UInt64 = 0
     public var keyboardScope: KeyboardScope = .builtInAndApple834
     public var finderEnabled = false
+    public var finderPermanentDeleteEnabled = false
+    public var textNavigationEnabled = true
+    public var windowSwitcherEnabled = false
+    public var windowThumbnailsEnabled = false
+    public var altF4Enabled = false
+    public var altF4QuitLastWindow = false
     public init() {}
 }
 
@@ -76,12 +82,15 @@ public final class InputEngine: @unchecked Sendable {
     private var publishedDiagnosticRevision: UInt64 = .max
     private var diagnosticDeadline: TimeInterval = 0
     private var actionEpoch: UInt64 = 0
+    private var altTabHeld = false
+    private var altTabActive = false
 
     public init() {
         let marker = Int64.random(in: 1...Int64.max)
         self.marker = marker; actions = ShortcutActionDispatcher(marker: marker)
         // Compile every table before an event callback can run.
-        _ = RuleEngine.browser; _ = RuleEngine.finder; _ = RuleEngine.system
+        _ = RuleEngine.browser; _ = RuleEngine.finder; _ = RuleEngine.finderExtras
+        _ = RuleEngine.textNavigation; _ = RuleEngine.system
     }
     /// Invoke once per instance, by the owning lifecycle coordinator.
     public func start() { Thread { [self] in run() }.start() }
@@ -91,6 +100,12 @@ public final class InputEngine: @unchecked Sendable {
         let cancel = previous.context != configuration.context || previous.enabled != configuration.enabled ||
             previous.sessionActive != configuration.sessionActive || previous.keyboardScope != configuration.keyboardScope ||
             previous.finderEnabled != configuration.finderEnabled || previous.layoutSupported != configuration.layoutSupported ||
+            previous.finderPermanentDeleteEnabled != configuration.finderPermanentDeleteEnabled ||
+            previous.textNavigationEnabled != configuration.textNavigationEnabled ||
+            previous.windowSwitcherEnabled != configuration.windowSwitcherEnabled ||
+            previous.windowThumbnailsEnabled != configuration.windowThumbnailsEnabled ||
+            previous.altF4Enabled != configuration.altF4Enabled ||
+            previous.altF4QuitLastWindow != configuration.altF4QuitLastWindow ||
             previous.restartToken != configuration.restartToken
         mailbox.configuration = configuration; mailbox.revision &+= 1
         mailbox.lock.unlock()
@@ -123,6 +138,7 @@ public final class InputEngine: @unchecked Sendable {
         if changed { configuration = mailbox.configuration; revision = mailbox.revision }
         mailbox.lock.unlock()
         if changed {
+            altTabActive = false
             if lastRestart != configuration.restartToken {
                 lastRestart = configuration.restartToken
                 status.fault = nil; status.emergencyPaused = false
@@ -153,10 +169,18 @@ public final class InputEngine: @unchecked Sendable {
             status.fault == nil && !status.emergencyPaused && scopeSupported
         processor.configure(context: configuration.context,
                             enabled: active, layoutSupported: configuration.layoutSupported,
-                            controlsEnabled: active, finderEnabled: configuration.finderEnabled)
+                            controlsEnabled: active, finderEnabled: configuration.finderEnabled,
+                            finderPermanentDeleteEnabled: configuration.finderPermanentDeleteEnabled,
+                            textNavigationEnabled: configuration.textNavigationEnabled,
+                            altF4Enabled: configuration.altF4Enabled)
         if !actions.update(context: configuration.context,
                            enabled: active && configuration.layoutSupported && !processor.manualPassThrough,
-                           finderEnabled: configuration.finderEnabled, epoch: actionEpoch) {
+                           finderEnabled: configuration.finderEnabled,
+                           finderPermanentDeleteEnabled: configuration.finderPermanentDeleteEnabled,
+                           windowSwitcherEnabled: configuration.windowSwitcherEnabled && active && !processor.manualPassThrough,
+                           windowThumbnailsEnabled: configuration.windowThumbnailsEnabled,
+                           altF4QuitLastWindow: configuration.altF4QuitLastWindow,
+                           epoch: actionEpoch) {
             processor.invalidate()
         }
     }
@@ -247,6 +271,7 @@ public final class InputEngine: @unchecked Sendable {
 
     private func handle(_ type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            altTabHeld = false; altTabActive = false
             processor.invalidate()
             actionEpoch &+= 1
             if configuration.enabled && configuration.sessionActive && status.accessibility &&
@@ -275,6 +300,35 @@ public final class InputEngine: @unchecked Sendable {
         let normalized = KeyboardEvent(phase, keyCode: key, modifiers: flags,
                                        isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
                                        modifierSide: side, modifierDown: down)
+        // A Tab release belongs to a previously consumed press even if focus, profile
+        // or Alt state changed after the selection was committed.
+        if key == 48 && phase == .up && altTabHeld {
+            altTabHeld = false
+            return nil
+        }
+        if key == 48 && phase == .down && altTabHeld && !flags.contains(.option) {
+            return nil
+        }
+        if WindowSwitchPolicy.intercepts(mode: configuration.context.mode,
+                                         enabled: configuration.windowSwitcherEnabled && configuration.enabled,
+                                         layoutSupported: configuration.layoutSupported,
+                                         inputReady: !processor.isAwaitingNeutral && processor.modifiers.synchronized,
+                                         manualPassThrough: processor.manualPassThrough,
+                                         emergencyPaused: status.emergencyPaused) {
+            if key == 48 && (phase == .down || phase == .up) {
+                if phase == .down && flags == .option || phase == .down && flags == [.option, .shift] {
+                    if actions.submit(.window(.advance(reverse: flags.contains(.shift))), context: configuration.context) {
+                        altTabHeld = true; altTabActive = true; return nil
+                    }
+                }
+            }
+            if phase == .flagsChanged && altTabActive && !flags.contains(.option) {
+                altTabActive = false
+                if !actions.submit(.window(.commit), context: configuration.context) {
+                    actions.cancelSwitcherFromCallback()
+                }
+            }
+        }
         let decision = processor.process(normalized)
         var result: Unmanaged<CGEvent>? = Unmanaged.passUnretained(event)
         switch decision {

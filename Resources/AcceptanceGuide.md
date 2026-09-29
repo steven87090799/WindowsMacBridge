@@ -26,7 +26,7 @@
 | 左右 Ctrl／Shift | 分別測試；放開一邊但仍按著另一邊時狀態正確 |
 | Ctrl+Y 先放 Ctrl、Y 暫時不放 | 不應連續輸入 Z，也不應在重按 Ctrl 後復活連發；放開全部後新快捷鍵正常 |
 | Ctrl 按住切 App | 在新 App 先放開全部按鍵，再按新快捷鍵才開始翻譯；不重播前個 App 的動作 |
-| 本機 App 切換 | EventTap 使用原生 Command+Tab；Alt+Tab 保留原樣。選用 HID 才另測 Alt+Tab 持有／放開 |
+| 本機視窗切換 | 預設 Alt+Tab 原樣通過；啟用逐視窗開關後，Alt+Tab／Alt+Shift+Tab 選擇不同視窗，放開 Alt 才切換；最小化及多螢幕也要測。HID 模式另測舊有持有式映射。 |
 
 再到 Codex 的**未送出聊天文字框**用相同測試文字做 Ctrl+A/C/X/V/Z；不要送出。
 Codex 的預設 Profile 適合聊天；若使用它的內建 Terminal，需改成 IDE 保護模式。

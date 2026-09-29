@@ -30,11 +30,25 @@ for resource_bundle in "$binary_directory"/*.bundle; do
     [ -d "$resource_bundle" ] || continue
     /usr/bin/ditto "$resource_bundle" "$app_directory/Contents/Resources/$(basename "$resource_bundle")"
 done
+extension_directory="$app_directory/Contents/PlugIns/WindowsMacBridgeFinderSync.appex"
+mkdir -p "$extension_directory/Contents/MacOS"
+cp "$task_root/Extensions/FinderSync/Info.plist" "$extension_directory/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_directory/Contents/Info.plist")" "$extension_directory/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app_directory/Contents/Info.plist")" "$extension_directory/Contents/Info.plist"
+swiftc -emit-executable -parse-as-library -module-name WindowsMacBridgeFinderSync \
+    -target arm64-apple-macos14.0 -framework FinderSync -framework AppKit \
+    -Xlinker -e -Xlinker _NSExtensionMain \
+    "$task_root/Sources/BridgeCore/FinderPathSelection.swift" \
+    "$task_root/Extensions/FinderSync/FinderSync.swift" \
+    -o "$extension_directory/Contents/MacOS/WindowsMacBridgeFinderSync"
 # File providers can attach FinderInfo to generated bundles; codesign rejects it.
 # Only generated app metadata is affected, never source files or user documents.
 /usr/bin/xattr -dr com.apple.FinderInfo "$app_directory" 2>/dev/null || true
 /usr/bin/xattr -dr com.apple.ResourceFork "$app_directory" 2>/dev/null || true
-/usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --options runtime "$app_directory"
+/usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --options runtime \
+    --entitlements "$task_root/Extensions/FinderSync/Entitlements.plist" "$extension_directory"
+/usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --options runtime \
+    --entitlements "$task_root/Resources/AppEntitlements.plist" "$app_directory"
 /usr/bin/codesign --verify --strict "$app_directory"
 mkdir -p "$task_root/build"
 printf '%s\n' "$app_directory" > "$task_root/build/APP_PATH.txt"

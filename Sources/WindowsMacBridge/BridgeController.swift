@@ -6,6 +6,7 @@ import BridgePlatform
 import InputSourceSupport
 import InputSourceCore
 import HIDProtocol
+import FinderSync
 
 @MainActor final class BridgeController: ObservableObject {
     @Published var settingsPage = SettingsPage.general
@@ -26,6 +27,7 @@ import HIDProtocol
     @Published var targetApp: ApplicationContext?
     @Published var hidStatus = HIDStatus()
     @Published var screenshotStatus = ScreenshotStatus()
+    @Published var finderExtensionEnabled = false
     private let engine = InputEngine()
     private let hid = HIDBackendClient()
     private let store = SettingsStore()
@@ -71,11 +73,13 @@ import HIDProtocol
 
     init() {
         settings = store.settings
+        finderExtensionEnabled = FIFinderSyncController.isExtensionEnabled
         configurationError = store.errorMessage
         do { registry = try ApplicationRegistry() }
         catch { configurationError = "App 保護清單無法載入；翻譯已停用。" }
     }
     func start() {
+        syncFinderExtensionPreference()
         inputSources.onChange = { [weak self] status in
             guard let self else { return }
             if sourceStatus != status { sourceStatus = status }
@@ -176,6 +180,8 @@ import HIDProtocol
     }
     private func refreshApplication() {
         context = currentApplicationContext()
+        let extensionEnabled = FIFinderSyncController.isExtensionEnabled
+        if finderExtensionEnabled != extensionEnabled { finderExtensionEnabled = extensionEnabled }
         if context.processID != ProcessInfo.processInfo.processIdentifier { targetApp = context }
         refreshLayout()
         publish()
@@ -247,6 +253,12 @@ import HIDProtocol
         config.restartToken = restartToken
         config.keyboardScope = settings.keyboardScope
         config.finderEnabled = settings.finderEnabled
+        config.finderPermanentDeleteEnabled = settings.finderPermanentDeleteEnabled
+        config.textNavigationEnabled = settings.textNavigationEnabled
+        config.windowSwitcherEnabled = settings.windowSwitcherEnabled
+        config.windowThumbnailsEnabled = settings.windowThumbnailsEnabled
+        config.altF4Enabled = settings.altF4Enabled
+        config.altF4QuitLastWindow = settings.altF4QuitLastWindow
         hid.update(config, active: settings.inputBackend == .deviceHID)
         config.enabled = config.enabled && settings.inputBackend == .eventTap
         engine.update(config)
@@ -261,6 +273,7 @@ import HIDProtocol
         store.applyRecommendedPreset()
         settings = store.settings; configurationError = store.errorMessage
         if let error = store.errorMessage { presetNotice = error; publish(); return }
+        syncFinderExtensionPreference()
         refreshApplication()
         resume()
         presetNotice = "已套用建議預設並恢復引擎。"
@@ -292,7 +305,51 @@ import HIDProtocol
     }
     func setFinderEnabled(_ value: Bool) {
         store.update { $0.finderEnabled = value }; settings = store.settings
+        if store.errorMessage == nil { syncFinderExtensionPreference() }
         configurationError = store.errorMessage; publish()
+    }
+    private func syncFinderExtensionPreference() {
+        guard let defaults = UserDefaults(suiteName: "group.local.WindowsMacBridge") else { return }
+        defaults.set(settings.finderEnabled, forKey: "finder.enabled")
+        defaults.synchronize()
+    }
+    func openFinderExtensionSettings() { FIFinderSyncController.showExtensionManagementInterface() }
+    func setFinderPermanentDeleteEnabled(_ value: Bool) {
+        store.update { $0.finderPermanentDeleteEnabled = value }; settings = store.settings
+        configurationError = store.errorMessage; publish()
+    }
+    func setTextNavigationEnabled(_ value: Bool) {
+        store.update { $0.textNavigationEnabled = value }; settings = store.settings
+        configurationError = store.errorMessage; publish()
+    }
+    func setWindowSwitcherEnabled(_ value: Bool) {
+        store.update { $0.windowSwitcherEnabled = value }; settings = store.settings
+        configurationError = store.errorMessage; publish()
+    }
+    func setWindowThumbnailsEnabled(_ value: Bool) {
+        store.update { $0.windowThumbnailsEnabled = value }; settings = store.settings
+        configurationError = store.errorMessage
+        if value && !CGPreflightScreenCaptureAccess() { _ = CGRequestScreenCaptureAccess() }
+        publish()
+    }
+    func setAltF4Enabled(_ value: Bool) {
+        store.update { $0.altF4Enabled = value }; settings = store.settings
+        configurationError = store.errorMessage; publish()
+    }
+    func setAltF4QuitLastWindow(_ value: Bool) {
+        store.update { $0.altF4QuitLastWindow = value }; settings = store.settings
+        configurationError = store.errorMessage; publish()
+    }
+    var screenRecordingGranted: Bool { CGPreflightScreenCaptureAccess() }
+    func openScreenRecording() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+    func openInputMonitoring() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
+            NSWorkspace.shared.open(url)
+        }
     }
     func setIMEShortcuts(_ value: Bool) {
         store.update { $0.allowIMEShortcuts = value }; settings = store.settings

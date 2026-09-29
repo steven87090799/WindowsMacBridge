@@ -61,11 +61,18 @@ public enum HIDActionCodec {
         switch action {
         case .finder(let value): "finder." + value.rawValue
         case .system(let value): "system." + value.rawValue
+        case .window(.close): "window.close"
+        case .window(.commit): "window.commit"
+        case .window(.advance(let reverse)): reverse ? "window.previous" : "window.next"
         }
     }
     public static func decode(_ id: String) -> ShortcutAction? {
         if id.hasPrefix("finder."), let value = FinderAction(rawValue: String(id.dropFirst(7))) { return .finder(value) }
         if id.hasPrefix("system."), let value = SystemAction(rawValue: String(id.dropFirst(7))) { return .system(value) }
+        if id == "window.close" { return .window(.close) }
+        if id == "window.commit" { return .window(.commit) }
+        if id == "window.next" { return .window(.advance(reverse: false)) }
+        if id == "window.previous" { return .window(.advance(reverse: true)) }
         return nil
     }
 }

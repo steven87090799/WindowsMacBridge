@@ -29,5 +29,7 @@ public struct RuleEngine: Sendable {
     public static let windows = try! RuleEngine(rules: WindowsCompatibilityRules.general)
     public static let browser = try! RuleEngine(rules: WindowsCompatibilityRules.browser)
     public static let finder = try! RuleEngine(rules: WindowsCompatibilityRules.finder)
+    public static let finderExtras = try! RuleEngine(rules: WindowsCompatibilityRules.finderExtras)
     public static let system = try! RuleEngine(rules: WindowsCompatibilityRules.system)
+    public static let textNavigation = try! RuleEngine(rules: WindowsCompatibilityRules.textNavigation)
 }

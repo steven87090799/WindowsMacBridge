@@ -140,6 +140,19 @@ import InputSourceSupport
         if CommandLine.arguments.contains("--self-check") {
             do {
                 let registry = try ApplicationRegistry()
+                if Bundle.main.bundleURL.pathExtension == "app" {
+                    let extensionURL = Bundle.main.bundleURL.appendingPathComponent("Contents/PlugIns/WindowsMacBridgeFinderSync.appex")
+                    guard let finder = Bundle(url: extensionURL),
+                          finder.infoDictionary?["CFBundleIdentifier"] as? String == "local.WindowsMacBridge.FinderSync",
+                          finder.executableURL != nil else {
+                        print("WindowsMacBridge self-check failed: Finder Sync extension missing.")
+                        exit(1)
+                    }
+                    guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.local.WindowsMacBridge") != nil else {
+                        print("WindowsMacBridge self-check failed: Finder shared settings unavailable.")
+                        exit(1)
+                    }
+                }
                 print("\(AppBuildInfo.current.diagnosticText)\nBundled registry loaded (\(registry.entries.count) entries); no event tap or capture started.")
             } catch {
                 print("WindowsMacBridge self-check failed: registry unavailable.")

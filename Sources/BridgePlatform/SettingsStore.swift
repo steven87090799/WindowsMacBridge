@@ -2,7 +2,7 @@ import Foundation
 import BridgeCore
 
 public struct BridgeSettings: Codable, Equatable, Sendable {
-    public var schemaVersion = 1
+    public var schemaVersion = 2
     public var enabled = true
     // This preset is for chat/text use. Remove it to restore Codex's IDE protection.
     public var overrides: [String: ApplicationMode] = ["com.openai.codex": .macOS]
@@ -11,6 +11,12 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     public var allowIMEShortcuts = true
     public var inputBackend: InputBackend = .eventTap
     public var screenshotAutoCopy = true
+    public var windowSwitcherEnabled = false
+    public var windowThumbnailsEnabled = false
+    public var finderPermanentDeleteEnabled = false
+    public var textNavigationEnabled = true
+    public var altF4Enabled = false
+    public var altF4QuitLastWindow = false
     public init() {}
     public static var safeFallback: Self {
         var settings = Self()
@@ -22,6 +28,7 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     }
     private enum CodingKeys: String, CodingKey {
         case schemaVersion, enabled, overrides, keyboardScope, finderEnabled, allowIMEShortcuts, inputBackend, screenshotAutoCopy
+        case windowSwitcherEnabled, windowThumbnailsEnabled, finderPermanentDeleteEnabled, textNavigationEnabled, altF4Enabled, altF4QuitLastWindow
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -34,6 +41,12 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         allowIMEShortcuts = try values.decodeIfPresent(Bool.self, forKey: .allowIMEShortcuts) ?? false
         inputBackend = try values.decodeIfPresent(InputBackend.self, forKey: .inputBackend) ?? .eventTap
         screenshotAutoCopy = try values.decodeIfPresent(Bool.self, forKey: .screenshotAutoCopy) ?? true
+        windowSwitcherEnabled = try values.decodeIfPresent(Bool.self, forKey: .windowSwitcherEnabled) ?? false
+        windowThumbnailsEnabled = try values.decodeIfPresent(Bool.self, forKey: .windowThumbnailsEnabled) ?? false
+        finderPermanentDeleteEnabled = try values.decodeIfPresent(Bool.self, forKey: .finderPermanentDeleteEnabled) ?? false
+        textNavigationEnabled = try values.decodeIfPresent(Bool.self, forKey: .textNavigationEnabled) ?? true
+        altF4Enabled = try values.decodeIfPresent(Bool.self, forKey: .altF4Enabled) ?? false
+        altF4QuitLastWindow = try values.decodeIfPresent(Bool.self, forKey: .altF4QuitLastWindow) ?? false
     }
 }
 
@@ -46,8 +59,9 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         if let data = defaults.data(forKey: "bridge.settings.v1") {
             do {
                 let loaded = try JSONDecoder().decode(BridgeSettings.self, from: data)
-                guard loaded.schemaVersion == 1 else { throw CocoaError(.coderReadCorrupt) }
+                guard (1...2).contains(loaded.schemaVersion) else { throw CocoaError(.coderReadCorrupt) }
                 settings = loaded
+                settings.schemaVersion = 2
             } catch {
                 settings = .safeFallback
                 errorMessage = "設定無法讀取，已使用停用的安全預設；原資料未覆寫。"
@@ -67,9 +81,15 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     public func applyRecommendedPreset() {
         update {
             let existingOverrides = $0.overrides
-            let screenshotAutoCopy = $0.screenshotAutoCopy
+            let preserved = $0
             $0 = BridgeSettings()
-            $0.screenshotAutoCopy = screenshotAutoCopy
+            $0.screenshotAutoCopy = preserved.screenshotAutoCopy
+            $0.windowSwitcherEnabled = preserved.windowSwitcherEnabled
+            $0.windowThumbnailsEnabled = preserved.windowThumbnailsEnabled
+            $0.finderPermanentDeleteEnabled = preserved.finderPermanentDeleteEnabled
+            $0.textNavigationEnabled = preserved.textNavigationEnabled
+            $0.altF4Enabled = preserved.altF4Enabled
+            $0.altF4QuitLastWindow = preserved.altF4QuitLastWindow
             $0.overrides.merge(existingOverrides) { _, existing in existing }
             $0.overrides["com.openai.codex"] = .macOS
         }

@@ -22,29 +22,66 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     private var context = ApplicationContext()
     private var enabled = false
     private var finderEnabled = false
+    private var finderPermanentDeleteEnabled = false
+    private var altF4QuitLastWindow = false
+    private var windowThumbnailsEnabled = false
+    private var windowSwitcherEnabled = false
     private var epoch: UInt64 = 0
     private var message = ""
     private let marker: Int64
     @MainActor private var cut = FinderCutState()
     @MainActor private var cutGeneration: UInt64 = .max
+    @MainActor private var switcher: WindowSwitcher?
 
     public init(marker: Int64) { self.marker = marker }
 
     /// UI/lifecycle path only. Synchronously invalidates queued work before a pause returns.
     public func cancelPending(disable: Bool = false) {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
         generation &+= 1
         if disable { enabled = false }
+        lock.unlock()
+        Task { @MainActor [self] in switcher?.cancel() }
+    }
+    /// Keyboard callback fallback: schedule cancellation without waiting on a lock.
+    public func cancelSwitcherFromCallback() {
+        Task { @MainActor [self] in
+            cancelPending()
+            switcher?.cancel()
+        }
     }
 
     @discardableResult public func update(context: ApplicationContext, enabled: Bool,
-                                         finderEnabled: Bool = false, epoch: UInt64 = 0) -> Bool {
+                                         finderEnabled: Bool = false,
+                                         finderPermanentDeleteEnabled: Bool = false,
+                                         windowSwitcherEnabled: Bool = false,
+                                         windowThumbnailsEnabled: Bool = false,
+                                         altF4QuitLastWindow: Bool = false,
+                                         epoch: UInt64 = 0) -> Bool {
         guard lock.try() else { return false }
-        defer { lock.unlock() }
-        if self.context != context || self.enabled != enabled || self.finderEnabled != finderEnabled || self.epoch != epoch {
+        let switcherChanged = self.windowSwitcherEnabled != windowSwitcherEnabled
+        if self.context != context || self.enabled != enabled || self.finderEnabled != finderEnabled ||
+            self.finderPermanentDeleteEnabled != finderPermanentDeleteEnabled ||
+            switcherChanged ||
+            self.windowThumbnailsEnabled != windowThumbnailsEnabled ||
+            self.altF4QuitLastWindow != altF4QuitLastWindow || self.epoch != epoch {
             generation &+= 1
             self.context = context; self.enabled = enabled
-            self.finderEnabled = finderEnabled; self.epoch = epoch
+            self.finderEnabled = finderEnabled
+            self.finderPermanentDeleteEnabled = finderPermanentDeleteEnabled
+            self.windowSwitcherEnabled = windowSwitcherEnabled
+            self.windowThumbnailsEnabled = windowThumbnailsEnabled
+            self.altF4QuitLastWindow = altF4QuitLastWindow; self.epoch = epoch
+        }
+        lock.unlock()
+        if switcherChanged {
+            Task { @MainActor [self] in
+                if windowSwitcherEnabled {
+                    let current = switcher ?? WindowSwitcher()
+                    switcher = current
+                    current.startObserving()
+                } else { switcher?.stopObserving() }
+            }
         }
         return true
     }
@@ -57,8 +94,9 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
         guard lock.try() else { return false }
         guard enabled, context == expected, count < pending.count else { lock.unlock(); return false }
         if case .finder = action, !finderEnabled { lock.unlock(); return false }
+        let lifetime: Double = if case .window = action { 10 } else { 0.6 }
         pending[writeIndex] = Request(action: action, context: context, generation: generation,
-                                     deadline: ProcessInfo.processInfo.systemUptime + 0.6)
+                                     deadline: ProcessInfo.processInfo.systemUptime + lifetime)
         writeIndex = (writeIndex + 1) % pending.count; count += 1
         let start = !scheduled; scheduled = true
         lock.unlock()
@@ -72,16 +110,16 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
         readIndex = (readIndex + 1) % pending.count; count -= 1
         return request
     }
-    private func isCurrent(_ request: Request) -> Bool {
+    private func isCurrent(_ request: Request, ignoreDeadline: Bool = false) -> Bool {
         lock.lock(); defer { lock.unlock() }
         return enabled && generation == request.generation &&
-            ProcessInfo.processInfo.systemUptime < request.deadline
+            (ignoreDeadline || ProcessInfo.processInfo.systemUptime < request.deadline)
     }
     private func report(_ value: String) {
         lock.lock(); message = value; lock.unlock()
     }
-    @MainActor private func allowed(_ request: Request) -> Bool {
-        isCurrent(request) && AXIsProcessTrusted() && CGPreflightPostEventAccess() &&
+    @MainActor private func allowed(_ request: Request, ignoreDeadline: Bool = false) -> Bool {
+        isCurrent(request, ignoreDeadline: ignoreDeadline) && AXIsProcessTrusted() && CGPreflightPostEventAccess() &&
             !IsSecureEventInputEnabled() &&
             NSWorkspace.shared.frontmostApplication?.processIdentifier == request.context.processID
     }
@@ -97,6 +135,7 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
                     catch { report("系統 App 開啟失敗。") }
                 } else { report("找不到要求開啟的系統 App。") }
             case .finder(let action): await performFinder(action, request: request)
+            case .window(let action): performWindow(action, request: request)
             }
         }
     }
@@ -151,11 +190,50 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
             cut.cancel()
             if focus == .files { _ = emit(51, .command, request: request) }
             else { report("刪除略過：焦點不是可確認的檔案列表。") }
+        case .permanentDelete:
+            cut.cancel()
+            guard finderPermanentDeleteEnabled, focus == .files else {
+                report("永久刪除略過：設定未啟用或焦點不是檔案列表。"); return
+            }
+            let alert = NSAlert()
+            alert.messageText = "永久刪除 Finder 選取項目？"
+            alert.informativeText = "此操作無法從垃圾桶還原。Finder 可能會再次要求確認。"
+            alert.addButton(withTitle: "永久刪除")
+            alert.addButton(withTitle: "取消")
+            guard alert.runModal() == .alertFirstButtonReturn, allowed(request, ignoreDeadline: true) else { return }
+            _ = emit(51, [.command, .option], request: request, ignoreDeadline: true)
+        case .parentFolder:
+            cut.cancel()
+            if focus == .files { _ = emit(126, .command, request: request) }
+            else { _ = emit(51, [], request: request) }
+        case .newFolder:
+            cut.cancel()
+            if focus == .files { _ = emit(45, [.command, .shift], request: request) }
+        case .goToFolder:
+            cut.cancel()
+            _ = emit(5, [.command, .shift], request: request)
+        }
+    }
+
+    @MainActor private func performWindow(_ action: WindowAction, request: Request) {
+        guard request.context.mode == .macOS else { return }
+        let switcher = self.switcher ?? WindowSwitcher()
+        self.switcher = switcher
+        switcher.thumbnailsEnabled = windowThumbnailsEnabled
+        switch action {
+        case .advance(let reverse): switcher.advance(reverse: reverse); report(switcher.status)
+        case .commit: switcher.commit(); report(switcher.status)
+        case .close:
+            let quit = altF4QuitLastWindow && switcher.standardWindowCount(pid: request.context.processID) == 1
+            if emit(quit ? 12 : 13, .command, request: request) {
+                report(quit ? "已送出原生結束 App 請求。" : "已送出原生關閉視窗請求。")
+            }
         }
     }
     /// Complete key pairs, private source, marker and target PID. No global held modifiers.
-    @MainActor private func emit(_ key: UInt16, _ modifiers: Modifiers, request: Request) -> Bool {
-        guard allowed(request), let source = CGEventSource(stateID: .privateState),
+    @MainActor private func emit(_ key: UInt16, _ modifiers: Modifiers, request: Request,
+                                 ignoreDeadline: Bool = false) -> Bool {
+        guard allowed(request, ignoreDeadline: ignoreDeadline), let source = CGEventSource(stateID: .privateState),
               let down = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false) else { return false }
         for event in [down, up] {

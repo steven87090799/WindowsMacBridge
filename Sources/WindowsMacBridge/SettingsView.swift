@@ -67,7 +67,7 @@ struct SettingsView: View {
             Section("Windows 快捷鍵") {
                 Toggle("啟用 Windows 快捷鍵", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
                 explanation("預設開啟。包含複製、貼上、復原、儲存、尋找、分頁與 Ctrl 文字導覽；關閉後停止 Windows 按鍵翻譯，輸入法守護由自己的開關控制。")
-                explanation("一般使用不需調整：本機自動翻譯；Terminal、Remote／VM 等依 App 規則保留原按鍵。EventTap 的 Alt+Tab 維持原樣；本機切換 App 請用原生 Command+Tab。")
+                explanation("本機自動翻譯；Terminal、IDE、Remote／VM／Game 依 App 規則保留原按鍵。")
                 DisclosureGroup("進階：輸入方式與指定鍵盤") {
                     Picker("輸入方式", selection: Binding(get: { controller.settings.inputBackend }, set: { controller.setInputBackend($0) })) {
                         ForEach(InputBackend.allCases, id: \.self) { Text($0.title).tag($0) }
@@ -91,6 +91,29 @@ struct SettingsView: View {
                 }
                 Toggle("Finder 檔案快捷鍵加強", isOn: Binding(get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
                 explanation("預設關閉。開啟後，確認焦點在檔案列表才提供開啟、改名及 Ctrl+X → Ctrl+V 移動；文字框仍使用文字操作。剪下標記在剪貼簿更新、切換 App、暫停或 5 分鐘後失效；程式無法確認 Finder 是否真的移動成功。")
+                HStack {
+                    Image(systemName: controller.finderExtensionEnabled ? "checkmark.square.fill" : "square")
+                    Text("Finder 路徑選單擴充功能")
+                    Spacer()
+                    if !controller.finderExtensionEnabled {
+                        Button("開啟設定") { controller.openFinderExtensionSettings() }
+                    }
+                }
+                explanation("右鍵路徑選單由 App 內的 Finder Sync 擴充功能提供。首次安裝後請在「一般 → 登入項目與擴充功能 → Finder」啟用 WindowsMacBridge Finder；此開關關閉時選單不顯示。")
+                Toggle("Finder Shift+Delete 永久刪除", isOn: Binding(get: { controller.settings.finderPermanentDeleteEnabled }, set: { controller.setFinderPermanentDeleteEnabled($0) }))
+                    .disabled(!controller.settings.finderEnabled)
+                explanation("預設關閉；每次執行前另行確認。")
+                Toggle("Windows 文字游標操作", isOn: Binding(get: { controller.settings.textNavigationEnabled }, set: { controller.setTextNavigationEnabled($0) }))
+                explanation("Ctrl+方向鍵按單字移動、Home／End 到行首行尾、Ctrl+Home／End 到文件邊界；Shift 組合選取。預設開啟，以維持舊版 Ctrl 文字操作。")
+                Toggle("Alt+F4 關閉目前視窗", isOn: Binding(get: { controller.settings.altF4Enabled }, set: { controller.setAltF4Enabled($0) }))
+                Toggle("最後一個視窗改為退出 App", isOn: Binding(get: { controller.settings.altF4QuitLastWindow }, set: { controller.setAltF4QuitLastWindow($0) }))
+                    .disabled(!controller.settings.altF4Enabled)
+                explanation("使用 App 原生關閉／退出快捷鍵；未儲存文件仍由 App 自己確認。")
+                Toggle("Alt+Tab 逐視窗切換", isOn: Binding(get: { controller.settings.windowSwitcherEnabled }, set: { controller.setWindowSwitcherEnabled($0) }))
+                explanation("只在 Default macOS Profile 攔截；按住 Alt 用 Tab／Shift+Tab 選擇，放開 Alt 切換。顯示 App 圖示與視窗名稱，包含最小化視窗。")
+                Toggle("顯示視窗縮圖（需螢幕錄製權限）", isOn: Binding(get: { controller.settings.windowThumbnailsEnabled }, set: { controller.setWindowThumbnailsEnabled($0) }))
+                    .disabled(!controller.settings.windowSwitcherEnabled)
+                explanation("逐視窗切換、視窗縮圖、Alt+F4 與新增 Finder／文字鍵位使用 EventTap；進階 HID 後端保留原有實體鍵位規則。")
             }
             Section("截圖") {
                 Toggle("截圖自動複製（⇧⌘4）", isOn: Binding(
@@ -111,11 +134,14 @@ struct SettingsView: View {
                 if let issue = controller.sourceStatus.loginIssue { Text(issue).foregroundStyle(.orange) }
             }
             Section("鍵盤權限") {
-                LabeledContent("輔助使用", value: controller.status.accessibility ? "已授權" : "尚未授權")
+                HStack { Image(systemName: controller.status.accessibility ? "checkmark.square.fill" : "square"); Text("輔助使用"); Spacer(); if !controller.status.accessibility { Button("開啟設定") { controller.openPermissions() } } }
                 explanation("允許程式攔截快捷鍵及操作 App。未授權時不進行翻譯；第一次下載不能替你自動開啟這項 macOS 權限。")
-                LabeledContent("事件輸出", value: controller.status.postAccess ? "可用" : "尚未授權")
+                HStack { Image(systemName: controller.status.postAccess ? "checkmark.square.fill" : "square"); Text("事件輸出"); Spacer(); if !controller.status.postAccess { Button("開啟設定") { controller.openPermissions() } } }
                 explanation("表示程式能否送出翻譯後的按鍵，通常隨輔助使用授權開啟。若不可用，先確認授權的是正在執行的新版 App。")
-                LabeledContent("輸入監控", value: controller.status.listenAccess ? "可用" : "尚未授權／依系統攔截能力而定")
+                HStack { Image(systemName: controller.status.listenAccess ? "checkmark.square.fill" : "square"); Text("輸入監控"); Spacer(); if !controller.status.listenAccess { Button("開啟設定") { controller.openInputMonitoring() } } }
+                if controller.settings.windowThumbnailsEnabled {
+                    HStack { Image(systemName: controller.screenRecordingGranted ? "checkmark.square.fill" : "square"); Text("螢幕錄製（視窗縮圖）"); Spacer(); if !controller.screenRecordingGranted { Button("開啟設定") { controller.openScreenRecording() } } }
+                }
                 explanation("用於接收鍵盤事件。EventTap 能否建立也依系統授權而定；HID helper 需要自己的輸入監控權限。唯音守護本身不需要鍵盤權限。")
                 HStack {
                     Button("要求輔助使用") { controller.requestAccessibility() }.help("顯示 macOS 的輔助使用授權提示。")
@@ -270,6 +296,12 @@ struct SettingsView: View {
                 explanation("這是目前前景 App 與實際套用的模式；Remote 表示按 App 規則穿透，不表示已確認遠端連線。開啟此設定視窗時，WindowsMacBridge 自己會保持穿透。")
                 LabeledContent("輸入方式", value: controller.settings.inputBackend.title)
                 LabeledContent("Event Tap", value: controller.status.tapActive ? "Active" : "Inactive")
+                LabeledContent("逐視窗 Alt+Tab", value: controller.settings.windowSwitcherEnabled ? (controller.status.tapActive ? "啟用" : "等待 Event Tap") : "關閉")
+                LabeledContent("Finder Mode／右鍵擴充", value: "\(controller.settings.finderEnabled ? "啟用" : "關閉")／\(controller.finderExtensionEnabled ? "已核准" : "待核准")")
+                LabeledContent("文字游標／Alt+F4", value: "\(controller.settings.textNavigationEnabled ? "啟用" : "關閉")／\(controller.settings.altF4Enabled ? "啟用" : "關閉")")
+                if controller.settings.windowThumbnailsEnabled {
+                    LabeledContent("視窗縮圖螢幕錄製", value: controller.screenRecordingGranted ? "已授權" : "待授權")
+                }
                 LabeledContent("截圖 Event Tap", value: controller.screenshotStatus.tapActive ? "Active" : "Inactive")
                 LabeledContent("截圖最近結果", value: controller.screenshotStatus.lastResult)
                 Text(controller.screenshotLogPath).font(.caption).textSelection(.enabled)
