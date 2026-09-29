@@ -49,7 +49,7 @@ struct SettingsView: View {
             HStack {
                 Text("授權清單").font(.title2.bold())
                 Spacer()
-                Button("重新檢查") { controller.refreshPermissions() }
+                    Button("重新檢查") { controller.refreshPermissions(userInitiated: true) }
             }
             explanation("綠色勾勾表示已取得；紅色叉叉表示尚未取得。按「前往開啟」即可到對應系統設定。")
             ScrollView {

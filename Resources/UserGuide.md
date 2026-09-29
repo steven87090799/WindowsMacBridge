@@ -1,4 +1,6 @@
-# WindowsMacBridge 0.5.1 — 操作說明
+# WindowsMacBridge 0.5.5 — 操作說明
+
+Finder 右鍵路徑選單需要 App 正在執行及 Finder Mode 已開啟。設定同步僅使用原生通知傳送開／關，不依賴 App Group；免費簽章版本的擴充功能保留沙盒，沒有新增輪詢。
 
 ## 最快開始
 

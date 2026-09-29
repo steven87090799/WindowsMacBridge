@@ -37,6 +37,7 @@ import FinderSync
     private let hid = HIDBackendClient()
     private let store = SettingsStore()
     private let screenshot = ScreenshotManager()
+    private let finderPublisher = FinderModePublisher()
     private let screenshotManagedLoginKey = "screenshot.loginManaged.v1"
     private var registry: ApplicationRegistry?
     private var timer: Timer?
@@ -83,7 +84,7 @@ import FinderSync
         catch { configurationError = "App 保護清單無法載入；翻譯已停用。" }
     }
     func start() {
-        syncFinderExtensionPreference()
+        finderPublisher.start(enabled: settings.finderEnabled)
         inputSources.onChange = { [weak self] status in
             guard let self else { return }
             let loginChanged = sourceStatus.loginStatus != status.loginStatus
@@ -127,6 +128,7 @@ import FinderSync
         })
     }
     func stop() {
+        finderPublisher.stop()
         timer?.invalidate(); timer = nil
         for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         observers.removeAll()
@@ -199,10 +201,10 @@ import FinderSync
         refreshLayout()
         publish()
     }
-    func refreshPermissions() {
+    func refreshPermissions(userInitiated: Bool = false) {
         // A source/login notification in the background must not confirm a
         // settings link. Verify once the user returns, or explicitly rechecks.
-        if !permissionChecklist.awaitingVerification.isEmpty && !NSApp.isActive { return }
+        if !userInitiated && !permissionChecklist.awaitingVerification.isEmpty && !NSApp.isActive { return }
         var next = permissionChecklist
         next.verify(PermissionStatus.current())
         if permissionChecklist != next { permissionChecklist = next }
@@ -347,9 +349,7 @@ import FinderSync
         configurationError = store.errorMessage; publish()
     }
     private func syncFinderExtensionPreference() {
-        guard let defaults = UserDefaults(suiteName: "group.local.WindowsMacBridge") else { return }
-        defaults.set(settings.finderEnabled, forKey: "finder.enabled")
-        defaults.synchronize()
+        finderPublisher.setEnabled(settings.finderEnabled)
     }
     func openFinderExtensionSettings() { FIFinderSyncController.showExtensionManagementInterface() }
     func setFinderPermanentDeleteEnabled(_ value: Bool) {

@@ -27,12 +27,17 @@ def command(*args: str, timeout: int = 10) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
 
 
-def app_pid(executable: str = APP_PATH) -> int | None:
+def app_pids(executable: str = APP_PATH) -> list[int]:
     pattern = f"^{re.escape(executable)}" + (r"( |$)" if executable == FINDER_PATH else "$" )
     result = command("pgrep", "-f", pattern)
     if result.returncode != 0:
-        return None
-    return int(result.stdout.splitlines()[0])
+        return []
+    return sorted({int(value) for value in result.stdout.splitlines()})[:64]
+
+
+def app_pid(executable: str = APP_PATH) -> int | None:
+    pids = app_pids(executable)
+    return pids[0] if pids else None
 
 
 def cpu_seconds(value: str) -> float:
@@ -70,10 +75,11 @@ def system_sample() -> tuple[str | float, str | float, str | float]:
         return "", "", ""
 
 
-def sample(elapsed: float, footprint: bool, executable: str = APP_PATH) -> list[str | int | float]:
+def sample(elapsed: float, footprint: bool, executable: str = APP_PATH,
+           process_id: int | None = None) -> list[str | int | float]:
     timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
     try:
-        pid = app_pid(executable)
+        pid = process_id if process_id is not None else app_pid(executable)
         if pid is None:
             return [timestamp, round(elapsed, 1), "down", "", "", "", "", ""]
         result = command("ps", "-p", str(pid), "-o", "time=,rss=,state=")
@@ -125,13 +131,24 @@ def main() -> None:
             now = time.monotonic()
             measure_footprint = count % args.footprint_every == 0 or now >= deadline
             system = system_sample() if args.include_system and measure_footprint else ("", "", "")
-            roles = [("main", APP_PATH)] + ([("finder-extension", FINDER_PATH)] if args.include_finder else [])
-            for role, executable in roles:
-                row = sample(time.monotonic() - start, measure_footprint, executable)
+            roles = [("main", APP_PATH, None)]
+            if args.include_finder:
+                try:
+                    finder_pids = app_pids(FINDER_PATH)
+                except (OSError, ValueError, subprocess.TimeoutExpired):
+                    finder_pids = []
+                roles += [("finder-extension", FINDER_PATH, pid) for pid in finder_pids or [None]]
+            active_keys: set[str] = set()
+            active_pids: set[int] = set()
+            for role, executable, process_id in roles:
+                row = sample(time.monotonic() - start, measure_footprint, executable, process_id)
                 identity = ("", "", "")
                 cpu_percent: str | float = ""
                 if row[2] == "running":
                     pid, elapsed, cpu = int(row[3]), float(row[1]), float(row[4])
+                    key = f"{role}:{pid}"
+                    active_keys.add(key)
+                    active_pids.add(pid)
                     if pid not in identities:
                         try:
                             with open("/Applications/WindowsMacBridge.app/Contents/Info.plist", "rb") as info:
@@ -141,11 +158,11 @@ def main() -> None:
                         except (OSError, ValueError, plistlib.InvalidFileException):
                             identities[pid] = identity
                     identity = identities[pid]
-                    cpu_percent = interval_cpu(previous.get(role), pid, elapsed, cpu)
-                    previous[role] = (pid, elapsed, cpu)
-                else:
-                    previous.pop(role, None)
+                    cpu_percent = interval_cpu(previous.get(key), pid, elapsed, cpu)
+                    previous[key] = (pid, elapsed, cpu)
                 writer.writerow(row + [role, args.phase, *identity, cpu_percent, *system])
+            previous = {key: value for key, value in previous.items() if key in active_keys}
+            identities = {pid: value for pid, value in identities.items() if pid in active_pids}
             file.flush()
             count += 1
             if now >= deadline:

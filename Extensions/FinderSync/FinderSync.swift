@@ -5,12 +5,19 @@ import FinderSync
 /// No background file scanning or pasteboard reads are needed.
 final class FinderSync: FIFinderSync {
     private var currentKind: FIMenuKind = .contextualMenuForContainer
+    private var modeEnabled = false
     override init() {
         super.init()
+        DistributedNotificationCenter.default().addObserver(self, selector: #selector(modeChanged(_:)),
+            name: FinderModeChannel.current.stateName, object: nil)
+        requestMode()
         FIFinderSyncController.default().directoryURLs = [URL(fileURLWithPath: "/", isDirectory: true)]
     }
+    deinit { DistributedNotificationCenter.default().removeObserver(self) }
+    override func beginObservingDirectory(at url: URL) { requestMode() }
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {
+        requestMode()
         guard finderEnabled, menuKind != .toolbarItemMenu else { return nil }
         currentKind = menuKind
         let menu = NSMenu(title: "WindowsMacBridge")
@@ -30,7 +37,15 @@ final class FinderSync: FIFinderSync {
     }
 
     private var finderEnabled: Bool {
-        UserDefaults(suiteName: "group.local.WindowsMacBridge")?.bool(forKey: "finder.enabled") ?? false
+        modeEnabled && NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "local.WindowsMacBridge" }
+    }
+    private func requestMode() {
+        DistributedNotificationCenter.default().postNotificationName(FinderModeChannel.current.requestName,
+            object: FinderModeChannel.requestObject, userInfo: nil, deliverImmediately: true)
+    }
+    @objc private func modeChanged(_ notification: Notification) {
+        guard let value = FinderModeChannel.enabled(from: notification.object) else { return }
+        modeEnabled = value
     }
 
     private func item(_ title: String, _ action: Selector) -> NSMenuItem {

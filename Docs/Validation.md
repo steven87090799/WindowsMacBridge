@@ -1,3 +1,15 @@
+# 0.5.5-preview.1 Finder 實測修復（2026-09-29）
+
+- 主套件 **132 tests 通過**：34 InputSourceCore、32 BridgePlatform、66 BridgeCore，保留 0.5.4 的全部授權與 NSTextView 回歸。另 **11 HID helper tests**／release helper build／self-check／signature verification、**5 Python 資源計算 tests 通過**，不安裝 helper／driver。
+- 實測 0.5.4 Finder Mode 已開、extension 已啟用但右鍵選單未出現；cfprefsd 日誌確認拒絕共享 App Group 設定寫入，extension 讀取也失敗。原 self-check 僅以 containerURL 非 nil 推定可用，不能證明跨程序讀寫成功，已改為檢查 extension 協定版本。
+- 改為原生 DistributedNotificationCenter 的版本化 Boolean object 字串，userInfo 永遠為 nil。Host 保存設定，擴充功能只記憶本次收到的狀態；初始化、觀察資料夾與開選單時才請求。Host 合併同一回合的回覆工作且停止時使舊 generation 失效，沒有計時輪詢。移除無法驗證的 App Group entitlement，保留 extension App Sandbox；不讀取或傳送任何路徑、Clipboard 或文件內容。
+- 新回歸包含嚴格字串／版本解碼與私有測試 namespace，以及真正的原生通知接收、變更、請求回覆、停止及 nil userInfo。測試 namespace 不影響正在執行的 App 或 Finder。這是原生通知的程序內測試，實際 sandboxed extension 的 UI 結果另記於 release／PR。
+- 使用者完成系統本人驗證後，0.5.4 的六項原生授權／啟用、Event Tap Active 與截圖攔截正常已確認；新版 identity 的授權與效能不沿用此結果。新版完整 build、Hosted CI、Finder UI 與資源 CSV 的結果記於 release／PR。
+
+以下保留歷史版本結果。
+
+---
+
 # 0.5.4-preview.1 授權查驗與功能回歸（2026-09-29）
 
 - 主套件完整 **129 tests 通過**：34 InputSourceCore、31 BridgePlatform、64 BridgeCore。另有 **11 HID helper tests**、helper release build／codec self-check／strict signature verification，以及 **4 Python 資源計算 tests 通過**；沒有安裝 helper 或 driver。

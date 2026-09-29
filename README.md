@@ -1,10 +1,10 @@
 # WindowsMacBridge
 
-Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.4 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
+Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.5 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
 
 主專案是這個 repository；`vchewing-input-helper` 已移入 `InputSourceCore` 與 `InputSourceSupport`，不需同時執行兩個 App。[整合與遷移](Docs/ProjectIntegration.md)。
 
-## 0.5.4 快速開始
+## 0.5.5 快速開始
 
 新安裝預設啟用 Windows 快捷鍵、EventTap／所有鍵盤、底層 ABC／U.S. 的中文／唯音快捷鍵、截圖自動複製，以及 Codex 的聊天／文字 Profile。Terminal、其他 IDE、Remote、VM、Game 保留原按鍵；Finder 加強、唯音守護及切換快捷鍵預設關閉。截圖功能會註冊登入啟動，仍可能需要 macOS 核准。更新保留已存設定，可從一般頁按「套用建議預設」。
 
@@ -14,7 +14,7 @@ Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macO
 
 狀態依目前版本的原生 API 檢查結果顯示，不把系統清單裡的舊開關當成已授權。App 啟動、打開設定、回到前景或按「重新檢查」時更新；鍵盤權限變更只觸發一次原生重新查驗，沒有新增輪詢計時器，也不在 SwiftUI 重繪時反覆查詢螢幕錄製權限。可用 `WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge --diagnose-permissions` 取得只讀狀態報告，不會提出授權要求或啟動截圖。命令列啟動可能沿用終端機的 TCC 身分，App 的實際授權請以執行中 App 的授權頁為準。唯音守護直接使用本版本設定；舊版助手的程序偵測、避讓、結束及偏好匯入已移除。
 
-0.5.4 的「前往開啟」只跳到 macOS 設定，不提出隱含授權要求或註冊登入項目；按下不會得到綠勾。回到 App 或按「重新檢查」後，必須由當前 App 的只讀原生檢查確認才顯示綠勾，背景引擎快照不會覆蓋此結果。取消／拒絕仍為紅叉。macOS 若提示「結束並重新打開」才能套用權限變更，請依系統提示重啟；App 不讀取 TCC 資料庫或系統設定 UI 來推測權限。
+0.5.4 起的「前往開啟」只跳到 macOS 設定，不提出隱含授權要求或註冊登入項目；按下不會得到綠勾。回到 App 或按「重新檢查」後，必須由當前 App 的只讀原生檢查確認才顯示綠勾，背景引擎快照不會覆蓋此結果。取消／拒絕仍為紅叉。macOS 若提示「結束並重新打開」才能套用權限變更，請依系統提示重啟；App 不讀取 TCC 資料庫或系統設定 UI 來推測權限。
 
 ### 輸入法手動選擇、暫停與統計
 
@@ -34,6 +34,8 @@ Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macO
 - Windows 文字游標提供 Ctrl+左右方向鍵按單字移動、Ctrl+Backspace／Delete 按單字刪除、Home／End 行首行尾、Ctrl+Home／End 文件首尾，並支援 Shift 選取組合。Alt+F4 發出 App 原生 `⌘W`；選配最後一個主要視窗時發出 `⌘Q`，保留 App 的未儲存內容確認。
 
 這些新動作只在本機 Default macOS Profile 啟用；Terminal、IDE、Remote、VM、Game 維持原樣通過。鍵盤 callback 只處理有界狀態並將 AX、Finder、AppKit 工作送到最多 16 筆的動作佇列。視窗 MRU 用通知更新，縮圖只在顯示切換器時擷取，沒有新增加的長期輪詢。HID 後端保留既有實體鍵位交換語意；新視窗切換器只適用 EventTap。授權頁顯示實際取得的權限，缺少時可直接開啟對應系統設定，仍須由使用者在 macOS 核准。
+
+0.5.5 修正 Finder 選單的設定同步。macOS 15+ 會拒絕未經 provisioning 驗證的免費簽章擴充功能讀取 App Group；因此改用原生 DistributedNotificationCenter，僅傳送版本化的開／關字串，userInfo 為 nil，沒有檔案路徑或剪貼簿資料。App 啟動／開關改動與擴充功能的初始化／資料夾／選單事件才交換狀態，沒有背景輪詢；主設定照常持久保存，App 未執行時不顯示選單。擴充功能維持 App Sandbox。依據 [Apple 的 App Group 存取規則](https://developer.apple.com/documentation/xcode/accessing-app-group-containers) 與 [沙盒通知 API](https://developer.apple.com/documentation/foundation/distributednotificationcenter/post%28name%3Aobject%3Auserinfo%3A%29)。
 
 ## 截圖自動複製
 

@@ -2,6 +2,7 @@ import AppKit
 import ApplicationServices
 import SwiftUI
 import BridgePlatform
+import BridgeCore
 import InputSourceSupport
 import InputSourceCore
 
@@ -166,8 +167,10 @@ import InputSourceCore
                         print("WindowsMacBridge self-check failed: Finder Sync extension missing.")
                         exit(1)
                     }
-                    guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.local.WindowsMacBridge") != nil else {
-                        print("WindowsMacBridge self-check failed: Finder shared settings unavailable.")
+                    guard finder.infoDictionary?["WMBFinderSignalVersion"] as? Int == FinderModeChannel.version,
+                          finder.infoDictionary?["CFBundleShortVersionString"] as? String == Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+                          finder.infoDictionary?["CFBundleVersion"] as? String == Bundle.main.infoDictionary?["CFBundleVersion"] as? String else {
+                        print("WindowsMacBridge self-check failed: Finder signal protocol mismatch.")
                         exit(1)
                     }
                 }

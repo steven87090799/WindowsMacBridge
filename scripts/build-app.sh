@@ -39,6 +39,7 @@ swiftc -emit-executable -parse-as-library -module-name WindowsMacBridgeFinderSyn
     -target arm64-apple-macos14.0 -framework FinderSync -framework AppKit \
     -Xlinker -e -Xlinker _NSExtensionMain \
     "$task_root/Sources/BridgeCore/FinderPathSelection.swift" \
+    "$task_root/Sources/BridgeCore/FinderModeSignal.swift" \
     "$task_root/Extensions/FinderSync/FinderSync.swift" \
     -o "$extension_directory/Contents/MacOS/WindowsMacBridgeFinderSync"
 # File providers can attach FinderInfo to generated bundles; codesign rejects it.
