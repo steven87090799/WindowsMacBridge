@@ -60,24 +60,37 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
     public func configure(enabled: Bool, eventTapBackend: Bool = true, sessionActive: Bool = true) {
         self.enabled = enabled
         permitted = eventTapBackend && sessionActive
-        if enabled && permitted && !observing {
-            observing = backend.observeChanges { [weak self] in self?.refresh() }
-        } else if (!enabled || !permitted) && observing {
-            backend.stopObserving(); observing = false
-        }
         refresh()
     }
 
+    private func updateObservation() {
+        let needed = enabled && permitted && backend.portable
+        if needed && !observing {
+            observing = backend.observeChanges { [weak self] in self?.refresh() }
+        } else if !needed && observing {
+            backend.stopObserving(); observing = false
+        }
+    }
+
     public func refresh() {
+        // Manual/lifecycle rechecks retry a failed registration. No timer is
+        // needed, and desktop Macs never register an unused keyboard observer.
+        updateObservation()
         let old = status
         var next = MacBookKeyboardMappingStatus()
         let shouldApply = enabled && permitted
+        if (!enabled || !backend.portable) && journal.originals.isEmpty {
+            next.summary = enabled ? "等待本機 MacBook 內建鍵盤；外接／通用控制鍵盤保持原樣"
+                : "已關閉；已還原本程式的交換"
+            _ = saveJournal()
+            publish(next, previous: old)
+            return
+        }
         guard let services = backend.services() else {
             next.issue = "無法讀取鍵盤服務；還原紀錄已保留，請重新檢查。"
             next.restorePending = !shouldApply && !journal.originals.isEmpty
             next.summary = next.issue!
-            status = next
-            if old != next { onChange?(next); onDiagnostic?(next.summary) }
+            publish(next, previous: old)
             return
         }
         // Registry IDs are valid only for this boot. Removed services have lost their mappings.
@@ -131,8 +144,12 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
         else if !permitted { next.summary = "暫停原生交換（HID 後端或 Session 暫停）" }
         else if let issue = next.issue { next.summary = issue }
         else { next.summary = "等待本機 MacBook 內建鍵盤；外接／通用控制鍵盤保持原樣" }
+        publish(next, previous: old)
+    }
+
+    private func publish(_ next: MacBookKeyboardMappingStatus, previous: MacBookKeyboardMappingStatus) {
         status = next
-        if old != next { onChange?(next); onDiagnostic?(next.summary) }
+        if previous != next { onChange?(next); onDiagnostic?(next.summary) }
     }
 
     public func stop() {
@@ -154,7 +171,10 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
     }
     private func saveJournal() -> Bool {
         guard let data = try? JSONEncoder().encode(journal) else { return false }
-        if journal.originals.isEmpty { defaults.removeObject(forKey: journalKey); return true }
+        if journal.originals.isEmpty {
+            if defaults.object(forKey: journalKey) != nil { defaults.removeObject(forKey: journalKey) }
+            return true
+        }
         defaults.set(data, forKey: journalKey)
         return defaults.data(forKey: journalKey) == data
     }

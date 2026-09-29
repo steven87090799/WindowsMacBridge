@@ -169,6 +169,7 @@ struct ScreenshotShortcutTests {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("BridgeScreenshot-\(UUID().uuidString)"))
         defer { pasteboard.releaseGlobally() }
         #expect(ScreenshotClipboard.copyImage(at: path, to: pasteboard) == .success)
+        #expect(pasteboard.data(forType: NSPasteboard.PasteboardType("public.png")) == data)
         #expect(NSImage(pasteboard: pasteboard) != nil)
         #expect(pasteboard.data(forType: NSPasteboard.PasteboardType("public.png")) != nil)
         #expect(pasteboard.data(forType: .tiff) != nil)
@@ -189,5 +190,21 @@ struct ScreenshotShortcutTests {
         defer { pasteboard.releaseGlobally() }
         #expect(ScreenshotClipboard.copyImage(at: path, to: pasteboard) == .success)
         #expect(pasteboard.data(forType: NSPasteboard.PasteboardType("public.png")) != nil)
+    }
+
+    @Test func backgroundImagePreparationPublishesOnlyImmutableImageData() async throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("BridgeWorker-\(UUID().uuidString).png")
+        defer { try? FileManager.default.removeItem(at: path) }
+        let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 16, pixelsHigh: 16,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        let original = try #require(bitmap.representation(using: .png, properties: [:]))
+        try original.write(to: path)
+        let payload = try #require(await Task.detached { ScreenshotImagePreparation.prepare(at: path) }.value)
+        let pasteboard = NSPasteboard(name: .init("BridgeWorker-\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        #expect(ScreenshotClipboard.write(payload, to: pasteboard) == .success)
+        #expect(pasteboard.data(forType: .init("public.png")) == original)
+        #expect(NSImage(pasteboard: pasteboard) != nil)
     }
 }

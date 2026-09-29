@@ -25,6 +25,8 @@ public final class InputSourceStatisticsStore {
 
     public init(defaults: UserDefaults) { self.defaults = defaults }
 
+    public var previousStatisticsMigrationCompleted: Bool { defaults.bool(forKey: migrationKey) }
+
     public var snapshot: InputSourceStatistics {
         var result = InputSourceStatistics()
         result.automaticCorrections = count("automaticCorrectionCount")
@@ -41,7 +43,7 @@ public final class InputSourceStatisticsStore {
     /// Import only the six statistical fields, once. Existing bridge counters
     /// are added, dates are merged, and all settings/other legacy data are ignored.
     @discardableResult public func importPreviousStatistics(_ previous: [String: Any]?) -> Bool {
-        guard !defaults.bool(forKey: migrationKey) else { return false }
+        guard !previousStatisticsMigrationCompleted else { return false }
         let previous = previous ?? [:]
         var imported = false
         for name in ["automaticCorrectionCount", "failedSelectionCount", "secureInputWaitCount", "vChewingRestoreCount"] {

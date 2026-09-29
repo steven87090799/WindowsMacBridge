@@ -131,8 +131,9 @@ import FinderSync
         hid.start()
         publish()
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
+            MainActor.assumeIsolated { self?.tick() }
         }
+        timer?.tolerance = 0.1
     }
     private func observe(_ center: NotificationCenter, _ name: Notification.Name,
                          _ action: @escaping @MainActor (BridgeController) -> Void) {

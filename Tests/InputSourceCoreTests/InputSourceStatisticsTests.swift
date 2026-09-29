@@ -16,6 +16,7 @@ private final class StatisticsFixture {
 struct InputSourceStatisticsTests {
     @Test func previousCountersAreAddedOnceAndDoNotImportSettings() {
         let fixture = StatisticsFixture()
+        #expect(!fixture.store.previousStatisticsMigrationCompleted)
         fixture.store.recordFailedSelection()
         let previous: [String: Any] = [
             "diagnostics.automaticCorrectionCount": 12,
@@ -33,6 +34,7 @@ struct InputSourceStatisticsTests {
         #expect(fixture.defaults.object(forKey: "guardEnabled") == nil)
         #expect(fixture.defaults.object(forKey: "hotkeyPreset") == nil)
         let reopened = InputSourceStatisticsStore(defaults: fixture.defaults)
+        #expect(reopened.previousStatisticsMigrationCompleted)
         #expect(!reopened.importPreviousStatistics(previous))
         #expect(reopened.snapshot.failedSelections == 4)
         #expect(reopened.snapshot.previousStatisticsImported)
@@ -88,6 +90,7 @@ struct InputSourceStatisticsTests {
         let fixture = StatisticsFixture()
         fixture.store.recordPreservedExternalSelection()
         #expect(!fixture.store.importPreviousStatistics(nil))
+        #expect(fixture.store.previousStatisticsMigrationCompleted)
         #expect(fixture.store.snapshot.preservedExternalSelections == 1)
         #expect(!fixture.store.importPreviousStatistics(["diagnostics.failedSelectionCount": 5]))
         #expect(fixture.store.snapshot.failedSelections == 0)

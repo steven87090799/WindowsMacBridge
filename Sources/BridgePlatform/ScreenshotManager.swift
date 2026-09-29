@@ -2,6 +2,7 @@ import AppKit
 import ApplicationServices
 import Carbon
 import Foundation
+import BridgeCore
 
 private struct TapResult: @unchecked Sendable {
     let event: Unmanaged<CGEvent>?
@@ -11,16 +12,40 @@ public enum ScreenshotClipboardResult: Equatable, Sendable {
     case success, unreadableImage, writeFailed
 }
 
+public struct ScreenshotImagePayload: Sendable {
+    let png: Data
+    let tiff: Data
+}
+
+public enum ScreenshotImagePreparation {
+    /// Local image/bitmap objects never cross threads. Only immutable image data
+    /// leaves the pool; AppKit UI and Clipboard remain on the main actor.
+    public static func prepare(at url: URL) -> ScreenshotImagePayload? {
+        autoreleasepool {
+            guard let image = NSImage(contentsOf: url), let tiff = image.tiffRepresentation else { return nil }
+            let png: Data
+            if url.pathExtension.lowercased() == "png",
+               let original = try? Data(contentsOf: url, options: .mappedIfSafe),
+               original.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]) {
+                png = original
+            } else {
+                guard let encoded = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return nil }
+                png = encoded
+            }
+            return ScreenshotImagePayload(png: png, tiff: tiff)
+        }
+    }
+}
+
 @MainActor public enum ScreenshotClipboard {
     public static func copyImage(at url: URL, to pasteboard: NSPasteboard) -> ScreenshotClipboardResult {
-        guard let image = NSImage(contentsOf: url),
-              let tiff = image.tiffRepresentation,
-              let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else {
-            return .unreadableImage
-        }
+        guard let payload = ScreenshotImagePreparation.prepare(at: url) else { return .unreadableImage }
+        return write(payload, to: pasteboard)
+    }
+    public static func write(_ payload: ScreenshotImagePayload, to pasteboard: NSPasteboard) -> ScreenshotClipboardResult {
         let item = NSPasteboardItem()
-        guard item.setData(png, forType: NSPasteboard.PasteboardType("public.png")),
-              item.setData(tiff, forType: .tiff) else { return .writeFailed }
+        guard item.setData(payload.png, forType: NSPasteboard.PasteboardType("public.png")),
+              item.setData(payload.tiff, forType: .tiff) else { return .writeFailed }
         pasteboard.clearContents()
         return pasteboard.writeObjects([item]) ? .success : .writeFailed
     }
@@ -52,7 +77,10 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
     private var checkTimer: Timer?
-    private var captureInProgress = false
+    private var capture = ScreenshotCaptureLifecycle()
+    private var recovery = RecoveryPolicy()
+    private var tapGeneration: UInt64 = 0
+    private var recoveryQueued: UInt64?
 
     public init(defaults: UserDefaults = .standard, fileManager: FileManager = .default) {
         // Initialize the shared marker outside the native event callback.
@@ -65,6 +93,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
 
     public func start(enabled: Bool) {
         self.enabled = enabled
+        capture.configure(enabled: enabled)
         guard enabled else { return }
         verifyAndRepair(reason: "App 啟動")
         if defaults.object(forKey: lastCheckKey) == nil { defaults.set(Date(), forKey: lastCheckKey) }
@@ -74,6 +103,8 @@ public struct ScreenshotStatus: Equatable, Sendable {
     public func setEnabled(_ value: Bool) {
         guard enabled != value else { return }
         enabled = value
+        capture.configure(enabled: value)
+        recovery.reset()
         if value {
             verifyAndRepair(reason: "功能啟用")
             defaults.set(Date(), forKey: lastCheckKey)
@@ -92,10 +123,17 @@ public struct ScreenshotStatus: Equatable, Sendable {
         destroyTap()
         shortcut.reset()
         enabled = false
+        capture.configure(enabled: false)
+        recovery.reset()
         accessibilityTrusted = false
     }
 
     public func verifyAndRepair(reason: String) {
+        recovery.reset()
+        performVerification(reason: reason)
+    }
+
+    private func performVerification(reason: String) {
         guard enabled else { return }
         status.lastCheck = Date()
         accessibilityTrusted = AXIsProcessTrusted()
@@ -147,6 +185,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
                 self.scheduleNextCheck()
             }
         }
+        checkTimer?.tolerance = min(60, delay * 0.01)
     }
 
     public func reportConfigurationIssue(_ message: String) {
@@ -173,6 +212,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
                                             options: .defaultTap, eventsOfInterest: CGEventMask(mask),
                                             callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque()),
               let newSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, newTap, 0) else { return }
+        tapGeneration &+= 1
         tap = newTap; source = newSource
         CFRunLoopAddSource(CFRunLoopGetMain(), newSource, .commonModes)
         CGEvent.tapEnable(tap: newTap, enable: true)
@@ -180,6 +220,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     private func destroyTap() {
+        tapGeneration &+= 1
         if let tap { CGEvent.tapEnable(tap: tap, enable: false); CFMachPortInvalidate(tap) }
         if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
         tap = nil; source = nil
@@ -190,7 +231,24 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private func handle(_ type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             shortcut.reset()
-            DispatchQueue.main.async { [weak self] in self?.verifyAndRepair(reason: "Event Tap 停用") }
+            let generation = tapGeneration
+            if recoveryQueued != generation {
+                recoveryQueued = generation
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    if self.recoveryQueued == generation { self.recoveryQueued = nil }
+                    // A delayed failure from an old tap must not destroy a new
+                    // tap after a toggle, permission repair or session change.
+                    guard self.enabled, self.tapGeneration == generation else { return }
+                    if self.recovery.mayRetry(at: ProcessInfo.processInfo.systemUptime) {
+                        self.performVerification(reason: "Event Tap 停用")
+                    } else {
+                        self.destroyTap()
+                        self.setStatus(issue: "截圖攔截反覆停用，已停止自動重試；請放開按鍵後重新開啟截圖開關。", result: "自動恢復已暫停")
+                        self.log("Event Tap 60 秒內反覆停用，停止自動重試")
+                    }
+                }
+            }
             return Unmanaged.passUnretained(event)
         }
         guard enabled, type == .keyDown || type == .keyUp else { return Unmanaged.passUnretained(event) }
@@ -205,16 +263,15 @@ public struct ScreenshotStatus: Equatable, Sendable {
                 shortcut.reset()
                 return Unmanaged.passUnretained(event)
             }
-            if !captureInProgress {
-                captureInProgress = true
-                DispatchQueue.main.async { [weak self] in self?.beginCapture() }
+            if let token = capture.begin() {
+                DispatchQueue.main.async { [weak self] in self?.beginCapture(token) }
             }
             return nil
         }
     }
 
-    private func beginCapture() {
-        guard enabled else { captureInProgress = false; return }
+    private func beginCapture(_ token: ScreenshotCaptureLifecycle.Token) {
+        guard capture.isCurrent(token) else { _ = capture.complete(token); return }
         let destination = captureURL()
         setStatus(issue: nil, result: "正在框選截圖")
         log("快捷鍵已接收，開始框選截圖")
@@ -223,28 +280,35 @@ public struct ScreenshotStatus: Equatable, Sendable {
         process.arguments = ["-i", "-s", "-t", destination.pathExtension, destination.path]
         process.terminationHandler = { [weak self] finished in
             let code = finished.terminationStatus
-            Task { @MainActor [weak self] in self?.finishCapture(exitCode: code, url: destination) }
+            Task { @MainActor [weak self] in await self?.finishCapture(exitCode: code, url: destination, token: token) }
         }
         do {
             try process.run()
         } catch {
-            captureInProgress = false
+            guard capture.complete(token) else { return }
             setStatus(issue: "無法啟動 macOS 截圖工具：\(error.localizedDescription)", result: "截圖失敗")
             log("截圖工具啟動失敗：\(error.localizedDescription)")
         }
     }
 
-    private func finishCapture(exitCode: Int32, url: URL) {
-        captureInProgress = false
-        guard enabled else { return }
+    private func finishCapture(exitCode: Int32, url: URL, token: ScreenshotCaptureLifecycle.Token) async {
+        guard capture.isCurrent(token) else { _ = capture.complete(token); return }
         guard let size = (try? fileManager.attributesOfItem(atPath: url.path)[.size]) as? NSNumber,
               size.intValue > 0 else {
+            guard capture.complete(token) else { return }
             if exitCode != 0 { log("截圖已取消或失敗，結束碼 \(exitCode)") }
             setStatus(issue: nil, result: "截圖已取消")
             return
         }
         if exitCode != 0 { log("截圖工具結束碼 \(exitCode)，但已產生圖片；繼續複製") }
-        switch ScreenshotClipboard.copyImage(at: url, to: .general) {
+        let payload = await Task.detached(priority: .userInitiated) {
+            ScreenshotImagePreparation.prepare(at: url)
+        }.value
+        // Off/on while decoding or while the native selection UI is open must
+        // not let the previous capture overwrite Clipboard or status.
+        guard capture.complete(token) else { return }
+        let result = payload.map { ScreenshotClipboard.write($0, to: .general) } ?? .unreadableImage
+        switch result {
         case .unreadableImage:
             setStatus(issue: "圖片已儲存，但無法讀取以複製到剪貼簿。", result: "儲存成功、複製失敗")
             log("圖片已儲存，但無法讀取：\(url.path)")

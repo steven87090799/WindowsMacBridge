@@ -65,6 +65,9 @@ import BridgeCore
         for pair in pairs {
             guard Set(pair.keys) == [sourceKey, destinationKey],
                   let source = pair[sourceKey] as? NSNumber, let destination = pair[destinationKey] as? NSNumber,
+                  CFGetTypeID(source) != CFBooleanGetTypeID(), CFGetTypeID(destination) != CFBooleanGetTypeID(),
+                  !["f", "d"].contains(String(cString: source.objCType)),
+                  !["f", "d"].contains(String(cString: destination.objCType)),
                   source.int64Value >= 0, destination.int64Value >= 0,
                   !result.contains(where: { $0.source == source.uint64Value }) else { return nil }
             result.append(NativeKeyMapping(source.uint64Value, destination.uint64Value))

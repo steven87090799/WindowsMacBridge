@@ -28,9 +28,11 @@ final class DiagnosticMetrics {
     private init() {
         // This migration reads statistical fields only, never old guard settings
         // or running processes. The prior helper need not be installed.
-        let previous = UserDefaults.standard.persistentDomain(forName: "com.local.VChewingGuard")
-        if store.importPreviousStatistics(previous) {
-            FileLogger.shared.log("Previous input-source statistics imported once")
+        if !store.previousStatisticsMigrationCompleted {
+            let previous = UserDefaults.standard.persistentDomain(forName: "com.local.VChewingGuard")
+            if store.importPreviousStatistics(previous) {
+                FileLogger.shared.log("Previous input-source statistics imported once")
+            }
         }
     }
 

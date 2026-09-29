@@ -123,9 +123,10 @@ public final class InputEngine: @unchecked Sendable {
 
     private func run() {
         Thread.current.name = "WindowsMacBridge.Input"
-        let timer = Timer(timeInterval: 0.25, repeats: true) { [self] _ in tick() }
+        let timer = Timer(timeInterval: 0.25, repeats: true) { [self] _ in autoreleasepool { tick() } }
+        timer.tolerance = 0.025
         RunLoop.current.add(timer, forMode: .common)
-        tick()
+        autoreleasepool { tick() }
         CFRunLoopRun()
         timer.invalidate()
         destroyTap()

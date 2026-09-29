@@ -1,10 +1,10 @@
 # WindowsMacBridge
 
-Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.9 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
+Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.10 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
 
 主專案是這個 repository；`vchewing-input-helper` 已移入 `InputSourceCore` 與 `InputSourceSupport`，不需同時執行兩個 App。[整合與遷移](Docs/ProjectIntegration.md)。
 
-## 0.5.9 快速開始
+## 0.5.10 快速開始
 
 新安裝預設啟用 Windows 快捷鍵、EventTap／所有鍵盤、底層 ABC／U.S. 的中文／唯音快捷鍵、截圖自動複製，以及 Codex 的聊天／文字 Profile。Terminal、其他 IDE、Remote、VM、Game 保留原按鍵；Finder 加強、唯音守護及切換快捷鍵預設關閉。截圖功能會註冊登入啟動，仍可能需要 macOS 核准。更新保留已存設定，可從一般頁按「套用建議預設」。
 
@@ -39,6 +39,8 @@ Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macO
 
 ## 截圖自動複製
 
+0.5.10 增加生命週期保護：關閉／重開或退出後，上一輪框選及圖片轉換不能再寫入剪貼簿；已儲存的圖片保留。截圖保持單一工作，原生框選仍以 Esc 取消。圖片轉換在背景工作與局部 autorelease pool 執行，PNG 沿用已儲存的編碼，剪貼簿寫入才回到主執行緒，避免大圖轉換阻塞截圖 Event Tap。60 秒內第三次 Tap 停用會停止自動重試並提供可見錯誤，重新開啟開關可檢查恢復。
+
 「一般 → 截圖」的開關預設開啟；舊設定沒有此欄位時也視為開啟，使用者明確關閉的選擇會持久保存，套用建議預設也不會重設。開啟後，`Shift+Win+S`（Win 鍵在 macOS 對應 Command，即 `⇧⌘S`）進入 macOS 的互動框選（Esc 取消）；完成時圖片存到系統截圖指定的資料夾，並以 PNG／TIFF 圖片格式寫入剪貼簿，可立即按 `⌘V`。會盡量沿用 macOS 截圖的儲存位置與格式；不支援的格式採 PNG，指定資料夾不可寫時改存桌面。原本的 `⇧⌘4` 永遠交由 macOS 處理。關閉開關會移除專屬 Event Tap，不改系統快捷鍵設定，也不使用 Automator。
 
 此功能使用 `/usr/sbin/screencapture -i -s` 啟動原生選取截圖。開啟時會立即檢查可執行檔、儲存位置、輔助使用權限及攔截狀態；往後每 30 天用一次性計時器檢查，遇到 tap 停用、session 恢復或權限恢復也會嘗試修復。診斷寫入 `~/Library/Logs/WindowsMacBridge/Screenshot.log`，只記錄接收此快捷鍵、狀態、錯誤及儲存路徑，不記錄圖片內容或普通按鍵。Esc 取消不動剪貼簿；若儲存成功但複製失敗，圖片仍留在磁碟，設定頁會顯示錯誤。
@@ -67,6 +69,8 @@ App 改用黑色鍵盤／雙向箭頭圖示，Menu Bar 不再顯示文字；暫�
 套用前保存本程式擁有的映射，套用後讀回驗證，成功才顯示已交換。遇到系統 Fn／Ctrl 映射或其他工具的衝突，保留外部設定並顯示錯誤；其他按鍵的既有映射不會清除。關閉或正常退出時只還原仍屬於本程式的 entries。強制終止後暫存映射可能仍存在，重新開啟可依同一次開機的還原紀錄恢復；重新開機會清除暫存映射，登入啟動後依保存的開關重新套用。若系統拒絕還原，會保留紀錄並顯示待處理狀態，不宣稱已恢復。
 
 只在開關、開啟一般設定／按重新檢查、鍵盤服務通知、睡眠／session 恢復時查驗，沒有新增輪詢或按鍵監聽。狀態變更寫入 `~/Library/Logs/WindowsMacBridge/KeyboardMapping.log`，上限 256 KiB、保留一份 `.1`，不記錄按鍵或輸入內容。HID 進階後端本來就有 Fn／Ctrl 交換，選用 HID 時暫停原生交換以免疊加；原生還原尚未驗證成功時阻止 HID 啟動。請先放開所有按鍵再切換。設定 schema 1／2 會遷移到 3，保留原功能開關與 App 規則；建議預設不會重設 Fn／Ctrl 的選擇。
+
+關閉 Fn／Ctrl 且沒有待還原紀錄時，略過鍵盤服務列舉；桌上型 Mac 不註冊用不到的內建鍵盤通知。手動重新檢查會重試先前失敗的通知註冊。畸形、Boolean 或小數映射皆拒絕套用。
 
 開啟此功能會確保 App 登入註冊；若 macOS 要求核准，授權清單會顯示真實登入狀態。截圖與 Fn／Ctrl 都關閉時才移除由這些功能新增的登入註冊，原先手動啟用的項目保留。
 
@@ -120,6 +124,8 @@ Windows 翻譯需於 **系統設定 → 隱私權與安全性 → 輔助使用**
 - NSWorkspace 與按鍵非原子同步、Finder 焦點競態、IME 組字、各 Client 與真實硬體都須實機驗收。
 
 ## 隱私與驗證
+
+0.5.10 保留權限／Secure Input／neutral recovery 的既有檢查頻率，為計時器加入 tolerance，讓系統合併背景喚醒；輸入執行緒每輪檢查使用局部 autorelease pool。舊統計遷移完成後不再讀取舊 App 的偏好 domain，統計延續與授權聲明仍保留。這些改動不保證特定 CPU 或 RAM 降幅，須以同版本／同 PID 的實際樣本判斷。一般使用者情境、改善建議與尚待實測項目見 [SafetyAndUsabilityReview](Docs/SafetyAndUsabilityReview.md)。
 
 外部資源取樣工具可同步記錄主程式、Finder extension 與系統 CPU／swap／壓縮記憶體，CPU 用同一 PID 的累積時間差計算，重啟重新建立基線；RSS 與 physical footprint 分開保存。`installed_*` 欄位是取樣時磁碟上的版本識別，若程序未重啟，不能據此推定它已載入新版。此工具不加入 App 的執行路徑，結束指定期間後自動停止，檔案預設只讓使用者讀寫。以單調時鐘限制時間，系統時間調整不延長採樣。系統總 CPU 是整台 Mac 的觀測值，不能歸因為此 App 的消耗。
 

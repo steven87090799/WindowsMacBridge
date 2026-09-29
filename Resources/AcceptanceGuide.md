@@ -6,6 +6,8 @@
 
 ## 準備（約兩分鐘）
 
+0.5.10 截圖保護驗收：開啟框選後關閉再重開截圖開關，完成舊框選時只儲存、不覆寫剪貼簿；下一次新截圖應可正常複製。大圖轉換期間做相同測試。同時確認 Esc 取消、快速重複快捷鍵、Shift+Ctrl+S 不截圖及 Shift+Win+S 框選。上述需實體操作，純核心生命週期與圖片 worker 測試不替代它。
+
 1. 從 Applications 啟動 App；診斷應顯示 EventTap Active、Secure Input OFF。
 2. 記下 App 版本、macOS 版本、鍵盤型號、輸入來源。先關掉 Karabiner 中重複的規則。
 3. 如果系統曾交換 Control／Command，先記下該鍵盤的設定。不要一次還原全部鍵盤；

@@ -32,6 +32,8 @@ jobs:
         run: swift --version
       - name: Unit and in-process AppKit tests
         run: bash scripts/test.sh
+      - name: Optimized native notification and screenshot regressions
+        run: bash scripts/test.sh -c release --filter 'nativeServiceNotificationRegistrationRetainsBridgedKeys|backgroundImagePreparationPublishesOnlyImmutableImageData'
       - name: Resource measurement regressions
         run: python3 -m unittest discover -s Tests/MonitoringTests -v
       - name: Build and verify development app

@@ -12,8 +12,12 @@ import BridgeCore
     var writes: [(UInt64, [NativeKeyMapping])] = []
     var acceptWrite = true, lieAboutWrite = false, acceptObservation = true
     var inventoryAvailable = true
+    var inventoryReads = 0, observationAttempts = 0
     var change: (@MainActor () -> Void)?
-    func services() -> [MacBookKeyboardService]? { inventoryAvailable ? rows : nil }
+    func services() -> [MacBookKeyboardService]? {
+        inventoryReads += 1
+        return inventoryAvailable ? rows : nil
+    }
     func write(_ mapping: [NativeKeyMapping], serviceID: UInt64) -> Bool {
         writes.append((serviceID, mapping))
         guard acceptWrite, let i = rows.firstIndex(where: { $0.identity.registryID == serviceID }) else { return false }
@@ -21,6 +25,7 @@ import BridgeCore
         return true
     }
     func observeChanges(_ action: @escaping @MainActor () -> Void) -> Bool {
+        observationAttempts += 1
         if acceptObservation { change = action }
         return acceptObservation
     }
@@ -156,6 +161,10 @@ import BridgeCore
         #expect(NativeMacBookKeyboardBackend.decode("not a map") == nil)
         #expect(NativeMacBookKeyboardBackend.decode([[source: "bad", destination: NSNumber(value: 3)]]) == nil)
         #expect(NativeMacBookKeyboardBackend.decode([[source: NSNumber(value: -1), destination: NSNumber(value: 3)]]) == nil)
+        #expect(NativeMacBookKeyboardBackend.decode([[source: NSNumber(value: true), destination: NSNumber(value: 3)]]) == nil)
+        #expect(NativeMacBookKeyboardBackend.decode([[source: NSNumber(value: 3), destination: NSNumber(value: false)]]) == nil)
+        #expect(NativeMacBookKeyboardBackend.decode([[source: NSNumber(value: 3.5), destination: NSNumber(value: 3)]]) == nil)
+        #expect(NativeMacBookKeyboardBackend.decode([[source: NSNumber(value: 3), destination: NSNumber(value: 4.5)]]) == nil)
         #expect(NativeMacBookKeyboardBackend.decode([[source: NSNumber(value: 3), destination: NSNumber(value: 4), "extra": 5]]) == nil)
     }
     @Test func unavailableInventoryKeepsRecoveryJournalUntilRestoreCanBeVerified() {
@@ -204,5 +213,31 @@ import BridgeCore
             native.stopObserving()
         }
         #expect(native.services() != nil)
+    }
+    @Test func disabledOrDesktopModeDoesNoInventoryOrObservationWork() {
+        let (name, defaults) = defaults(); defer { defaults.removePersistentDomain(forName: name) }
+        let backend = KeyboardBackendFixture()
+        let mapper = MacBookKeyboardMapper(backend: backend, defaults: defaults)
+        mapper.configure(enabled: false)
+        mapper.refresh()
+        #expect(backend.inventoryReads == 0 && backend.observationAttempts == 0)
+        backend.portable = false
+        mapper.configure(enabled: true)
+        mapper.refresh()
+        #expect(backend.inventoryReads == 0 && backend.observationAttempts == 0 && backend.writes.isEmpty)
+        #expect(mapper.status.activeDevices == 0 && mapper.status.issue == nil)
+    }
+    @Test func manualRecheckRetriesFailedNotificationsWithoutPolling() {
+        let (name, defaults) = defaults(); defer { defaults.removePersistentDomain(forName: name) }
+        let backend = KeyboardBackendFixture(); backend.acceptObservation = false
+        let mapper = MacBookKeyboardMapper(backend: backend, defaults: defaults)
+        mapper.configure(enabled: true)
+        #expect(backend.observationAttempts == 1 && backend.writes.isEmpty)
+        backend.acceptObservation = true
+        mapper.refresh()
+        #expect(backend.observationAttempts == 2 && mapper.status.activeDevices == 1)
+        mapper.refresh()
+        #expect(backend.observationAttempts == 2 && backend.writes.count == 1)
+        mapper.stop()
     }
 }

@@ -1,3 +1,16 @@
+# 0.5.10-preview.1 生命週期保護與資源檢查（2026-09-29）
+
+- 截圖新增 single-flight token，關閉／重開／停止會取消上一輪 Clipboard 寫入資格；即使圖片解碼稍後才完成也不更新剪貼簿或新狀態。背景轉換只回傳不可變 Data，局部 autorelease pool 釋放 NSImage／bitmap 暫存，PNG 原始 bytes 保留；不把圖檔刪除。
+- 截圖 Tap 恢復增加核心有界重試、同代工作合併與 tap generation：舊 Tap 的延遲修復不修改新 Tap，60 秒第三次停用停止自動重試。沒有加入新的常駐重試 timer。
+- 輸入與 UI timer tolerance，輸入 tick 局部 autorelease pool，移除 UI timer 每輪額外 Task；權限／Secure Input 檢查頻率保留。Fn 關閉且無還原紀錄不列舉服務；桌上型 Mac 不註冊未使用的通知；手動重新檢查可重試註冊失敗，Boolean／小數 property 格式拒絕。一次性舊統計 migration 完成後不再讀舊 domain。
+- 完整主套件 **162 tests**：34 InputSourceCore、54 BridgePlatform、74 BridgeCore；最佳化模式另驗證原生通知生命週期與圖片背景工作 2 項。另 11 HID helper tests／release build／self-check／strict signature，以及 5 Python 資源計算 tests。發行前完整主套件、release build、自檢會再跑最後原始碼；實際完成結果記於 release／PR。
+- 改版前 0.5.9 build 21，已授權、Windows 與截圖 Tap Active、設定視窗關閉、單一 PID 13655 的 120 秒樣本：平均單核 CPU **0.0583%**，最高 10 秒區間 **0.100%**，RSS **55.27–108.95 MiB**，physical footprint **61.5／61.6／61.5M**。CSV `resources-0.5.9-build21-before-audit.csv`。短樣本不是長期 idle、實體輸入、MacBook 或通用控制驗收，不和不同版本／PID 混算。
+- 一般使用者 18 類情境、7 個後續功能建議與必要／可移除碼的判斷整理於 SafetyAndUsabilityReview。MacBook Fn／Globe、雙向通用控制、Remote／VM／HID、登入／睡眠及多螢幕截圖仍需實機驗收；不以單元、CUA 或 CPU 短樣本宣稱通過。
+
+以下保留歷史結果。
+
+---
+
 # 0.5.9-preview.1 原生通知修復（2026-09-29）
 
 - 0.5.8 本機首次開啟 Fn／Ctrl 開關時發生 EXC_BAD_ACCESS；崩潰紀錄定位於 NativeMacBookKeyboardBackend.observeChanges 的 CFDictionarySetValue。臨時橋接的 CFString 經 Unmanaged.passUnretained 傳遞，未保證在字典讀取 hash 前仍有效。改用強引用及 withExtendedLifetime 同時保留鍵與值。
