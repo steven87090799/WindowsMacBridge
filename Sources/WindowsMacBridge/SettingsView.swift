@@ -4,7 +4,8 @@ import InputSourceSupport
 import BridgePlatform
 
 enum SettingsPage: String, CaseIterable {
-    case general = "一般與權限"
+    case permissions = "授權"
+    case general = "一般"
     case inputSources = "唯音與輸入法"
     case profiles = "App 規則"
     case diagnostics = "診斷"
@@ -26,6 +27,7 @@ struct SettingsView: View {
             }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 560)
             Group {
                 switch controller.settingsPage {
+                case .permissions: permissionList
                 case .general: general
                 case .inputSources: inputSources
                 case .profiles: profiles
@@ -41,20 +43,91 @@ struct SettingsView: View {
         Text(text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 
-    private var general: some View {
-        Form {
-            if !controller.status.accessibility {
-                Section("首次啟用：核准鍵盤權限") {
-                    Text("1. 將 WindowsMacBridge 拖到「應用程式」，並從那裡開啟。")
-                    Text("2. 按下方按鈕，在「輔助使用」開啟 WindowsMacBridge。")
-                    Button("開啟輔助使用設定") { controller.requestAccessibility(); controller.openPermissions() }
-                    explanation("快捷鍵預設已開啟；授權後自動開始，不需要執行安裝指令或安裝 Driver。macOS 權限只能由你核准；更新後若系統再次要求，請核准目前版本。")
+    private var permissionList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("授權清單").font(.title2.bold())
+                Spacer()
+                Button("重新檢查") { controller.refreshPermissions() }
+            }
+            explanation("綠色勾勾表示已取得；紅色叉叉表示尚未取得。按「前往開啟」即可到對應系統設定。")
+            List {
+                permissionRow("輔助使用", granted: controller.permissions.accessibility,
+                              detail: "鍵盤翻譯、截圖及視窗操作") {
+                    controller.requestAccessibility(); controller.openPermissions()
+                }
+                permissionRow("事件輸出", granted: controller.permissions.posting,
+                              detail: "送出翻譯後的按鍵；與輔助使用共用授權頁") {
+                    controller.openPermissions()
+                }
+                permissionRow("輸入監控", granted: controller.permissions.listening,
+                              detail: "允許此 App 接收鍵盤事件") {
+                    controller.requestListening(); controller.openInputMonitoring()
+                }
+                permissionRow("螢幕錄製", granted: controller.permissions.screenRecording,
+                              detail: "選用：只有視窗縮圖需要") {
+                    controller.requestScreenRecording(); controller.openScreenRecording()
+                }
+                permissionRow("Finder 擴充功能", granted: controller.permissions.finderExtension,
+                              detail: "選用：Finder 右鍵路徑選單", enabledLabel: "已啟用", disabledLabel: "未啟用") {
+                    controller.openFinderExtensionSettings()
+                }
+                permissionRow("登入時啟動", granted: controller.permissions.loginItem,
+                              detail: "重新登入或開機後繼續執行", enabledLabel: "已核准", disabledLabel: "未核准") {
+                    controller.inputSources.setLoginEnabled(true)
+                    controller.inputSources.openLoginSettings()
+                }
+                if controller.settings.inputBackend == .deviceHID {
+                    permissionRow("HID helper 輸入監控", granted: controller.hidStatus.permissions,
+                                  detail: "進階 HID 後端需要 helper 自己的授權") {
+                        controller.requestHIDListening(); controller.openInputMonitoring()
+                    }
                 }
             }
+            .listStyle(.inset)
+            HStack {
+                Text("WindowsMacBridge \(AppBuildInfo.current.versionLabel)")
+                Spacer()
+                if let checkedAt = controller.permissionsCheckedAt {
+                    Text("最近檢查：\(checkedAt.formatted(date: .omitted, time: .standard))")
+                }
+            }.font(.caption).foregroundStyle(.secondary)
+            if !controller.permissions.accessibility {
+                explanation("在系統的「輔助使用」或「裝置控制和資料取用」開啟 WindowsMacBridge。若系統開關已開但這裡仍是紅叉，請重新加入 /Applications 裡的目前版本。")
+            }
+        }
+        .onAppear { controller.refreshPermissions() }
+    }
+
+    private func permissionRow(_ title: String, granted: Bool, detail: String,
+                               enabledLabel: String = "已取得", disabledLabel: String = "未取得",
+                               action: @escaping () -> Void) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: granted ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .font(.title2).foregroundStyle(granted ? Color.green : Color.red)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).fontWeight(.medium)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(granted ? enabledLabel : disabledLabel)
+                .font(.callout).foregroundStyle(granted ? Color.green : Color.red)
+            if !granted {
+                Button("前往開啟", action: action)
+                    .accessibilityLabel("前往開啟\(title)")
+            }
+        }
+        .padding(.vertical, 7)
+    }
+
+    private var general: some View {
+        Form {
             Section("WindowsMacBridge · \(AppBuildInfo.current.versionLabel) Preview") {
                 Text(controller.summary).font(.headline).textSelection(.enabled)
                 explanation("新安裝已啟用 Windows 快捷鍵：本機 Ctrl+C／X／V 會轉成複製／剪下／貼上。Codex 預設適用聊天與文字輸入；Terminal、其他 IDE、遠端桌面、VM 和遊戲保留原按鍵。")
                 HStack {
+                    Button("授權清單") { controller.settingsPage = .permissions }
                     Button("套用建議預設") {
                         controller.applyRecommendedPreset()
                     }
@@ -91,14 +164,6 @@ struct SettingsView: View {
                 }
                 Toggle("Finder 檔案快捷鍵加強", isOn: Binding(get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
                 explanation("預設關閉。開啟後，確認焦點在檔案列表才提供開啟、改名及 Ctrl+X → Ctrl+V 移動；文字框仍使用文字操作。剪下標記在剪貼簿更新、切換 App、暫停或 5 分鐘後失效；程式無法確認 Finder 是否真的移動成功。")
-                HStack {
-                    Image(systemName: controller.finderExtensionEnabled ? "checkmark.square.fill" : "square")
-                    Text("Finder 路徑選單擴充功能")
-                    Spacer()
-                    if !controller.finderExtensionEnabled {
-                        Button("開啟設定") { controller.openFinderExtensionSettings() }
-                    }
-                }
                 explanation("右鍵路徑選單由 App 內的 Finder Sync 擴充功能提供。首次安裝後請在「一般 → 登入項目與擴充功能 → Finder」啟用 WindowsMacBridge Finder；此開關關閉時選單不顯示。")
                 Toggle("Finder Shift+Delete 永久刪除", isOn: Binding(get: { controller.settings.finderPermanentDeleteEnabled }, set: { controller.setFinderPermanentDeleteEnabled($0) }))
                     .disabled(!controller.settings.finderEnabled)
@@ -133,23 +198,6 @@ struct SettingsView: View {
                 explanation("若顯示待核准或啟動失敗，到系統設定檢查 WindowsMacBridge 是否被允許啟動。")
                 if let issue = controller.sourceStatus.loginIssue { Text(issue).foregroundStyle(.orange) }
             }
-            Section("鍵盤權限") {
-                HStack { Image(systemName: controller.status.accessibility ? "checkmark.square.fill" : "square"); Text("輔助使用"); Spacer(); if !controller.status.accessibility { Button("開啟設定") { controller.openPermissions() } } }
-                explanation("允許程式攔截快捷鍵及操作 App。未授權時不進行翻譯；第一次下載不能替你自動開啟這項 macOS 權限。")
-                HStack { Image(systemName: controller.status.postAccess ? "checkmark.square.fill" : "square"); Text("事件輸出"); Spacer(); if !controller.status.postAccess { Button("開啟設定") { controller.openPermissions() } } }
-                explanation("表示程式能否送出翻譯後的按鍵，通常隨輔助使用授權開啟。若不可用，先確認授權的是正在執行的新版 App。")
-                HStack { Image(systemName: controller.status.listenAccess ? "checkmark.square.fill" : "square"); Text("輸入監控"); Spacer(); if !controller.status.listenAccess { Button("開啟設定") { controller.openInputMonitoring() } } }
-                if controller.settings.windowThumbnailsEnabled {
-                    HStack { Image(systemName: controller.screenRecordingGranted ? "checkmark.square.fill" : "square"); Text("螢幕錄製（視窗縮圖）"); Spacer(); if !controller.screenRecordingGranted { Button("開啟設定") { controller.openScreenRecording() } } }
-                }
-                explanation("用於接收鍵盤事件。EventTap 能否建立也依系統授權而定；HID helper 需要自己的輸入監控權限。唯音守護本身不需要鍵盤權限。")
-                HStack {
-                    Button("要求輔助使用") { controller.requestAccessibility() }.help("顯示 macOS 的輔助使用授權提示。")
-                    Button("開啟權限設定") { controller.openPermissions() }.help("開啟系統設定 → 隱私權與安全性 → 輔助使用。")
-                    Button("要求 App 輸入監控") { controller.requestListening() }.help("向 macOS 要求此 App 的輸入監控權限。")
-                }
-                explanation("按第一個按鈕要求授權；第二個直接開啟系統設定；第三個用於需要輸入監控的情況。更新後若顯示已核准卻不能翻譯，重新加入目前版本並重啟 App。")
-            }
             Section("輸入法相容性") {
                 LabeledContent("目前輸入來源", value: controller.layoutID)
                 Toggle("中文／唯音輸入法也使用實體鍵位快捷鍵", isOn: Binding(get: { controller.settings.allowIMEShortcuts }, set: { controller.setIMEShortcuts($0) }))
@@ -180,10 +228,6 @@ struct SettingsView: View {
                     Button("重新偵測") { controller.inputSources.rediscover() }
                 }.disabled(controller.sourceStatus.suspension != nil)
                 explanation("前兩個按鈕立即切換輸入法；「重新偵測」用於剛安裝唯音或新增 ABC 之後。Remote、VM、Game、Disabled 或暫停期間不切換；Secure Input 期間延後切換。")
-                if controller.sourceStatus.suspension == .legacyApp {
-                    Button("結束舊版 VChewingGuard") { controller.inputSources.quitLegacyApp() }
-                    explanation("舊版與本程式不能同時守護輸入法；此按鈕正常結束舊版，之後請在登入項目停用舊版。")
-                }
                 if let issue = controller.sourceStatus.issue { Text(issue).foregroundStyle(.orange).textSelection(.enabled) }
             }
             Section("輸入法切換快捷鍵") {
@@ -202,10 +246,7 @@ struct SettingsView: View {
                 Stepper("啟動等待：\(controller.sourceStatus.startupDelayMilliseconds) ms", value: Binding(get: { controller.sourceStatus.startupDelayMilliseconds }, set: { controller.inputSources.setStartupDelay($0) }), in: 0...5000, step: 250)
                 explanation("預設 1500 ms，範圍 0–5000 ms。App 啟動後先等待輸入法服務準備，再開始守護。登入時來源偵測不穩，可增加等待；Windows 快捷鍵不受此值影響。")
             }
-            Section("舊版整合與來源診斷") {
-                Button("匯入舊版 VChewingGuard 偏好") { controller.inputSources.importLegacyPreferences() }.disabled(!controller.sourceStatus.canImportLegacy)
-                explanation("只匯入延遲與快捷鍵組合；不匯入啟用狀態、登入項目或歷史紀錄。找不到有效舊設定時按鈕停用。匯入後仍由你決定是否啟用守護。")
-                if let message = controller.sourceStatus.migrationMessage { Text(message) }
+            Section("輸入來源診斷") {
                 DisclosureGroup("輸入來源與守護診斷") {
                     Button("更新診斷") { controller.refreshSourceDiagnostics() }
                     explanation("重新讀取已安裝的輸入來源與最近切換結果，用於排查唯音／ABC 找不到或切換失敗；不會產生鍵盤紀錄。")

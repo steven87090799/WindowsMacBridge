@@ -22,8 +22,6 @@ public struct InputSourceStatus: Equatable, Sendable {
     public var loginStatus = "Off"
     public var loginRegistered = false
     public var loginIssue: String?
-    public var canImportLegacy = false
-    public var migrationMessage: String?
     public init() {}
 }
 
@@ -40,7 +38,6 @@ public struct InputSourceStatus: Equatable, Sendable {
     private var hotkeyIssue: String?
     private var issue: String?
     private var loginIssue: String?
-    private var migrationMessage: String?
     private var suspension: InputSourceSuspension? = .unknownApplication
     private let defaults = UserDefaults.standard
     private let hotkeyEnabledKey = "inputSource.hotkeyEnabled"
@@ -121,29 +118,7 @@ public struct InputSourceStatus: Equatable, Sendable {
         setLoginEnabled(true)
         return LoginItemManager.isRegistered
     }
-    public func quitLegacyApp() {
-        let oldApps = NSRunningApplication.runningApplications(withBundleIdentifier: LegacyPreferences.domain)
-        let refused = oldApps.filter { !$0.terminate() }
-        issue = refused.isEmpty ? nil : "舊版 App 尚未結束，請從 VChewingGuard 選單結束。"
-        emit()
-    }
     public func openLoginSettings() { SMAppService.openSystemSettingsLoginItems() }
-
-    public func importLegacyPreferences() {
-        let source = defaults.persistentDomain(forName: LegacyPreferences.domain) ?? [:]
-        let values = LegacyPreferences.validated(source)
-        guard !values.isEmpty else { migrationMessage = "未找到可匯入的舊版設定。"; emit(); return }
-        // A preset import uses the same transactional registration path as the UI.
-        if let raw = values[AppSettings.hotkeyKey] as? String, let preset = HotkeyPreset(rawValue: raw) {
-            setPreset(preset)
-        }
-        if let n = values[AppSettings.debounceKey] as? Int { setDebounce(n) }
-        if let n = values[AppSettings.startupDelayKey] as? Int { setStartupDelay(n) }
-        migrationMessage = hotkeyIssue == nil
-            ? "已匯入延遲與快捷鍵偏好；啟用狀態、登入項目與歷史紀錄未匯入。"
-            : "已匯入延遲；快捷鍵發生衝突，請重新選擇。"
-        emit()
-    }
 
     public var status: InputSourceStatus {
         var result = InputSourceStatus()
@@ -164,8 +139,6 @@ public struct InputSourceStatus: Equatable, Sendable {
         result.loginStatus = LoginItemManager.statusDescription
         result.loginRegistered = LoginItemManager.isRegistered
         result.loginIssue = loginIssue
-        result.canImportLegacy = !LegacyPreferences.validated(defaults.persistentDomain(forName: LegacyPreferences.domain) ?? [:]).isEmpty
-        result.migrationMessage = migrationMessage
         return result
     }
     public var diagnostics: String { controller.diagnostics + "\nHost policy: \(suspension?.rawValue ?? "Local")\nHotkey registered: \(hotkeyRegistered)" }
@@ -175,9 +148,6 @@ public struct InputSourceStatus: Equatable, Sendable {
         if SingleInstanceGuard.shared.acquire() { return true }
         SingleInstanceGuard.shared.activateExistingInstanceIfPossible()
         return false
-    }
-    public static var legacyAppRunning: Bool {
-        !NSRunningApplication.runningApplications(withBundleIdentifier: LegacyPreferences.domain).isEmpty
     }
     /// Enumerates metadata only: no source selection, hotkey registration or event tap.
     public static func discoveryReport() -> String {

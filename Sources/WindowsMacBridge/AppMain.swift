@@ -119,6 +119,8 @@ import InputSourceSupport
     @objc private func pauseUntilRestart() { controller.pause(minutes: nil) }
     @objc private func quit() { NSApp.terminate(nil) }
     @objc private func showSettings() {
+        controller.refreshPermissions()
+        controller.settingsPage = .permissions
         if settingsWindow == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 840, height: 740),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -162,6 +164,10 @@ import InputSourceSupport
         }
         if CommandLine.arguments.contains("--version") {
             print(AppBuildInfo.current.diagnosticText)
+            return
+        }
+        if CommandLine.arguments.contains("--diagnose-permissions") {
+            print("\(AppBuildInfo.current.diagnosticText)\n\(PermissionStatus.current().diagnosticText)")
             return
         }
         if CommandLine.arguments.contains("--diagnose-input-sources") {

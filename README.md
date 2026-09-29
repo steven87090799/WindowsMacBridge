@@ -1,12 +1,18 @@
 # WindowsMacBridge
 
-Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.0 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
+Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macOS Menu Bar App。**0.5.1 拖曳安裝個人測試版。** macOS 14+、Apple Silicon；預設 CGEventTap 快捷鍵，進階 HID 後端仍待裝置驗收。
 
 主專案是這個 repository；`vchewing-input-helper` 已移入 `InputSourceCore` 與 `InputSourceSupport`，不需同時執行兩個 App。[整合與遷移](Docs/ProjectIntegration.md)。
 
-## 0.5.0 快速開始
+## 0.5.1 快速開始
 
 新安裝預設啟用 Windows 快捷鍵、EventTap／所有鍵盤、底層 ABC／U.S. 的中文／唯音快捷鍵、截圖自動複製，以及 Codex 的聊天／文字 Profile。Terminal、其他 IDE、Remote、VM、Game 保留原按鍵；Finder 加強、唯音守護及切換快捷鍵預設關閉。截圖功能會註冊登入啟動，仍可能需要 macOS 核准。更新保留已存設定，可從一般頁按「套用建議預設」。
+
+### 授權清單
+
+開啟設定時先顯示獨立「授權」頁，以簡潔清單列出輔助使用、事件輸出、App 輸入監控、螢幕錄製、Finder 擴充功能及登入啟動。**綠色勾勾表示已取得／啟用，紅色叉叉表示尚未取得／啟用**，每個缺少項目都有「前往開啟」按鈕，直接進入對應 macOS 設定。螢幕錄製明確標為視窗縮圖的選用權限；使用 HID 時另外顯示 helper 的輸入監控。
+
+狀態依目前版本的原生 API 檢查結果顯示，不把系統清單裡的舊開關當成已授權。App 啟動、打開設定、回到前景或按「重新檢查」時更新；鍵盤權限沿用現有引擎快照，沒有新增輪詢計時器，也不在 SwiftUI 重繪時反覆查詢螢幕錄製權限。可用 `WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge --diagnose-permissions` 取得只讀狀態報告，不會提出授權要求或啟動截圖。唯音守護直接使用本版本設定；舊版助手的程序偵測、避讓、結束及偏好匯入已移除。
 
 ### Windows 視窗、Finder 與文字操作
 
@@ -17,11 +23,11 @@ Windows 快捷鍵相容層與唯音／ABC 輸入法輔助，整合成一個 macO
 - Finder 右鍵路徑選單由內含的 Finder Sync 擴充功能提供，使用 Finder 的 selected/targeted URL。可複製目前資料夾或選取項目的 POSIX 路徑，也可顯示路徑後按「複製」。只在按下複製時才寫入剪貼簿。首次安裝請到「系統設定 → 一般 → 登入項目與擴充功能 → Finder」啟用 WindowsMacBridge Finder；Finder Mode 關閉時選單不顯示。
 - Windows 文字游標提供 Ctrl+左右方向鍵按單字移動、Ctrl+Backspace／Delete 按單字刪除、Home／End 行首行尾、Ctrl+Home／End 文件首尾，並支援 Shift 選取組合。Alt+F4 發出 App 原生 `⌘W`；選配最後一個主要視窗時發出 `⌘Q`，保留 App 的未儲存內容確認。
 
-這些新動作只在本機 Default macOS Profile 啟用；Terminal、IDE、Remote、VM、Game 維持原樣通過。鍵盤 callback 只處理有界狀態並將 AX、Finder、AppKit 工作送到最多 16 筆的動作佇列。視窗 MRU 用通知更新，縮圖只在顯示切換器時擷取，沒有新增加的長期輪詢。HID 後端保留既有實體鍵位交換語意；新視窗切換器只適用 EventTap。設定頁以勾選顯示當下輔助使用、事件輸出、輸入監控及縮圖所需螢幕錄製權限，缺少時可直接開啟對應系統設定，仍須由使用者在 macOS 核准。
+這些新動作只在本機 Default macOS Profile 啟用；Terminal、IDE、Remote、VM、Game 維持原樣通過。鍵盤 callback 只處理有界狀態並將 AX、Finder、AppKit 工作送到最多 16 筆的動作佇列。視窗 MRU 用通知更新，縮圖只在顯示切換器時擷取，沒有新增加的長期輪詢。HID 後端保留既有實體鍵位交換語意；新視窗切換器只適用 EventTap。授權頁顯示實際取得的權限，缺少時可直接開啟對應系統設定，仍須由使用者在 macOS 核准。
 
 ## 截圖自動複製
 
-「一般與權限 → 截圖」的開關預設開啟；舊設定沒有此欄位時也視為開啟，使用者明確關閉的選擇會持久保存，套用建議預設也不會重設。開啟後，`⇧⌘4` 仍進入 macOS 的互動框選（可按空白鍵切換視窗、Esc 取消）；完成時圖片存到系統截圖指定的資料夾，並以圖片寫入剪貼簿，可立即按 `⌘V`。會盡量沿用 macOS 截圖的儲存位置與格式；不支援的格式採 PNG，指定資料夾不可寫時改存桌面。關閉開關會移除專屬 Event Tap，`⇧⌘4` 由 macOS 原樣處理，不改系統快捷鍵設定，也不使用 Automator。
+「一般 → 截圖」的開關預設開啟；舊設定沒有此欄位時也視為開啟，使用者明確關閉的選擇會持久保存，套用建議預設也不會重設。開啟後，`⇧⌘4` 仍進入 macOS 的互動框選（可按空白鍵切換視窗、Esc 取消）；完成時圖片存到系統截圖指定的資料夾，並以圖片寫入剪貼簿，可立即按 `⌘V`。會盡量沿用 macOS 截圖的儲存位置與格式；不支援的格式採 PNG，指定資料夾不可寫時改存桌面。關閉開關會移除專屬 Event Tap，`⇧⌘4` 由 macOS 原樣處理，不改系統快捷鍵設定，也不使用 Automator。
 
 此功能使用 `/usr/sbin/screencapture` 啟動原生互動截圖。開啟時會立即檢查可執行檔、儲存位置、輔助使用權限及攔截狀態；往後每 30 天用一次性計時器檢查，遇到 tap 停用、session 恢復或權限恢復也會嘗試修復。診斷寫入 `~/Library/Logs/WindowsMacBridge/Screenshot.log`，只記錄狀態、錯誤及儲存路徑，不記錄圖片內容或普通按鍵。Esc 取消不動剪貼簿；若儲存成功但複製失敗，圖片仍留在磁碟，設定頁會顯示錯誤。
 
@@ -67,7 +73,7 @@ open "$(cat build/APP_PATH.txt)"
 "$(cat build/APP_PATH.txt)/Contents/MacOS/WindowsMacBridge" --diagnose-backend
 ```
 
-Windows 快捷鍵預設啟用；唯音守護、輸入法切換鍵預設停用。唯音功能使用 TIS 與 Carbon，不需要 Accessibility，且需先安裝唯音。若 VChewingGuard 還在執行，輸入法頁會顯示衝突，可從頁面正常結束舊版，並於系統設定停用舊登入項目。
+Windows 快捷鍵預設啟用；唯音守護、輸入法切換鍵預設停用。唯音功能使用 TIS 與 Carbon，不需要 Accessibility，且需先安裝唯音。
 
 Windows 翻譯需於 **系統設定 → 隱私權與安全性 → 輔助使用** 授權 `.app`；Input Monitoring 有獨立診斷，不會反覆要求權限。依使用者選擇採免費 ad-hoc 個人測試發行，不申請付費憑證、不公證，也不繞過 macOS 安全核准。
 

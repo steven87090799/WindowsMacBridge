@@ -22,7 +22,6 @@ let package = Package(
         .executableTarget(name: "WindowsMacBridge", dependencies: ["BridgeCore", "BridgePlatform", "InputSourceCore", "InputSourceSupport"]),
         .testTarget(name: "BridgeCoreTests", dependencies: ["BridgeCore"], resources: [.copy("Fixtures")]),
         .testTarget(name: "InputSourceCoreTests", dependencies: ["InputSourceCore", "BridgeCore"]),
-        .testTarget(name: "InputSourceSupportTests", dependencies: ["InputSourceSupport", "InputSourceCore", "BridgeCore"]),
         .testTarget(name: "BridgePlatformTests", dependencies: ["BridgeCore", "BridgePlatform", "HIDProtocol"])
     ]
 )

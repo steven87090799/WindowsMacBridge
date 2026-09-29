@@ -9,7 +9,7 @@ import HIDProtocol
 import FinderSync
 
 @MainActor final class BridgeController: ObservableObject {
-    @Published var settingsPage = SettingsPage.general
+    @Published var settingsPage = SettingsPage.permissions
     let inputSources = InputSourceCoordinator()
     @Published var sourceStatus = InputSourceStatus()
     @Published var sourceDiagnostics = ""
@@ -27,7 +27,10 @@ import FinderSync
     @Published var targetApp: ApplicationContext?
     @Published var hidStatus = HIDStatus()
     @Published var screenshotStatus = ScreenshotStatus()
-    @Published var finderExtensionEnabled = false
+    @Published private(set) var permissions = PermissionStatus()
+    @Published private(set) var permissionsCheckedAt: Date?
+    var finderExtensionEnabled: Bool { permissions.finderExtension }
+    var screenRecordingGranted: Bool { permissions.screenRecording }
     private let engine = InputEngine()
     private let hid = HIDBackendClient()
     private let store = SettingsStore()
@@ -39,7 +42,6 @@ import FinderSync
     private enum SuspensionReason { case systemSleep, screensSleep, inactiveSession }
     private var suspensionReasons = Set<SuspensionReason>()
     private var sessionActive: Bool { suspensionReasons.isEmpty }
-    private var legacyAppRunning = false
     private var restartToken: UInt64 = 0
     private var lastEmergency = false
     private var debugUntil: Date?
@@ -73,7 +75,7 @@ import FinderSync
 
     init() {
         settings = store.settings
-        finderExtensionEnabled = FIFinderSyncController.isExtensionEnabled
+        refreshPermissions()
         configurationError = store.errorMessage
         do { registry = try ApplicationRegistry() }
         catch { configurationError = "App 保護清單無法載入；翻譯已停用。" }
@@ -82,21 +84,21 @@ import FinderSync
         syncFinderExtensionPreference()
         inputSources.onChange = { [weak self] status in
             guard let self else { return }
+            let loginChanged = sourceStatus.loginStatus != status.loginStatus
             if sourceStatus != status { sourceStatus = status }
+            if loginChanged { refreshPermissions() }
             refreshLayout()
             onStatusChange?()
         }
         inputSources.liveSelectionAllowed = { [weak self] in
             guard let self else { return false }
-            return !InputSourceCoordinator.legacyAppRunning && sourceSuspension(for: currentApplicationContext()) == nil
+            return sourceSuspension(for: currentApplicationContext()) == nil
         }
-        refreshLegacyApplication()
         refreshApplication()
         refreshLayout()
         let center = NSWorkspace.shared.notificationCenter
         observe(center, NSWorkspace.didActivateApplicationNotification) { $0.refreshApplication() }
-        observe(center, NSWorkspace.didTerminateApplicationNotification) { $0.refreshLegacyApplication(); $0.refreshApplication() }
-        observe(center, NSWorkspace.didLaunchApplicationNotification) { $0.refreshLegacyApplication(); $0.publish() }
+        observe(center, NSWorkspace.didTerminateApplicationNotification) { $0.refreshApplication() }
         observe(center, NSWorkspace.willSleepNotification) { $0.setSuspended(.systemSleep, true) }
         observe(center, NSWorkspace.didWakeNotification) { $0.setSuspended(.systemSleep, false); $0.refreshApplication() }
         observe(center, NSWorkspace.screensDidSleepNotification) { $0.setSuspended(.screensSleep, true) }
@@ -108,6 +110,7 @@ import FinderSync
         screenshot.onPeriodicCheck = { [weak self] in self?.verifyScreenshotConfiguration() }
         screenshot.start(enabled: settings.screenshotAutoCopy)
         if settings.screenshotAutoCopy { ensureScreenshotLogin() }
+        refreshPermissions()
         engine.start()
         hid.start()
         publish()
@@ -147,6 +150,12 @@ import FinderSync
         // Publishing identical snapshots wakes SwiftUI even when no window is visible.
         let changed = status != next
         if changed { status = next }
+        // Reuse the engine's existing checks; no additional permission polling.
+        var nextPermissions = permissions
+        nextPermissions.accessibility = next.accessibility
+        nextPermissions.posting = next.postAccess
+        nextPermissions.listening = next.listenAccess
+        if permissions != nextPermissions { permissions = nextPermissions }
         if !previousAccessibility && next.accessibility && settings.screenshotAutoCopy {
             screenshot.verifyAndRepair(reason: "輔助使用權限恢復")
         }
@@ -180,18 +189,20 @@ import FinderSync
     }
     private func refreshApplication() {
         context = currentApplicationContext()
-        let extensionEnabled = FIFinderSyncController.isExtensionEnabled
-        if finderExtensionEnabled != extensionEnabled { finderExtensionEnabled = extensionEnabled }
+        if context.processID == ProcessInfo.processInfo.processIdentifier { refreshPermissions() }
         if context.processID != ProcessInfo.processInfo.processIdentifier { targetApp = context }
         refreshLayout()
         publish()
     }
-    private func refreshLegacyApplication() { legacyAppRunning = InputSourceCoordinator.legacyAppRunning }
+    func refreshPermissions() {
+        let next = PermissionStatus.current()
+        if permissions != next { permissions = next }
+        permissionsCheckedAt = Date()
+    }
     private func sourceSuspension(for app: ApplicationContext) -> InputSourceSuspension? {
         InputSourcePolicy.suspension(context: app,
             isHostApp: app.processID == ProcessInfo.processInfo.processIdentifier,
-            paused: paused || status.emergencyPaused || status.manualPassThrough, sessionActive: sessionActive,
-            legacyAppRunning: legacyAppRunning)
+            paused: paused || status.emergencyPaused || status.manualPassThrough, sessionActive: sessionActive)
     }
     private func setSuspended(_ reason: SuspensionReason, _ suspended: Bool) {
         if suspended { suspensionReasons.insert(reason) } else { suspensionReasons.remove(reason) }
@@ -330,6 +341,7 @@ import FinderSync
         store.update { $0.windowThumbnailsEnabled = value }; settings = store.settings
         configurationError = store.errorMessage
         if value && !CGPreflightScreenCaptureAccess() { _ = CGRequestScreenCaptureAccess() }
+        refreshPermissions()
         publish()
     }
     func setAltF4Enabled(_ value: Bool) {
@@ -340,11 +352,14 @@ import FinderSync
         store.update { $0.altF4QuitLastWindow = value }; settings = store.settings
         configurationError = store.errorMessage; publish()
     }
-    var screenRecordingGranted: Bool { CGPreflightScreenCaptureAccess() }
     func openScreenRecording() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
             NSWorkspace.shared.open(url)
         }
+    }
+    func requestScreenRecording() {
+        if !CGPreflightScreenCaptureAccess() { _ = CGRequestScreenCaptureAccess() }
+        refreshPermissions()
     }
     func openInputMonitoring() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
@@ -393,8 +408,9 @@ import FinderSync
     func requestAccessibility() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
+        refreshPermissions()
     }
-    func requestListening() { _ = CGRequestListenEventAccess() }
+    func requestListening() { _ = CGRequestListenEventAccess(); refreshPermissions() }
     func openPermissions() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
