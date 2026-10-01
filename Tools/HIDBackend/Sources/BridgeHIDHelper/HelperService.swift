@@ -73,7 +73,7 @@ final class HelperService: NSObject, NSXPCListenerDelegate {
         weak var connection: NSXPCConnection?
         init(service: HelperService, connection: NSXPCConnection) { self.service = service; self.connection = connection }
         func configure(_ data: Data, withReply reply: @escaping (Data) -> Void) {
-            guard data.count <= 4096, let config = try? JSONDecoder().decode(HIDConfiguration.self, from: data), config.valid else {
+            guard data.count <= 8192, let config = try? JSONDecoder().decode(HIDConfiguration.self, from: data), config.valid else {
                 connection?.invalidate(); reply(Data()); return
             }
             DispatchQueue.main.async { [weak self] in

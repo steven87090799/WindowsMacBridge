@@ -31,6 +31,7 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
     private var connection: NSXPCConnection?
     private var configuration = HIDConfiguration()
     private var generation: UInt64 = 0
+    private var actionEpoch: UInt64 = 0
     private var backendActive = false
     private var started = false
     private var timer: Timer?
@@ -70,8 +71,9 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
             configuration.winRunEnabled != engine.winRunEnabled ||
             configuration.winSettingsEnabled != engine.winSettingsEnabled ||
             configuration.winTaskViewEnabled != engine.winTaskViewEnabled ||
-            configuration.sessionActive != engine.sessionActive || configuration.restartToken != engine.restartToken || backendActive != active
-        if changed { generation = engine.generation; actions.cancelPending() }
+            configuration.sessionActive != engine.sessionActive || configuration.restartToken != engine.restartToken ||
+            configuration.deviceInputs != engine.deviceInputs || backendActive != active
+        if changed { generation = engine.generation; actionEpoch &+= 1; actions.cancelPending() }
         backendActive = active
         configuration.enabled = effectiveEnabled
         configuration.sessionActive = engine.sessionActive; configuration.layoutSupported = engine.layoutSupported
@@ -85,17 +87,19 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
         configuration.winSettingsEnabled = engine.winSettingsEnabled
         configuration.winTaskViewEnabled = engine.winTaskViewEnabled
         configuration.keyboardScope = engine.keyboardScope
+        configuration.deviceInputs = engine.deviceInputs
         configuration.finderBrightnessEnterEnabled = engine.finderBrightnessEnterEnabled
         configuration.screenshotEnabled = engine.screenshotEnabled
         configuration.printScreenBehavior = engine.printScreenBehavior
         configuration.diagnostics = engine.diagnostics
         configuration.bundleID = engine.context.bundleID; configuration.mode = engine.context.mode
         configuration.isBrowser = engine.context.isBrowser; configuration.generation = generation
+        configuration.actionGeneration = actionEpoch
         configuration.restartToken = engine.restartToken
         _ = actions.update(context: configuration.context, enabled: configuration.enabled && !status.manualPassThrough,
                            finderEnabled: configuration.finderEnabled,
                            finderPermanentDeleteEnabled: configuration.finderPermanentDeleteEnabled,
-                           epoch: generation)
+                           epoch: actionEpoch)
         if !active || !effectiveEnabled {
             if wasActive || timer != nil || connection != nil {
                 timer?.invalidate(); timer = nil
@@ -159,9 +163,10 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
             next.exportedObject = HIDControllerReceiver(self)
             next.resume(); connection = next
         }
-        guard let connection, let data = try? JSONEncoder().encode(configuration) else { return }
+        guard let connection, let data = try? JSONEncoder().encode(configuration), data.count <= 8192 else { return }
         sentAt = now; inFlight = true
         let sentGeneration = generation
+        let sentActionEpoch = actionEpoch
         let proxy = connection.remoteObjectProxyWithErrorHandler { [weak self, weak connection] _ in
             Task { @MainActor in
                 guard let self, self.connection === connection else { return }
@@ -173,15 +178,16 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
             Task { @MainActor in
                 guard let self, self.connection === connection else { return }
                 self.inFlight = false
-                guard self.backendActive, sentGeneration == self.generation else { self.tick(); return }
-                guard data.count <= 4096, let status = try? JSONDecoder().decode(HIDStatus.self, from: data),
-                      status.version == HIDService.protocolVersion else { self.disconnect(); return }
+                guard self.backendActive, sentGeneration == self.generation, sentActionEpoch == self.actionEpoch else { self.tick(); return }
+                guard data.count <= 16384, let status = try? JSONDecoder().decode(HIDStatus.self, from: data),
+                      status.version == HIDService.protocolVersion, status.devices.count <= 16,
+                      status.devices.allSatisfy({ $0.identity.utf8.count <= 128 && $0.product.utf8.count <= 256 }) else { self.disconnect(); return }
                 self.status = status
                 _ = self.actions.update(context: self.configuration.context,
                     enabled: self.configuration.enabled && !status.manualPassThrough && !status.emergencyPaused,
                     finderEnabled: self.configuration.finderEnabled,
                     finderPermanentDeleteEnabled: self.configuration.finderPermanentDeleteEnabled,
-                    epoch: self.generation)
+                    epoch: self.actionEpoch)
                 if sentGeneration != self.generation { self.tick() }
             }
         }
@@ -195,7 +201,7 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
         while let entry = incomingActions.pop() {
             guard backendActive, configuration.enabled, !releasePending, configuration.layoutSupported,
                   !status.manualPassThrough, !status.emergencyPaused,
-                  generation == entry.generation, configuration.processID == entry.processID else { continue }
+                  actionEpoch == entry.generation, configuration.processID == entry.processID else { continue }
             if case .screenshot(let kind) = entry.action { onScreenshot?(kind) }
             else { _ = actions.submit(entry.action, context: configuration.context) }
         }

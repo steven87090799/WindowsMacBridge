@@ -24,6 +24,9 @@ public struct KeyboardEventProcessor: Sendable {
     private var winRunEnabled = false
     private var winSettingsEnabled = false
     private var winTaskViewEnabled = false
+    private var nativeAppSwitchEnabled = false
+    private var screenshotEnabled = false
+    private var printScreen: PrintScreenBehavior = .snipping
     public private(set) var manualPassThrough = false
     private var awaitingNeutral = true
     private var pressCount = 0
@@ -44,7 +47,10 @@ public struct KeyboardEventProcessor: Sendable {
                                    windowsKeyModifier: WindowsKeyModifier = .option,
                                    winRunEnabled: Bool = false,
                                    winSettingsEnabled: Bool = false,
-                                   winTaskViewEnabled: Bool = false) {
+                                   winTaskViewEnabled: Bool = false,
+                                   nativeAppSwitchEnabled: Bool = false,
+                                   screenshotEnabled: Bool = false,
+                                   printScreen: PrintScreenBehavior = .snipping) {
         let changedContext = context.processID != newContext.processID ||
             context.bundleID != newContext.bundleID || context.mode != newContext.mode ||
             context.isBrowser != newContext.isBrowser
@@ -58,7 +64,8 @@ public struct KeyboardEventProcessor: Sendable {
             self.textNavigationEnabled != textNavigationEnabled || self.altF4Enabled != altF4Enabled ||
             self.windowsKeyModifier != windowsKeyModifier ||
             self.winRunEnabled != winRunEnabled || self.winSettingsEnabled != winSettingsEnabled ||
-            self.winTaskViewEnabled != winTaskViewEnabled {
+            self.winTaskViewEnabled != winTaskViewEnabled || self.nativeAppSwitchEnabled != nativeAppSwitchEnabled ||
+            self.screenshotEnabled != screenshotEnabled || self.printScreen != printScreen {
             awaitingNeutral = true
         }
         context = newContext; self.enabled = enabled; self.layoutSupported = layoutSupported
@@ -68,6 +75,8 @@ public struct KeyboardEventProcessor: Sendable {
         self.windowsKeyModifier = windowsKeyModifier
         self.winRunEnabled = winRunEnabled; self.winSettingsEnabled = winSettingsEnabled
         self.winTaskViewEnabled = winTaskViewEnabled
+        self.nativeAppSwitchEnabled = nativeAppSwitchEnabled
+        self.screenshotEnabled = screenshotEnabled; self.printScreen = printScreen
     }
 
     public mutating func resumeManualPassThrough() { manualPassThrough = false; invalidate() }
@@ -101,6 +110,16 @@ public struct KeyboardEventProcessor: Sendable {
         for i in presses.indices { presses[i] = nil }
         pressCount = 0
         modifiers.reset(); awaitingNeutral = false
+    }
+
+    public mutating func reconcileIndependentSourceFlags(_ value: Modifiers) {
+        modifiers.synchronizeAggregate(value.subtracting(.fn))
+        for i in presses.indices {
+            if let rule = presses[i]?.rule, !value.isSuperset(of: rule.input.modifiers) {
+                presses[i]?.repeatSuppressed = true
+            }
+        }
+        if value.isEmpty && pressCount == 0 { awaitingNeutral = false }
     }
 
     public mutating func process(_ event: KeyboardEvent) -> EventDecision {
@@ -175,7 +194,7 @@ public struct KeyboardEventProcessor: Sendable {
         }
         if event.modifiers.isEmpty && activePressCount == 0 { awaitingNeutral = false }
 
-        let rule = enabled && layoutSupported && !manualPassThrough && !awaitingNeutral && modifiers.synchronized
+        let rule = event.allowsTranslation && enabled && layoutSupported && !manualPassThrough && !awaitingNeutral && modifiers.synchronized
             ? match(event) : nil
         presses[index] = Press(rule: rule, contextPID: context.processID,
                                contextBundle: context.bundleID, contextMode: context.mode, suppress: false)
@@ -193,6 +212,15 @@ public struct KeyboardEventProcessor: Sendable {
     private func match(_ event: KeyboardEvent) -> ShortcutRule? {
         // Remote/VM/game protections precede every local action, not only Ctrl shortcuts.
         guard context.mode == .macOS else { return nil }
+        if nativeAppSwitchEnabled && event.keyCode == 48 && event.modifiers.subtracting(.shift) == windowsKeyModifier.altFlag {
+            return ShortcutRule(id: "windows.nativeAppSwitch", input: .init(keyCode: 48, modifiers: event.modifiers),
+                                output: .init(keyCode: 48, modifiers: Modifiers.command.union(event.modifiers.intersection(.shift))))
+        }
+        if screenshotEnabled, let kind = WindowsScreenshotShortcuts.match(key: event.keyCode, modifiers: event.modifiers,
+                                                                         windowsKey: windowsKeyModifier, printScreen: printScreen) {
+            return ShortcutRule(id: "windows.screenshot", input: .init(keyCode: event.keyCode, modifiers: event.modifiers),
+                                output: .init(keyCode: event.keyCode, modifiers: []), action: .screenshot(kind))
+        }
         let systemRules = windowsKeyModifier == .option ? RuleEngine.system : RuleEngine.systemCommand
         if let system = systemRules.match(keyCode: event.keyCode, modifiers: event.modifiers),
            event.modifiers != windowsKeyModifier.flag ||

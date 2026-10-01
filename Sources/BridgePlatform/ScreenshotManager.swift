@@ -162,6 +162,9 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private var runtimePolicy: RuntimePolicySnapshot?
     private var policyEpoch: UInt64 = 0
     private var activeJob: (any ScreenshotCaptureJob)?
+    private var sourceJob: SourceWorkToken?
+    private var inputRouting = InputRoutingSnapshot()
+    private var physicalPreferences: [DeviceInputPreference] = []
     private var jobKind: ScreenshotKind = .region
     private let driver: any ScreenshotCaptureDriving
     private let validatesNativeContext: Bool
@@ -241,8 +244,25 @@ public struct ScreenshotStatus: Equatable, Sendable {
 
     /// HID dispatches the physical shortcut through versioned IPC, so its virtual reports
     /// can never be mistaken for an uncaptured keyboard's Alt+Shift+S by a second tap.
-    public func requestCapture(_ kind: ScreenshotKind) {
-        guard enabled, captureAllowed, let token = capture.begin() else { return }
+    public func applyInputRouting(_ routing: InputRoutingSnapshot) {
+        inputRouting = routing
+        if sourceJob?.validForAsyncWork == false {
+            activeJob?.cancel(.policyCancelled); processing?.cancel(); capture.invalidate()
+            sourceJob = nil
+        }
+    }
+    public func applyPhysicalPreferences(_ preferences: [DeviceInputPreference]) {
+        guard physicalPreferences != preferences else { return }
+        physicalPreferences = Array(preferences.prefix(16))
+        // No physical device ID exists at this stage. Conservatively cancel local work;
+        // a classified remote job has its own validity token and remains independent.
+        if sourceJob == nil && (activeJob != nil || processing != nil) {
+            activeJob?.cancel(.policyCancelled); processing?.cancel(); capture.invalidate()
+        }
+    }
+    public func requestCapture(_ kind: ScreenshotKind, source: SourceWorkToken? = nil) {
+        guard source?.validForAsyncWork ?? true, enabled, captureAllowed, let token = capture.begin() else { return }
+        sourceJob = source
         jobKind = kind
         beginCapture(token, kind: kind)
     }
@@ -389,6 +409,11 @@ public struct ScreenshotStatus: Equatable, Sendable {
             return Unmanaged.passUnretained(event)
         }
         guard enabled else { return Unmanaged.passUnretained(event) }
+        let evidence = InputOriginEvidence(processID: Int32(truncatingIfNeeded: event.getIntegerValueField(.eventSourceUnixProcessID)),
+                                           stateID: event.getIntegerValueField(.eventSourceStateID), ownEvent: EventRewriter.isGeneratedByBridge(event))
+        guard inputRouting.classify(evidence, physicalBackend: runtimePolicy?.input.backend ?? .eventTap) == .physicalFallback else {
+            return Unmanaged.passUnretained(event)
+        }
         if type == .flagsChanged {
             if InputEngine.modifiers(event.flags).isEmpty { awaitingNeutral = false }
             return Unmanaged.passUnretained(event)
@@ -399,7 +424,8 @@ public struct ScreenshotStatus: Equatable, Sendable {
             activeJob?.noteUserCancellation()
         }
         guard ScreenshotShortcut.supports(key) else { return Unmanaged.passUnretained(event) }
-        let decision = shortcut.handle(type: type, event: event, allowsCapture: captureAllowed && !awaitingNeutral)
+        let physicalAllowed = BackendCapabilities.eventTap.supports(runtimePolicy?.input.deviceScope ?? .allKeyboards, preferences: physicalPreferences)
+        let decision = shortcut.handle(type: type, event: event, allowsCapture: captureAllowed && physicalAllowed && !awaitingNeutral)
         switch decision {
         case .passThrough: return Unmanaged.passUnretained(event)
         case .suppress: return nil
@@ -409,6 +435,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
                 return Unmanaged.passUnretained(event)
             }
             if let token = capture.begin() {
+                sourceJob = nil
                 let kind = shortcut.captureKind
                 DispatchQueue.main.async { [weak self] in self?.beginCapture(token, kind: kind) }
             }
@@ -417,7 +444,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     private func beginCapture(_ token: ScreenshotCaptureLifecycle.Token, kind: ScreenshotKind) {
-        guard capture.isCurrent(token), isAuthorized() else {
+        guard sourceJob?.validForAsyncWork ?? true, capture.isCurrent(token), isAuthorized() else {
             if capture.complete(token) { setStatus(issue: "螢幕錄製權限不可用。", result: "permissionDenied") }
             return
         }
@@ -453,7 +480,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
 
     private func finishCapture(exitCode: Int32, failure: ScreenshotFailure?, url: URL, token: ScreenshotCaptureLifecycle.Token) async {
         activeJob = nil
-        guard capture.isCurrent(token) else {
+        guard capture.isCurrent(token), sourceJob?.validForAsyncWork ?? true else {
             jobTimer?.cancel(); jobTimer = nil
             _ = capture.complete(token); return
         }
@@ -477,7 +504,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         processing = nil; jobTimer?.cancel(); jobTimer = nil
         // Off/on while decoding or while the native selection UI is open must
         // not let the previous capture overwrite Clipboard or status.
-        guard capture.isCurrent(token) else { _ = capture.complete(token); return }
+        guard capture.isCurrent(token), sourceJob?.validForAsyncWork ?? true else { _ = capture.complete(token); return }
         guard isAuthorized() else {
             if capture.complete(token) { setStatus(issue: "螢幕錄製權限不可用。", result: "permissionDenied") }
             return

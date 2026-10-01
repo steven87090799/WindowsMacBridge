@@ -71,6 +71,44 @@ private final class CaptureJobFixture: ScreenshotCaptureJob, @unchecked Sendable
             manager.stop()
         }
     }
+    @Test func sourcePolicyReplacementCancelsActualCaptureAndPreventsLateClipboardWrite() async throws {
+        let driver = CaptureDriverFixture()
+        let board = NSPasteboard(name: .init("BridgeRemoteCapture-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.setString("untouched", forType: .string); let before = board.changeCount
+        let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true }, captureDirectory: FileManager.default.temporaryDirectory)
+        var input = RuntimePolicyInput(); input.backend = .deviceHID
+        input.shortcutEnabled = true; input.screenshotEnabled = true
+        input.foreground = .init(processID: .max, bundleID: "test", mode: .macOS)
+        var policy = RuntimePolicyCoordinator()
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+        let origin = SourceWorkGate(), frame = SourceWorkGate()
+        manager.requestCapture(.fullScreen, source: .init(origin: origin, frame: frame))
+        #expect(driver.launches == 1)
+        origin.invalidate(); manager.applyInputRouting(.init())
+        #expect(driver.job.cancellations.contains(.policyCancelled))
+        driver.completion?(0,nil)
+        for _ in 0..<10 { await Task.yield() }
+        #expect(board.changeCount == before)
+        manager.stop()
+    }
+    @Test func physicalPreferenceChangeCancelsLocalJobButPreservesRemoteJob() {
+        for remote in [false,true] {
+            let driver = CaptureDriverFixture()
+            let board = NSPasteboard(name: .init("BridgeDeviceCapture-\(UUID().uuidString)"))
+            defer { board.releaseGlobally() }
+            let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true }, captureDirectory: FileManager.default.temporaryDirectory)
+            var input = RuntimePolicyInput(); input.backend = .deviceHID; input.shortcutEnabled = true; input.screenshotEnabled = true
+            input.foreground = .init(processID: .max, bundleID: "test", mode: .macOS)
+            var policy = RuntimePolicyCoordinator()
+            manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+            let token = SourceWorkToken(origin: .init(), frame: .init())
+            manager.requestCapture(.region, source: remote ? token : nil)
+            manager.applyPhysicalPreferences([.init(identity: "a", experience: .nativeMac)])
+            #expect(driver.job.cancellations.contains(.policyCancelled) == !remote)
+            manager.stop()
+        }
+    }
 }
 
 @MainActor struct ScreenshotProcessingRegressionTests {

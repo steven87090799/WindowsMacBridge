@@ -13,9 +13,11 @@ final class DeviceCapture {
     private final class Device {
         let hid: IOHIDDevice, id: UInt64, builtIn: Bool, elements: [IOHIDElement]
         let apple834: Bool
+        let identity: String, product: String
         var seized = false, observed = false
-        init(_ hid: IOHIDDevice, id: UInt64, builtIn: Bool, apple834: Bool, elements: [IOHIDElement]) {
+        init(_ hid: IOHIDDevice, id: UInt64, builtIn: Bool, apple834: Bool, elements: [IOHIDElement], identity: String, product: String) {
             self.hid = hid; self.id = id; self.builtIn = builtIn; self.apple834 = apple834; self.elements = elements
+            self.identity = identity; self.product = String(decoding: product.utf8.prefix(240), as: UTF8.self)
         }
     }
     private let manager = IOHIDManagerCreate(kCFAllocatorDefault, 0)
@@ -66,6 +68,18 @@ final class DeviceCapture {
             if devices.contains(where: { $0.seized }) { sendOutput() }
         }
         if config.keyboardScope != next.keyboardScope { stopCapture() }
+        if config.actionGeneration != next.actionGeneration { actions.removeAll(keepingCapacity: true) }
+        if config.deviceInputs != next.deviceInputs {
+            actions.removeAll(keepingCapacity: true)
+            for d in devices where !PhysicalDevicePolicy.selected(identity: d.identity, scope: next.keyboardScope,
+                builtIn: d.builtIn, apple834: d.apple834, preferences: next.deviceInputs) && (d.seized || d.observed) {
+                // Release this device's contribution before returning its physical service.
+                engine.disconnect(d.id); _ = engine.register(d.id, builtIn: d.builtIn)
+                if d.seized { sendOutput() }
+                IOHIDDeviceClose(d.hid, d.seized ? IOOptionBits(kIOHIDOptionsTypeSeizeDevice) : 0)
+                d.seized = false; d.observed = false
+            }
+        }
         config = next
         if next.enabled && timer == nil {
             timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.tick() }
@@ -90,7 +104,8 @@ final class DeviceCapture {
     }
     func stop() { config = HIDConfiguration(); timer?.invalidate(); timer = nil; lastHeartbeat = 0; stopCapture() }
     private func selected(_ device: Device) -> Bool {
-        config.keyboardScope == .allKeyboards || device.builtIn || device.apple834
+        PhysicalDevicePolicy.selected(identity: device.identity, scope: config.keyboardScope, builtIn: device.builtIn,
+                                      apple834: device.apple834, preferences: config.deviceInputs)
     }
     private func stopCapture() {
         actions.removeAll(keepingCapacity: true)
@@ -101,10 +116,10 @@ final class DeviceCapture {
         guard devices.count < 16, !devices.contains(where: { $0.hid == hid }) else { return }
         func number(_ key: String) -> Int { (IOHIDDeviceGetProperty(hid, key as CFString) as? NSNumber)?.intValue ?? 0 }
         let product = IOHIDDeviceGetProperty(hid, kIOHIDProductKey as CFString) as? String ?? ""
+        let transport = IOHIDDeviceGetProperty(hid, kIOHIDTransportKey as CFString) as? String ?? ""
         // Never seize any virtual keyboard or a composite pointing/multitouch service.
-        guard !product.localizedCaseInsensitiveContains("virtual"), number(kIOHIDVendorIDKey) != 0x16c0,
-              !product.hasPrefix("V-"), !product.localizedCaseInsensitiveContains("Universal Control"),
-              number("VirtualHIDDevice") == 0,
+        guard !PhysicalDevicePolicy.isVirtual(product: product, vendor: number(kIOHIDVendorIDKey),
+              virtualProperty: number("VirtualHIDDevice") != 0, transport: transport),
               !IOHIDDeviceConformsTo(hid, UInt32(kHIDPage_GenericDesktop), UInt32(kHIDUsage_GD_Mouse)),
               !IOHIDDeviceConformsTo(hid, 0x0d, 5) else { return }
         let builtIn = number(kIOHIDBuiltInKey) != 0
@@ -120,13 +135,15 @@ final class DeviceCapture {
               input.allSatisfy({ Self.supported($0) || IOHIDElementGetUsage($0) == 0 }) else { return }
         var id: UInt64 = 0; _ = IORegistryEntryGetRegistryEntryID(IOHIDDeviceGetService(hid), &id)
         guard id != 0, engine.register(id, builtIn: builtIn) else { return }
-        let device = Device(hid, id: id, builtIn: builtIn, apple834: apple834, elements: keys); devices.append(device)
+        let identity = PhysicalDevicePolicy.identity(vendor: number(kIOHIDVendorIDKey), product: number(kIOHIDProductIDKey),
+            location: number(kIOHIDLocationIDKey), transport: transport, builtIn: builtIn,
+            serial: IOHIDDeviceGetProperty(hid, kIOHIDSerialNumberKey as CFString) as? String ?? "")
+        let device = Device(hid, id: id, builtIn: builtIn, apple834: apple834, elements: keys, identity: identity, product: product); devices.append(device)
         IOHIDDeviceRegisterInputValueCallback(hid, { context, result, _, value in
             guard let context else { return }
             Unmanaged<DeviceCapture>.fromOpaque(context).takeUnretainedValue().received(result, value: value)
         }, Unmanaged.passUnretained(self).toOpaque())
         IOHIDDeviceScheduleWithRunLoop(hid, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
-        if selected(device) && lifecycle.phase == .capturing { execute(lifecycle.stop()); engine.invalidate() }
     }
     private static func isFn(_ e: IOHIDElement) -> Bool {
         HIDTranslationEngine.modifier(page: IOHIDElementGetUsagePage(e), usage: UInt16(truncatingIfNeeded: IOHIDElementGetUsage(e))) == .fn
@@ -148,7 +165,7 @@ final class DeviceCapture {
         if device.seized || device.observed { IOHIDDeviceClose(hid, 0) }
         IOHIDDeviceUnscheduleFromRunLoop(hid, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
         if devices.contains(where: { $0.seized }) { sendOutput() }
-        execute(lifecycle.stop())
+        execute(lifecycle.deviceRemoved(remainingCaptured: devices.contains(where: { $0.seized })))
     }
     private func neutral(_ device: Device) -> Bool {
         for e in device.elements {
@@ -212,6 +229,19 @@ final class DeviceCapture {
             for device in devices where selected(device) && !device.observed && !device.seized {
                 device.observed = IOHIDDeviceOpen(device.hid, 0) == kIOReturnSuccess
             }
+            // A new/reenabled keyboard waits for its own neutral state. Do not stop another
+            // keyboard's active Ctrl chord merely because this device's preference changed.
+            if lifecycle.phase == .capturing {
+                for d in devices where selected(d) && d.observed && !d.seized && neutral(d) {
+                    IOHIDDeviceClose(d.hid, 0); d.observed = false
+                    if IOHIDDeviceOpen(d.hid, IOOptionBits(kIOHIDOptionsTypeSeizeDevice)) == kIOReturnSuccess {
+                        d.seized = true
+                        if !neutral(d) {
+                            IOHIDDeviceClose(d.hid, IOOptionBits(kIOHIDOptionsTypeSeizeDevice)); d.seized = false
+                        }
+                    }
+                }
+            }
         }
         var p = CapturePrerequisites()
         p.enabled = valid; p.sessionActive = sessionActive(); p.secureInput = status.secureInput
@@ -231,6 +261,12 @@ final class DeviceCapture {
         let pending = actions; actions.removeAll(keepingCapacity: true)
         if valid && lifecycle.phase == .capturing && !engine.manualPassThrough { for (action, pid, generation) in pending { onAction?(action, pid, generation) } }
         status.capturedDevices = devices.filter { $0.seized }.count; status.eligibleDevices = targets.count
+        var deviceStatus = [HIDDeviceStatus]()
+        for d in devices {
+            if let i = deviceStatus.firstIndex(where: { $0.identity == d.identity }) { deviceStatus[i].captured = deviceStatus[i].captured || d.seized }
+            else { deviceStatus.append(.init(identity: d.identity, product: d.product, builtIn: d.builtIn, captured: d.seized)) }
+        }
+        if status.devices != deviceStatus { status.devices = deviceStatus }
         status.manualPassThrough = engine.manualPassThrough; status.emergencyPaused = engine.emergencyPaused
         status.processed = engine.processed; status.translated = engine.translated; status.maxMicroseconds = maxMicroseconds
         if !fault.isEmpty { status.state = fault }
@@ -240,6 +276,7 @@ final class DeviceCapture {
         else if !valid { status.state = "已停止擷取" }
         else if !status.driverReady { status.state = "等待 VirtualHID Driver；不擷取鍵盤" }
         else if devices.isEmpty { status.state = "找不到支援的目標鍵盤服務" }
+        else if targets.isEmpty { status.state = "已辨識鍵盤均為 Native Mac／不在指定範圍" }
         else { status.state = String(describing: lifecycle.phase) }
     }
     private func received(_ result: IOReturn, value: IOHIDValue) {
@@ -257,7 +294,7 @@ final class DeviceCapture {
         if wasPassing != engine.manualPassThrough || engine.emergencyPaused { actions.removeAll(keepingCapacity: true) }
         if config.diagnostics, let rule = engine.lastRuleID { status.lastRule = rule }
         if let action {
-            if actions.count < 16 { actions.append((action, config.processID, config.generation)) }
+            if actions.count < 16 { actions.append((action, config.processID, config.actionGeneration)) }
             else { failClosed = true; fault = "動作佇列已滿；擷取已停止。"; execute(lifecycle.stop()); return }
         }
         sendOutput()

@@ -199,6 +199,10 @@ import InputSourceCore
             print(NativeMacBookKeyboardBackend().diagnosticReport())
             return
         }
+        if CommandLine.arguments.contains("--diagnose-input-producers") {
+            print(RemoteProcessResolver.metadataReport())
+            return
+        }
         guard InputSourceCoordinator.acquireSingleInstance() else { return }
         let application = NSApplication.shared
         let delegate = AppDelegate()

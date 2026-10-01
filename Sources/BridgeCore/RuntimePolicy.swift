@@ -3,21 +3,6 @@ public enum InputBackend: String, Codable, CaseIterable, Sendable {
     public var title: String { self == .deviceHID ? "裝置 HID 後端（需要 helper）" : "CGEventTap 快捷鍵" }
 }
 
-/// Foreground application classification describes a client, not the origin of incoming input.
-/// Choose the receiving role manually when the transport does not preserve provenance.
-public enum RemoteInputProfile: String, Codable, CaseIterable, Sendable {
-    case automatic, windowsReceiver, macReceiver, alreadyTranslated, sourcePassThrough
-    public var translates: Bool { self == .automatic || self == .windowsReceiver }
-    public var title: String {
-        switch self {
-        case .automatic: "本機／依 App 規則"
-        case .windowsReceiver: "接收原始 Windows 按鍵（此端轉譯）"
-        case .macReceiver: "接收原生 Mac 按鍵（原樣通過）"
-        case .alreadyTranslated: "來源已有 Bridge（此端原樣通過）"
-        case .sourcePassThrough: "傳送／通用控制來源（原樣通過）"
-        }
-    }
-}
 public enum KeyboardOwnership {
     public enum Owner: Sendable { case hid, eventTap, native }
     /// There is no reliable device ID in a public session EventTap. Never run a blind hybrid.
@@ -29,7 +14,6 @@ public struct RuntimePolicyInput: Equatable, Sendable {
     public var backend: InputBackend = .eventTap
     public var deviceScope: KeyboardScope = .allKeyboards
     public var foreground = ApplicationContext()
-    public var remoteProfile: RemoteInputProfile = .automatic
     public var paused = false, secureInput = false, sessionActive = true, manualPassThrough = false
     public var session: UInt64 = 0
     public var screenshotEnabled = false, shortcutEnabled = false
@@ -56,11 +40,11 @@ public struct RuntimePolicySnapshot: Equatable, Sendable {
     }
     public var permitsPhysicalNormalization: Bool {
         input.shortcutEnabled && !input.hidReleasePending && !input.paused && !input.secureInput && input.sessionActive &&
-            (input.remoteProfile.translates || input.remoteProfile == .sourcePassThrough) && input.accessibility && input.posting
+            input.accessibility && input.posting
     }
     public var permitsInput: Bool {
         input.shortcutEnabled && !input.hidReleasePending && !input.paused && !input.secureInput && input.sessionActive &&
-            input.remoteProfile.translates && input.accessibility && input.posting
+            input.accessibility && input.posting
     }
     public var permitsScreenshots: Bool {
         permitsShortcuts && input.screenshotEnabled && input.foreground.mode == .macOS
@@ -85,7 +69,7 @@ public enum RuntimeWakePlan: Equatable, Sendable {
     case stopped, periodic, deadline(Double)
     public static func make(input: RuntimePolicyInput, awaitingMappingNeutral: Bool,
                             deadline: Double?) -> Self {
-        if awaitingMappingNeutral || (input.shortcutEnabled && !input.paused && input.sessionActive && input.remoteProfile.translates) {
+        if awaitingMappingNeutral || (input.shortcutEnabled && !input.paused && input.sessionActive) {
             return .periodic
         }
         return deadline.map(Self.deadline) ?? .stopped

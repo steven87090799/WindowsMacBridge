@@ -143,11 +143,11 @@ struct SettingsView: View {
                     Button("完整操作說明") { controller.openUserGuide() }
                     Button("實機驗收步驟") { controller.openAcceptanceGuide() }
                 }
-                explanation("「套用建議預設」會啟用快捷鍵及中文／唯音相容、選 EventTap／所有鍵盤、將 Codex 設為 Default macOS，並關閉 Finder 檔案加強。保留其他 App 規則、輸入法及登入設定；下方仍可逐項調整。")
+                explanation("「套用建議預設」會啟用快捷鍵及中文／唯音相容、選裝置 HID／所有鍵盤、將 Codex 設為 Default macOS，並關閉 Finder 檔案加強。保留其他 App 規則、各來源偏好、輸入法及登入設定。HID 需要安裝包內的 helper 與 Driver。")
                 if let notice = controller.presetNotice { Text(notice).foregroundStyle(.secondary) }
             }
             Section("Windows 快捷鍵") {
-                Toggle("啟用 Windows 快捷鍵", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
+                Toggle("Windows Experience", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
                 explanation("預設開啟。包含複製、貼上、復原、儲存、尋找、分頁與 Ctrl 文字導覽；關閉後停止 Windows 按鍵翻譯，輸入法守護由自己的開關控制。")
                 Picker("這臺 Mac 收到的 Windows 鍵", selection: Binding(
                     get: { controller.settings.windowsKeyModifier },
@@ -155,13 +155,13 @@ struct SettingsView: View {
                     Text("Option (⌥)：這把鍵盤的 Win 送出 Option").tag(WindowsKeyModifier.option)
                     Text("Command (⌘)：這把鍵盤的 Win 送出 Command").tag(WindowsKeyModifier.command)
                 }
-                explanation("Mac mini 預設 Option，MacBook 預設 Command；舊設定缺少此欄時依本機機型選擇。這項選擇讓 Win 專用操作和 Alt+F4／瀏覽器上一頁、下一頁依實際輸入判斷，不交換整把鍵盤；Alt+Tab 交由 macOS 原生按鍵決定。Ctrl 文字操作不受影響。通用控制換用不同來源鍵盤時，EventTap 無法辨識來源，必要時在接收端切換。")
+                explanation("新安裝的實體鍵盤預設 Command：標準 Windows／Apple 鍵位皆使用實體 Control 執行 Ctrl 快捷鍵，Alt／Option 用於原生 App 切換。舊版手動鍵位選擇保留。此進階鍵位只影響實體輸入；遠端依自己的來源偏好處理。")
                 explanation("本機自動翻譯；Terminal、IDE、Remote／VM／Game 依 App 規則保留原按鍵。")
                 DisclosureGroup("進階：輸入方式與指定鍵盤") {
                     Picker("輸入方式", selection: Binding(get: { controller.settings.inputBackend }, set: { controller.setInputBackend($0) })) {
                         ForEach(InputBackend.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
-                    explanation("EventTap 是預設：授權後即可使用快捷鍵。下方 MacBook Fn／Ctrl 交換可用原生 API，不需 Driver。HID 是進階測試方式：只接管指定鍵盤；依 Win 鍵選擇處理 Option／Command，內建鍵盤依下方開關處理 Fn／Ctrl，另支援亮度鍵。需安裝並核准 Driver。")
+                    explanation("裝置 HID 是新安裝預設，先在按鍵來源端正規化；需安裝並核准 Driver。EventTap 是相容備援，無法辨識個別實體鍵盤或保證通用控制接收端不重複翻譯。現有 EventTap 設定保留，不會自動安裝或切換 Driver。")
                     Picker("鍵盤範圍", selection: Binding(get: { controller.settings.keyboardScope }, set: { controller.setKeyboardScope($0) })) {
                         ForEach(KeyboardScope.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
@@ -170,17 +170,26 @@ struct SettingsView: View {
                     if controller.settings.inputBackend == .deviceHID {
                         LabeledContent("Helper 狀態", value: controller.hidStatus.state)
                         LabeledContent("Driver／接管鍵盤數", value: "\(controller.hidStatus.driverReady ? "Ready" : "Not ready")／\(controller.hidStatus.capturedDevices)")
+                        ForEach(controller.hidStatus.devices) { device in
+                            Picker("\(device.product.isEmpty ? "鍵盤" : device.product)\(device.builtIn ? "（內建）" : "")", selection: Binding(
+                                get: { controller.settings.deviceInputs.first { $0.identity == device.identity }?.experience ?? .windows },
+                                set: { controller.setDeviceExperience($0, identity: device.identity) })) {
+                                Text("Windows Experience").tag(DeviceExperience.windows)
+                                Text("Native Mac").tag(DeviceExperience.nativeMac)
+                            }
+                            Text(device.captured ? "此鍵盤已接管" : "此鍵盤維持原生輸入／等待就緒").font(.caption).foregroundStyle(.secondary)
+                        }
                         explanation("需先執行下載包的 Install.command 並依 macOS 提示核准官方 VirtualHID。Ready 且接管數大於 0 才表示此後端有鍵盤可用；不支援的鍵盤維持原樣。此路徑仍待實體裝置驗收。")
                         Button("在 Finder 顯示 helper") { controller.openHelperLocation() }
                         explanation("手動加入輸入監控時，用此按鈕找到 BridgeHIDHelper.app，再到系統設定的輸入監控清單加入。尚未安裝 helper 時，請先執行 Install.command。")
                         Button("要求 helper 輸入監控權限") { controller.requestHIDListening() }
                         explanation("要求 macOS 允許已安裝的 helper 接收鍵盤；需由你在系統設定核准，按鈕不會自動授權。")
                     }
-                    explanation("一般 DMG 包含原生 MacBook Fn／Ctrl 交換；Option／Command 與亮度鍵等進階交換仍需另用 HID 整合包。")
+                    explanation("Fn／Globe、Touch ID、音量及亮度預設保留原本功能；Fn／Ctrl 交換是另外的明確選項。")
                 }
                 Toggle("MacBook 內建鍵盤：交換 Fn／地球鍵與左 Ctrl", isOn: Binding(
                     get: { controller.settings.macBookFnControlSwap }, set: { controller.setMacBookFnControlSwap($0) }))
-                explanation("MacBook 新安裝預設開啟，Mac mini 預設關閉；舊設定中明確關閉會保留。Fn 變成 Ctrl、原左 Ctrl 變成 Fn；右 Ctrl 及外接鍵盤保持原樣。EventTap 使用內建鍵盤的原生 HID 服務；進階 HID 後端只在其接管的內建鍵盤服務上套用相同交換，不會疊加。退出 App 或關閉時還原；請先放開按鍵再切換。")
+                explanation("所有新安裝預設關閉，保留實體 Control 與 Fn／Globe；舊版明確的交換設定保留。啟用後 Fn 變成 Ctrl、原左 Ctrl 變成 Fn；右 Ctrl 及外接鍵盤保持原樣。退出 App 或關閉時還原；請先放開按鍵再切換。")
                 explanation("通用控制：在鍵盤實際所在的 MacBook 開啟。接收端不交換虛擬鍵盤，避免交換兩次；Mac mini 的外接鍵盤操作 MacBook 時仍保持外接排列。兩臺 Mac 的跨機修飾鍵結果需實測。EventTap 的 Fn／Ctrl 原生交換作用於本機內建鍵盤；HID 的 Remote／VM／Game Profile 會釋放鍵盤，維持原生穿透。")
                 LabeledContent("MacBook 鍵盤模式", value: controller.macBookKeyboardStatus.summary)
                 Button("重新檢查鍵盤模式") { controller.refreshMacBookKeyboard() }
@@ -204,6 +213,34 @@ struct SettingsView: View {
                 Toggle("Win+Tab 開啟 Mission Control", isOn: Binding(get: { controller.settings.winTaskViewEnabled }, set: { controller.setWinTaskViewEnabled($0) }))
                 explanation("這三項預設關閉，各自選用；僅在 Default macOS Profile 生效。Win+R 使用 macOS ⌘Space，Win+Tab 使用 ⌃↑；若你已改過系統快捷鍵，結果會跟隨 macOS 設定。")
                 explanation("Alt+F4、Finder、文字及截圖功能共用安全政策；切換後端或暫停會取消尚未完成的操作。")
+            }
+            Section("Universal Control") {
+                LabeledContent("模式", value: controller.settings.inputBackend == .deviceHID ? "自動：來源端轉換，接收端通過" : "需裝置 HID 才能可靠區分來源")
+                explanation("兩台 Mac 使用裝置 HID 時，實體鍵盤在自己的 Mac 轉換一次，通用控制與虛擬鍵盤在接收端保持原樣。無需切換傳送／接收角色。跨機 App 情境與特殊鍵仍須實機驗收。")
+            }
+            Section("Remote Input") {
+                LabeledContent("模式", value: "自動偵測；各來源獨立")
+                explanation("已辨識的 Google host 會將原始 Ctrl 快捷鍵轉成 Mac 操作，已是 Command 的快捷鍵保持原樣。未知合成輸入保留原樣，可在進階設定校準一次；不影響本機鍵盤。")
+                DisclosureGroup("遠端進階與實際來源狀態") {
+                    if controller.remoteSources.isEmpty { Text("目前沒有可辨識的來源；尚未完成遠端實機驗收。") }
+                    ForEach(controller.remoteSources) { source in
+                        VStack(alignment: .leading) {
+                            Text(source.transport == .generic ? source.displayName : source.transport.title).font(.headline)
+                            Text("\(source.confidence.rawValue) · \(source.support.rawValue) · \(source.observedInput ? "已觀察來源事件" : "僅偵測程序身份")\(source.learned ? " · 已校準" : "")").font(.caption)
+                            Picker("輸入語意", selection: Binding(get: { source.semantics }, set: { controller.setRemoteSemantics($0, source: source) })) {
+                                ForEach(RemoteSemantics.allCases, id: \.self) { Text($0.title).tag($0) }
+                            }
+                            if source.confidence != .known {
+                                Picker("手動關聯軟體（不代表已驗證）", selection: Binding(get: { source.transport }, set: { controller.setRemoteTransport($0, source: source) })) {
+                                    ForEach(RemoteTransport.allCases, id: \.self) { Text($0.title).tag($0) }
+                                }
+                            }
+                            Button("校準這個來源一次") { controller.calibrateRemote(source) }.disabled(!source.observedInput)
+                        }
+                    }
+                    if let notice = controller.calibrationNotice { Text(notice).foregroundStyle(.secondary) }
+                    explanation("Detected 只代表辨識到程序，Verified 必須有實機驗收紀錄。PID／來源資訊被傳輸軟體隱藏時，無法可靠把事件歸到來源；未知事件保持原樣。")
+                }
             }
             Section("截圖") {
                 Toggle("截圖自動複製（Shift+Win+S）", isOn: Binding(
@@ -340,10 +377,6 @@ struct SettingsView: View {
     private var profiles: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("App 規則").font(.title2)
-            Picker("遠端／通用控制輸入角色", selection: Binding(get: { controller.settings.remoteInputProfile }, set: { controller.setRemoteInputProfile($0) })) {
-                ForEach(RemoteInputProfile.allCases, id: \.self) { Text($0.title).tag($0) }
-            }
-            explanation("在接收端明確選擇來源角色。來源端已有 Bridge 時，接收端選原樣通過；Windows 軟體注入到 Mac 請在接收端選 EventTap。傳輸未保留來源資訊時，無法自動可靠辨識或協調兩端。")
             explanation("規則依 App 的 bundle ID 套用到整個 App。Codex 新安裝預設 Default macOS，適合聊天與文字輸入；若使用內建終端機，改成 IDE 或移除規則，避免 Ctrl+C 被當成複製。")
             if let app = controller.targetApp {
                 HStack {

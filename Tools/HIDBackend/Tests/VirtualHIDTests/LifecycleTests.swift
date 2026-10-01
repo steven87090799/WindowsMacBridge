@@ -60,4 +60,11 @@ struct LifecycleTests {
         #expect(lifecycle.update(requirements, now: 10) == [.openPhysicalDevices])
         #expect(lifecycle.stop() == [.releaseVirtualOutputs, .closePhysicalDevices])
     }
+    @Test func oneKeyboardDisconnectDoesNotStopAnotherCapturedKeyboard() {
+        var lifecycle = CaptureLifecycle()
+        _ = lifecycle.update(valid(), now: 10); _ = lifecycle.captureCompleted(success: true)
+        #expect(lifecycle.deviceRemoved(remainingCaptured: true) == [] && lifecycle.phase == .capturing)
+        #expect(lifecycle.deviceRemoved(remainingCaptured: false) == [.releaseVirtualOutputs, .closePhysicalDevices])
+        #expect(lifecycle.phase == .inactive)
+    }
 }

@@ -30,11 +30,16 @@ import Carbon
     @Published var hidStatus = HIDStatus()
     @Published var screenshotStatus = ScreenshotStatus()
     @Published var macBookKeyboardStatus = MacBookKeyboardMappingStatus()
+    @Published var remoteSources: [RemoteSourceStatus] = []
+    @Published var calibrationNotice: String?
     @Published private(set) var permissionChecklist = PermissionChecklistState()
     var permissions: PermissionSnapshot { permissionChecklist.verified }
     @Published private(set) var permissionsCheckedAt: Date?
     var finderExtensionEnabled: Bool { permissions.finderExtension }
     private let engine = InputEngine()
+    private let remoteRegistry = RemoteSourceRegistry()
+    private var lastEngineConfiguration: EngineConfiguration?
+    private var calibrationDeadline: Double?
     private let hid = HIDBackendClient()
     private let store = SettingsStore()
     private let installationRecoveryPending: Bool
@@ -68,7 +73,6 @@ import Carbon
         if let configurationError { return configurationError }
         if !settings.enabled { return "已停用" }
         if paused || status.emergencyPaused { return "已暫停" }
-        if !settings.remoteInputProfile.translates { return settings.remoteInputProfile.title }
         if hid.releasePending { return "等待 Helper 安全釋放；新後端尚未啟動" }
         if settings.inputBackend == .deviceHID {
             if macBookKeyboardStatus.restorePending { return "等待 Fn／Ctrl 原生交換還原；HID 尚未啟動" }
@@ -138,6 +142,14 @@ import Carbon
         screenshot.onChange = { [weak self] status in self?.screenshotStatus = status }
         screenshot.onPeriodicCheck = { [weak self] in self?.verifyScreenshotConfiguration() }
         screenshot.start(enabled: false)
+        engine.setScreenshotHandler { [weak self] kind, source in self?.screenshot.requestCapture(kind, source: source) }
+        remoteRegistry.onChange = { [weak self] in
+            guard let self else { return }
+            if self.remoteSources != self.remoteRegistry.statuses { self.remoteSources = self.remoteRegistry.statuses }
+            self.publish()
+        }
+        observe(center, NSWorkspace.didLaunchApplicationNotification) { $0.remoteRegistry.discover() }
+        observe(center, NSWorkspace.didTerminateApplicationNotification) { $0.remoteRegistry.maintain([]) }
         hid.onOwnershipChange = { [weak self] in self?.publish() }
         hid.onScreenshot = { [weak self] kind in self?.screenshot.requestCapture(kind) }
         if settings.screenshotAutoCopy { ensureScreenshotLogin() }
@@ -179,6 +191,9 @@ import Carbon
     }
     func stop() {
         running = false
+        remoteRegistry.configure(active: false, preferences: settings.remoteSources)
+        remoteRegistry.onChange = nil
+        engine.calibrationInbox.cancel()
         finderPublisher.stop()
         timer?.invalidate(); timer = nil; timerPlan = .stopped
         for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
@@ -193,6 +208,18 @@ import Carbon
         inputSources.stop()
     }
     private func tick() {
+        engine.maintain()
+        remoteRegistry.maintain(engine.producerInbox.take())
+        screenshot.applyInputRouting(remoteRegistry.snapshot)
+        if let result = engine.calibrationInbox.take(),
+           remoteRegistry.snapshot.producers.contains(where: { $0.identity == result.identity && $0.processID == result.processID && $0.session == result.session }) {
+            let transport = remoteSources.first { $0.identity == result.identity }?.transport ?? .generic
+            saveRemotePreference(.init(identity: result.identity, semantics: result.semantics, transport: transport, learned: true))
+            calibrationNotice = "已保存此來源：\(result.semantics.title)"; calibrationDeadline = nil
+        }
+        if let deadline = calibrationDeadline, ProcessInfo.processInfo.systemUptime >= deadline {
+            engine.calibrationInbox.cancel(); calibrationDeadline = nil; calibrationNotice = "校準逾時；沒有改變來源設定。"
+        }
         // Reuse the existing lifecycle tick only while a mapping mutation is waiting.
         if macBookKeyboardStatus.awaitingNeutral { refreshMacBookKeyboard() }
         let previousPassThrough = status.manualPassThrough
@@ -205,8 +232,8 @@ import Carbon
             next.manualPassThrough = hidStatus.manualPassThrough
             next.emergencyPaused = hidStatus.emergencyPaused
             next.secureInput = hidStatus.secureInput
-            next.processed = hidStatus.processed; next.translated = hidStatus.translated
-            next.maxMicroseconds = hidStatus.maxMicroseconds
+            next.processed &+= hidStatus.processed; next.translated &+= hidStatus.translated
+            next.maxMicroseconds = max(next.maxMicroseconds, hidStatus.maxMicroseconds)
             next.actionStatus = hid.actionStatus
             next.backendIssue = nil
         }
@@ -284,7 +311,7 @@ import Carbon
     }
     private func sourceSuspension(for app: ApplicationContext) -> InputSourceSuspension? {
         if installationRecoveryPending { return .protectedApplication }
-        if !settings.remoteInputProfile.translates || IsSecureEventInputEnabled() { return .protectedApplication }
+        if IsSecureEventInputEnabled() { return .protectedApplication }
         return InputSourcePolicy.suspension(context: app,
             isHostApp: app.processID == ProcessInfo.processInfo.processIdentifier,
             paused: paused || status.emergencyPaused || status.manualPassThrough, sessionActive: sessionActive)
@@ -299,8 +326,7 @@ import Carbon
     }
     private func configureMacBookKeyboard() {
         let native = settings.inputBackend == .eventTap ||
-            HIDCapturePolicy.requiresNativePassThrough(mode: context.mode, layoutSupported: layoutSupported) ||
-            !settings.remoteInputProfile.translates
+            HIDCapturePolicy.requiresNativePassThrough(mode: context.mode, layoutSupported: layoutSupported)
         macBookKeyboard.configure(enabled: settings.macBookFnControlSwap && policy.current?.permitsPhysicalNormalization == true,
             eventTapBackend: native, sessionActive: sessionActive)
         macBookKeyboardStatus = macBookKeyboard.status
@@ -409,10 +435,10 @@ import Carbon
             if transitionRequested { transitionRequested = false; publish() }
         }
         if settings.inputBackend == .eventTap && hid.hasOwnership { hid.releaseOwnership() }
-        if lastAppliedSettings != settings { settingsRevision &+= 1; lastAppliedSettings = settings }
+        if lastAppliedSettings != settings.physicalPolicySettings { settingsRevision &+= 1; lastAppliedSettings = settings.physicalPolicySettings }
         var input = RuntimePolicyInput()
         input.backend = settings.inputBackend; input.deviceScope = settings.keyboardScope
-        input.foreground = context; input.remoteProfile = settings.remoteInputProfile
+        input.foreground = context
         input.paused = paused || status.emergencyPaused
         input.manualPassThrough = status.manualPassThrough
         input.secureInput = IsSecureEventInputEnabled()
@@ -428,12 +454,26 @@ import Carbon
         input.nativeRestorePending = macBookKeyboardStatus.restorePending
         let previous = policy.current
         let snapshot = policy.transition(input)
+        remoteRegistry.configure(active: snapshot.permitsShortcuts, preferences: settings.remoteSources, generation: snapshot.generation)
         updateRuntimeTimer()
-        guard previous != snapshot else { return }
+        if previous == snapshot {
+            if var config = lastEngineConfiguration, config.inputRouting != remoteRegistry.snapshot || config.deviceInputs != settings.deviceInputs {
+                let deviceChanged = config.deviceInputs != settings.deviceInputs
+                config.inputRouting = remoteRegistry.snapshot; config.deviceInputs = settings.deviceInputs; lastEngineConfiguration = config
+                if deviceChanged { hid.update(config, active: settings.inputBackend == .deviceHID && !macBookKeyboardStatus.restorePending) }
+                screenshot.applyPhysicalPreferences(config.deviceInputs)
+                screenshot.applyInputRouting(config.inputRouting); engine.update(config)
+            }
+            return
+        }
+        engine.calibrationInbox.cancel(); calibrationDeadline = nil
         var config = EngineConfiguration()
         config.context = context
         config.enabled = snapshot.permitsInput
         config.generation = snapshot.generation
+        config.physicalBackend = settings.inputBackend
+        config.inputRouting = remoteRegistry.snapshot
+        config.deviceInputs = settings.deviceInputs
         config.sessionActive = sessionActive
         config.layoutSupported = layoutSupported
         config.diagnostics = diagnosticsEnabled
@@ -459,8 +499,12 @@ import Carbon
         finderPublisher.setEnabled(settings.finderEnabled && snapshot.permitsShortcuts)
         screenshot.applyRuntimePolicy(snapshot, windowsKey: settings.windowsKeyModifier,
                                       printScreen: settings.printScreenBehavior)
+        screenshot.applyInputRouting(config.inputRouting)
+        screenshot.applyPhysicalPreferences(config.deviceInputs)
         hid.update(config, active: settings.inputBackend == .deviceHID && !macBookKeyboardStatus.restorePending)
-        config.enabled = config.enabled && settings.inputBackend == .eventTap
+        // The same session tap handles classified remote producers in HID mode. Hardware
+        // and incoming UC/virtual events remain pass-through in that tap.
+        lastEngineConfiguration = config
         engine.update(config)
         inputSources.updateRuntimePolicy(snapshot, protection: sourceSuspension(for: context))
     }
@@ -515,13 +559,38 @@ import Carbon
     private func syncFinderExtensionPreference() {
         publish()
     }
-    func setRemoteInputProfile(_ value: RemoteInputProfile) {
-        store.update { $0.remoteInputProfile = value }; settings = store.settings
-        configurationError = store.errorMessage; publish()
-    }
     func setPrintScreenBehavior(_ value: PrintScreenBehavior) {
         store.update { $0.printScreenBehavior = value }; settings = store.settings
         configurationError = store.errorMessage; publish()
+    }
+    private func saveRemotePreference(_ preference: RemoteSourcePreference) {
+        store.update {
+            if let i = $0.remoteSources.firstIndex(where: { $0.identity == preference.identity }) { $0.remoteSources[i] = preference }
+            else if $0.remoteSources.count < 32 { $0.remoteSources.append(preference) }
+        }
+        settings = store.settings; configurationError = store.errorMessage; publish()
+    }
+    func setRemoteSemantics(_ semantics: RemoteSemantics, source: RemoteSourceStatus) {
+        engine.calibrationInbox.cancel(); calibrationDeadline = nil
+        saveRemotePreference(.init(identity: source.identity, semantics: semantics, transport: source.transport))
+    }
+    func setRemoteTransport(_ transport: RemoteTransport, source: RemoteSourceStatus) {
+        engine.calibrationInbox.cancel(); calibrationDeadline = nil
+        saveRemotePreference(.init(identity: source.identity, semantics: source.semantics, transport: transport, learned: source.learned))
+    }
+    func calibrateRemote(_ source: RemoteSourceStatus) {
+        guard policy.current?.permitsShortcuts == true else { return }
+        engine.calibrationInbox.arm(identity: source.identity, processID: source.processID, session: source.session)
+        calibrationDeadline = ProcessInfo.processInfo.systemUptime + 60
+        calibrationNotice = "請在此遠端電腦按一次 Ctrl+C。只辨識這個測試組合，60 秒內有效。"
+    }
+    func setDeviceExperience(_ experience: DeviceExperience, identity: String) {
+        guard (settings.deviceInputs.first { $0.identity == identity }?.experience ?? .windows) != experience else { return }
+        store.update {
+            if let i = $0.deviceInputs.firstIndex(where: { $0.identity == identity }) { $0.deviceInputs[i].experience = experience }
+            else if $0.deviceInputs.count < 16 { $0.deviceInputs.append(.init(identity: identity, experience: experience)) }
+        }
+        settings = store.settings; configurationError = store.errorMessage; publish()
     }
     func setFinderBrightnessEnterEnabled(_ value: Bool) {
         store.update { $0.finderBrightnessEnterEnabled = value }; settings = store.settings

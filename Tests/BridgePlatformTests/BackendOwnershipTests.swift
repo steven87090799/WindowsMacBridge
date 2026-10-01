@@ -59,4 +59,23 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         #expect(!client.releasePending && !client.hasOwnership)
         client.stop()
     }
+    @Test func devicePreferenceActionEpochRejectsOldWorkWithoutChangingPhysicalGeneration() async throws {
+        let helper = OfflineHelper()
+        let listener = NSXPCListener.anonymous(); listener.delegate = helper; listener.resume()
+        defer { helper.acknowledge(); listener.invalidate() }
+        let client = HIDBackendClient(connectionFactory: { NSXPCConnection(listenerEndpoint: listener.endpoint) })
+        var config = EngineConfiguration(); config.enabled = true; config.layoutSupported = true; config.generation = 10
+        config.context = .init(processID: .max, bundleID: "test", mode: .macOS)
+        var captures = 0; client.onScreenshot = { _ in captures += 1 }
+        client.update(config, active: true)
+        client.performAction("screenshot.region", processID: .max, generation: 1)
+        for _ in 0..<10 { await Task.yield() }; #expect(captures == 1)
+        config.deviceInputs = [.init(identity: "a", experience: .nativeMac)]
+        client.update(config, active: true)
+        client.performAction("screenshot.region", processID: .max, generation: 1)
+        for _ in 0..<10 { await Task.yield() }; #expect(captures == 1)
+        client.performAction("screenshot.region", processID: .max, generation: 2)
+        for _ in 0..<10 { await Task.yield() }; #expect(captures == 2 && config.generation == 10)
+        client.stop()
+    }
 }

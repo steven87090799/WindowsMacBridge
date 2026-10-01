@@ -51,6 +51,18 @@ public struct ModifierStateMachine: Sendable {
         if sideGroupDown != aggregate.contains(side.group) { synchronized = false }
     }
     public mutating func invalidate() { synchronized = false }
+    /// Only for transports whose event flags describe that producer's own state.
+    public mutating func synchronizeAggregate(_ value: Modifiers) {
+        // Preserve actual side edges. An aggregate flag can repair a missing group,
+        // but must not relabel a known Right Control hold as Left Control.
+        for shift in stride(from: 0, through: 6, by: 2) {
+            let mask = UInt8(3) << shift
+            let group = ModifierSide(rawValue: shift)!.group
+            if !value.contains(group) { sides &= ~mask }
+            else if sides & mask == 0 { sides |= UInt8(1) << shift }
+        }
+        synchronized = true
+    }
     public mutating func reset() { sides = 0; synchronized = true }
 }
 
@@ -94,6 +106,7 @@ public struct KeyboardEvent: Sendable {
     public var isOwnEvent: Bool
     public var modifierSide: ModifierSide?
     public var modifierDown: Bool?
+    public var allowsTranslation = true
     public init(_ phase: KeyPhase, keyCode: UInt16, modifiers: Modifiers = [],
                 isRepeat: Bool = false, isOwnEvent: Bool = false,
                 modifierSide: ModifierSide? = nil, modifierDown: Bool? = nil) {

@@ -50,6 +50,9 @@ public struct CaptureLifecycle: Sendable {
         phase = .inactive
         return release()
     }
+    public mutating func deviceRemoved(remainingCaptured: Bool) -> [CaptureCommand] {
+        remainingCaptured ? [] : stop()
+    }
     public mutating func restart() -> [CaptureCommand] {
         let cleanup = stop()
         faulted = false

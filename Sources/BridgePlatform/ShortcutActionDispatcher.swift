@@ -3,6 +3,26 @@ import ApplicationServices
 import Carbon
 import BridgeCore
 
+public struct SystemApplicationActivation: Sendable {
+    private let action: @MainActor @Sendable () -> Void
+    public init(_ action: @escaping @MainActor @Sendable () -> Void) { self.action = action }
+    @MainActor public func activate() { action() }
+}
+@MainActor public protocol SystemApplicationOpening: Sendable {
+    func open(bundleID: String) async throws -> SystemApplicationActivation?
+}
+@MainActor private final class NativeSystemApplicationOpener: SystemApplicationOpening {
+    func open(bundleID: String) async throws -> SystemApplicationActivation? {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
+        let config = NSWorkspace.OpenConfiguration()
+        // Opening is an OS operation which cannot be withdrawn once submitted. Defer
+        // foreground activation until its completion passes the original work gate.
+        config.activates = false
+        let app = try await NSWorkspace.shared.openApplication(at: url, configuration: config)
+        return .init { _ = app.activate() }
+    }
+}
+
 /// A bounded mailbox separates the keyboard callback from AppKit, AX and pasteboard work.
 /// No clipboard payload or AX text/value attribute is read.
 public final class ShortcutActionDispatcher: @unchecked Sendable {
@@ -10,7 +30,9 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
         let action: ShortcutAction
         let context: ApplicationContext
         let generation: UInt64
+        let localGeneration: UInt64
         let deadline: Double
+        let source: SourceWorkToken?
     }
     private let lock = NSLock()
     private var pending = [Request?](repeating: nil, count: 16)
@@ -19,6 +41,7 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     private var count = 0
     private var scheduled = false
     private var generation: UInt64 = 0
+    private var localGeneration: UInt64 = 0
     private var context = ApplicationContext()
     private var enabled = false
     private var finderEnabled = false
@@ -26,10 +49,23 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     private var epoch: UInt64 = 0
     private var message = ""
     private let marker: Int64
+    private let authorization: (@MainActor @Sendable (ApplicationContext) -> Bool)?
+    private let clock: @Sendable () -> Double
+    private let systemOpener: (any SystemApplicationOpening)?
     @MainActor private var cut = FinderCutState()
     private var rejected: UInt64 = 0
+    @MainActor public var onScreenshot: (@MainActor @Sendable (ScreenshotKind, SourceWorkToken?) -> Void)?
 
-    public init(marker: Int64) { self.marker = marker }
+    public init(marker: Int64, authorization: (@MainActor @Sendable (ApplicationContext) -> Bool)? = nil,
+                clock: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime },
+                systemOpener: (any SystemApplicationOpening)? = nil) {
+        self.marker = marker; self.authorization = authorization; self.clock = clock; self.systemOpener = systemOpener
+    }
+
+    /// Per-device preferences invalidate local work without revoking a remote source.
+    public func cancelLocalPending() {
+        lock.lock(); localGeneration &+= 1; lock.unlock()
+    }
 
     /// UI/lifecycle path only. Synchronously invalidates queued work before a pause returns.
     public func cancelPending(disable: Bool = false) {
@@ -61,14 +97,20 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
         return message
     }
     public var rejectedCount: UInt64 { lock.lock(); defer { lock.unlock() }; return rejected }
+    var hasPendingWork: Bool { lock.lock(); defer { lock.unlock() }; return scheduled }
     /// try-lock only on the callback; on contention or overflow the request is dropped.
-    @discardableResult public func submit(_ action: ShortcutAction, context expected: ApplicationContext) -> Bool {
+    @discardableResult public func submit(_ action: ShortcutAction, context expected: ApplicationContext, source: SourceWorkToken? = nil) -> Bool {
         guard lock.try() else { return false }
         guard enabled, context == expected, count < pending.count else { rejected &+= 1; lock.unlock(); return false }
         if case .finder = action, !finderEnabled { lock.unlock(); return false }
-        let lifetime: Double = if case .window = action { 10 } else { 0.6 }
+        let lifetime: Double
+        switch action {
+        case .window, .system: lifetime = 10 // Native App startup can exceed a keyboard action's 0.6s lifetime.
+        default: lifetime = 0.6
+        }
         pending[writeIndex] = Request(action: action, context: context, generation: generation,
-                                     deadline: ProcessInfo.processInfo.systemUptime + lifetime)
+                                     localGeneration: localGeneration,
+                                     deadline: clock() + lifetime, source: source)
         writeIndex = (writeIndex + 1) % pending.count; count += 1
         let start = !scheduled; scheduled = true
         lock.unlock()
@@ -83,15 +125,20 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
         return request
     }
     private func isCurrent(_ request: Request, ignoreDeadline: Bool = false) -> Bool {
-        lock.lock(); defer { lock.unlock() }
-        return enabled && generation == request.generation &&
-            (ignoreDeadline || ProcessInfo.processInfo.systemUptime < request.deadline)
+        lock.lock()
+        let current = enabled && generation == request.generation &&
+            (request.source != nil || localGeneration == request.localGeneration) &&
+            (ignoreDeadline || clock() < request.deadline)
+        lock.unlock()
+        return current && (request.source?.validForAsyncWork ?? true)
     }
     private func report(_ value: String) {
         lock.lock(); message = value; lock.unlock()
     }
     @MainActor private func allowed(_ request: Request, ignoreDeadline: Bool = false) -> Bool {
-        isCurrent(request, ignoreDeadline: ignoreDeadline) && AXIsProcessTrusted() && CGPreflightPostEventAccess() &&
+        guard isCurrent(request, ignoreDeadline: ignoreDeadline) else { return false }
+        if let authorization { return authorization(request.context) }
+        return AXIsProcessTrusted() && CGPreflightPostEventAccess() &&
             !IsSecureEventInputEnabled() &&
             NSWorkspace.shared.frontmostApplication?.processIdentifier == request.context.processID
     }
@@ -106,13 +153,15 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
                 case .openSettings: bundle = "com.apple.systempreferences"
                 case .activityMonitor: bundle = "com.apple.ActivityMonitor"
                 }
-                if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) {
-                    do { _ = try await NSWorkspace.shared.openApplication(at: url, configuration: .init()) }
-                    catch { if allowed(request) { report("系統 App 開啟失敗。") } }
-                } else { report("找不到要求開啟的系統 App。") }
+                do {
+                    let activation = try await (systemOpener ?? NativeSystemApplicationOpener()).open(bundleID: bundle)
+                    guard allowed(request) else { continue }
+                    if let activation { activation.activate() }
+                    else { report("找不到要求開啟的系統 App。") }
+                } catch { if allowed(request) { report("系統 App 開啟失敗。") } }
             case .finder(let action): await performFinder(action, request: request)
             case .window(let action): await performWindow(action, request: request)
-            case .screenshot: break // screenshot jobs have their own single-flight owner
+            case .screenshot(let kind): onScreenshot?(kind, request.source)
             }
         }
     }

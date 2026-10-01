@@ -1,4 +1,4 @@
-# WindowsMacBridge 0.5.14（build 26）修復候選版 — 操作說明
+# WindowsMacBridge 0.5.15（build 27）統一輸入候選版 — 操作說明
 
 截圖尚在框選或圖片轉換時，關閉開關會取消該次自動複製；即使馬上重開，也不會複製上一輪圖片。已儲存的圖片保留。原生框選仍可按 Esc 取消；同一時間只接受一輪截圖。Pause、backend、session、Secure Input 或設定世代改變會取消舊工作；120 秒逾時，權限、程序、磁碟、解碼與編碼失敗各自顯示原因。截圖 Event Tap 在 60 秒內第三次停用時停止自動重試並顯示錯誤，放開按鍵後重開截圖開關即可重新檢查。
 
@@ -8,12 +8,12 @@ Finder 右鍵路徑選單需要 App 正在執行及 Finder Mode 已開啟。設�
 
 1. 開啟 DMG，將 `WindowsMacBridge.app` 拖到旁邊的 Applications，再從「應用程式」開啟。更新前先從 Menu Bar 結束舊版；不用執行安裝指令。
 2. 開啟設定會先顯示「授權」清單。綠勾代表已取得，紅叉代表缺少；按該列「前往開啟」，在 macOS 設定核准目前版本的 App。授權後自動開始，不需重設快捷鍵；更新後亦可能需要重新核准。
-3. 新安裝已選 Windows 快捷鍵 ON、EventTap、所有鍵盤，以及 Codex 的 Default macOS 規則。既有設定不會被更新覆蓋；需要相同設定就按「套用建議預設」。
+3. 新安裝已選 Windows Experience ON、裝置 HID、所有支援鍵盤，以及 Codex 的 Default macOS 規則。HID 需要整合 ZIP 的 Install.command 安裝 helper／Driver；Ready 且接管數大於零才有實體翻譯。既有 EventTap 設定保留；不會自動安裝 Driver。
 4. 在 ABC 輸入來源與可丟棄的文字文件試 Ctrl+A／C／X／V／Z；Codex 用聊天文字框實測，不送出測試文字。進入 Terminal 或遠端 App 時會自動切成原樣通過。
 
 這是待實機驗收的修復候選版，適用 Apple Silicon、macOS 14+，不需要購買 Developer 帳號。App 使用 ad-hoc 簽章，沒有 Apple 公證；若 macOS 阻擋，嘗試開啟後到「系統設定 → 隱私權與安全性」使用系統提供的「仍要打開」。不要關閉 Gatekeeper／SIP 或清除 quarantine。
 
-普通快捷鍵**不需**執行 Install.command，也不需要 Driver。安裝 HID 只用於下方的進階鍵盤映射測試。
+EventTap 備援不需安裝 Driver，但不能提供可靠的逐裝置偏好與通用控制來源分流。使用裝置 HID 時在來源 Mac 轉換實體鍵盤，接收端的 UC／virtual input 保留原樣。
 
 實體鍵盤、中文組字、Terminal、遠端與睡眠恢復驗收，請按 App 的「實機驗收步驟」，
 或閱讀同資料夾的 [AcceptanceGuide.md](AcceptanceGuide.md)。未操作過的情境保留為未驗收。
@@ -23,9 +23,9 @@ Finder 右鍵路徑選單需要 App 正在執行及 Finder Mode 已開啟。設�
 | 設定 | 新安裝預設 | 用途 |
 | --- | --- | --- |
 | Windows 快捷鍵 | 開 | 本機 Ctrl 快捷鍵轉為 macOS 操作 |
-| 輸入方式 | EventTap | 使用目前可用的快捷鍵翻譯，不接管實體鍵盤 |
+| 輸入方式 | 裝置 HID | 實體來源先正規化；需要 helper／Driver；舊版 EventTap 保留 |
 | 鍵盤範圍 | 所有鍵盤 | 內建、USB、Bluetooth 均使用同一套快捷鍵規則 |
-| MacBook Fn／Ctrl 交換 | MacBook 開／Mac mini 關 | 本機內建 Fn → 左 Ctrl、左 Ctrl → Fn；外接與通用控制虛擬鍵盤排除 |
+| MacBook Fn／Ctrl 交換 | 關 | 保留實體 Control 與 Fn／Globe；舊版明確選項保留 |
 | Codex／ChatGPT App | Default macOS | 依 `com.openai.codex` 套用聊天／文字操作 |
 | Terminal／其他 IDE | 原樣通過 | 保護 Unix 與內嵌終端機 Ctrl 快捷鍵 |
 | Remote／VM／Game | 原樣通過 | 不在本機翻譯或切換輸入法 |
@@ -34,9 +34,9 @@ Finder 右鍵路徑選單需要 App 正在執行及 Finder Mode 已開啟。設�
 | Windows 文字游標 | 開 | 保留舊版 Ctrl 文字導覽並新增 Home／End |
 | Alt+F4 | 關 | 按目前視窗的 AX 關閉按鈕，保留未儲存提示 |
 | Finder 亮度增加 → Enter | 關 | 只在本機 Finder 與 Finder 增強啟用時生效 |
-| 遠端輸入角色 | 本機／依 App 規則 | 可手動指定接收 Windows／Mac 或來源已有 Bridge |
+| Remote Input | 各來源自動 | Google host 原始 Ctrl 轉換、Command 通過；未知來源可逐一校準 |
 | PrintScreen | 框選 | 可改為傳統全螢幕複製 |
-| Windows 鍵位置 | Mac mini Option／MacBook Command | 依這把鍵盤實際送出的修飾鍵調整；Alt 專用操作用另一鍵 |
+| Windows 鍵位置 | Command | 標準實體 Win／Apple Command 鍵位；舊版明確選擇保留 |
 | Win+R／Win+I／Win+Tab | 關／關／關 | 可選 Spotlight／系統設定／Mission Control |
 | 截圖自動複製 | 開 | `Shift+Win+S` 框選後儲存圖片並複製到剪貼簿 |
 | 中文／唯音實體鍵位快捷鍵 | 開 | 底層 ABC／U.S. 的中文來源也翻譯快捷鍵 |
@@ -49,7 +49,7 @@ Finder 右鍵路徑選單需要 App 正在執行及 Finder Mode 已開啟。設�
 
 ## MacBook 內建鍵盤模式
 
-新安裝時自動辨識這臺 Mac 是否為 MacBook：MacBook 預設開啟「MacBook 內建鍵盤：交換 Fn／地球鍵與左 Ctrl」，Mac mini 預設關閉。舊設定沒有此欄位才依機型補值；已儲存的關閉選擇不會被升級覆蓋。最左側變成 Ctrl，右側原 Ctrl 變成 Fn，其他修飾鍵不變。映射在原生 HID 鍵盤服務上依裝置套用，內建鍵盤和外接鍵盤可以交替使用，不必切換開關；只有內建鍵盤會交換。狀態顯示「已交換」才代表服務讀回成功；找不到本機實體內建鍵盤時顯示等待，不修改外接鍵盤。請先放開按鍵再手動切換。
+新安裝及舊版缺欄位均保留 Control 與 Fn／Globe。內建與 Apple 鍵盤不因品牌而被排除；在 HID 已接管且 Windows Experience 啟用時，Control+C 和外接鍵盤使用同一套複製規則。「交換 Fn／地球鍵與左 Ctrl」是額外選項，舊版明確保存的選擇不被覆寫。啟用才交換內建 Fn／左 Ctrl，外接鍵盤不交換；請放開按鍵後切換。
 
 通用控制兩種方向都能使用同一份設定：只在來源 MacBook 交換實體內建鍵盤，另一臺收到的虛擬服務不會再次交換；外接鍵盤操控 MacBook 時仍保持外接排列。實際跨機 Ctrl／Fn、中文組字及睡眠恢復需按驗收指南測試，未測之前不視為已驗收。
 
@@ -68,7 +68,7 @@ App 啟動、開啟設定及返回前景時會重新檢查，也可按「重新�
 ## 一般
 
 - **Windows 快捷鍵**：開啟後翻譯既有 29 組一般規則與 19 組瀏覽器規則，涵蓋複製、貼上、復原、儲存、分頁與文字導覽；關閉不會連帶關閉輸入法守護。
-- **EventTap**：全鍵盤的快捷鍵翻譯。自製 Alt+Tab 視窗切換器已移除，Tab 不再被本 App 攔截；若實體 Alt 在這把鍵盤上送出 Command，Alt+Tab 直接使用 macOS 原生逐 App 切換器。不能可靠辨識每次按鍵來自哪一把鍵盤，也不提供 Fn／Control 交換或 consumer 亮度鍵映射。
+- **EventTap 備援**：只在未識別為遠端／UC／自身輸出的 hardware 事件上翻譯；沒有可靠鍵盤 device ID。存在 Native Mac 裝置偏好或指定範圍時停止備援的實體翻譯並顯示原因，不能忽略你的裝置選擇。已辨識遠端仍可獨立處理。自製視窗切換器已移除；遠端 Alt+Tab 只是輸出 macOS 原生 Command+Tab。
 - **HID**：進階裝置測試後端，需要另裝 root helper 與官方 VirtualHID Driver。「所有支援的鍵盤」接管符合安全 descriptor 的內建及外接鍵盤；另保留內建／Apple VID 1452/PID 834 範圍。複合、虛擬或未知 descriptor 維持原生。依目前 Win 鍵位置配置 Option／Command，內建鍵盤依同一 Fn／Ctrl 開關配置，Finder／文字／Alt+F4／Win+R/I/Tab 開關會傳給 helper。切換輸入方式會選擇對應範圍。
 - **鍵盤範圍**：EventTap 使用所有鍵盤，HID 使用指定範圍。EventTap 選內建限定時停止翻譯，避免錯誤地套用到全部鍵盤。
 - **Finder 加強**：確認在檔案列表才啟用開啟、改名、刪除與 Ctrl+X／V 移動。Ctrl+X 先執行 Copy 並記住剪下狀態，Ctrl+V 再交由 Finder 的 Move 執行。開資料夾、上一層與切換路徑保持剪下狀態；剪貼簿更新、切換 App、暫停或 5 分鐘後取消標記；不保證 Move 已成功。Shift+Delete 必須另外啟用並逐次確認。右鍵路徑選單由 Finder Sync 提供，請在系統的 Finder 擴充功能設定啟用；「顯示目前資料夾路徑」子選單優先顯示選取項目的完整 POSIX 路徑，並有「複製此路徑」。只有按下複製才寫入剪貼簿。
@@ -118,7 +118,11 @@ EventTap 不攔截滑鼠，不翻譯無修飾鍵 F／Escape 或原生 Control+Co
 
 **Codex 已依「只用聊天與文字輸入」預設 Default macOS。** 如果改用內建終端機，改成 IDE 或移除 Codex 規則，避免 Ctrl+C 變成 Copy。移除此規則後不會因下次重啟重新加入；「套用建議預設」才會再加入。
 
-App 的 Remote 規則讓 Client 收到原始按鍵；另有「遠端輸入角色」可手動指定本機自動、接收原始 Windows（此端翻譯）、接收原生 Mac、來源已有 Bridge，以及傳送／Universal Control 來源（後三者穿透）。兩端都裝 Bridge 時，只選一端翻譯。系統事件沒有可靠的遠端來源標籤，因此角色需自行指定，不能自動判斷兩端軟體或 Client 是否已映射。設定檔中的 `remoteWindows` 是為保留舊版設定而留下的內部代碼，介面顯示 Remote Session。瀏覽器的遠端分頁無法可靠辨識，可使用專用瀏覽器並指定 Remote。Alt+Tab、Ctrl+Alt+Delete、剪貼簿是否送到遠端，由各 Client 決定，不保證所有 Client 相同。
+App 的 Remote Session 規則保護「本機正在操作遠端 Client」的原始按鍵。它與「其他電腦控制這台 Mac」不同：後者依 CGEvent 來源 PID、程序簽章及來源偏好獨立處理。一般 Chrome 不被當作 Google host。Google host Automatic 轉換明確的 raw Ctrl／Home／End／Alt+Tab，已是 Command 的快捷鍵保持原樣；有歧義的 Win／Option 組合需要該來源的 Windows 語意設定。
+
+Remote Advanced 顯示實際來源、Known／Likely／Unknown、語意與 Detected／Generic／Unknown；目前沒有遠端被列為 Verified。未知 producer 保留原樣，按「校準這個來源一次」後，在遠端按 Ctrl+C，最多 60 秒辨識此組合收到的是 Control 或 Command，保存到此來源；不保存普通打字。不用切 Sender／Receiver，遠端偏好也不影響其他鍵盤或 UC。
+
+每個來源有獨立按鍵帳本；程序消失、host session／pause／Secure Input／policy 改變會清理自己的輸出。沒有可觀察 disconnect 訊號時，持有的遠端合成輸出在 60 秒沒有來源事件後安全失效，長時間靜止持鍵需要重新放開再按。來源 PID 被軟體隱藏／改成零、未知虛擬 HID 或共享 host 的多個 peer，不能保證自動區分；請按驗收指南逐一測試。Client 是否轉送 Alt+Tab、Win+Shift+S 等本機保留快捷鍵，仍由 Client／來源 OS 決定。
 
 ## 唯音與輸入法
 
@@ -146,7 +150,7 @@ App 的 Remote 規則讓 Client 收到原始按鍵；另有「遠端輸入角色
 
 ## 進階 HID／停止與移除
 
-下載包的 READ-ME-FIRST.md 提供安裝 helper、核准 Driver、輸入監控與裝置驗收步驟。Install.command 需要管理員授權；新版預設 EventTap，除非明確切換 HID，否則不會接管鍵盤。
+下載包的 READ-ME-FIRST.md 提供安裝 helper、核准 Driver、輸入監控與裝置驗收步驟。Install.command 需要管理員授權；新版 HID 預設只會在 helper／Driver Ready、所有安全條件成立時接管支援的實體裝置。不支援 descriptor 保留原生。
 
 先從 Menu Bar 暫停／結束。只用 EventTap 時，將 App 移到垃圾桶即可停止使用；macOS 的登入項目與權限可自行移除，設定偏好會保留。若裝過 helper，使用 Uninstall.command 移除本工具服務；共用官方 Driver 保留，避免影響其他軟體。
 

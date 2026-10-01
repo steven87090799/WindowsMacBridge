@@ -1,10 +1,10 @@
-# WindowsMacBridge 0.5.14（build 26）修復候選版
+# WindowsMacBridge 0.5.15（build 27）統一輸入候選版
 
-Windows 快捷鍵與唯音／ABC 輸入法輔助整合在一個 macOS Menu Bar App。適用 Apple Silicon、macOS 14+。這次修復的根因、完整測試與未完成驗收見 [2026-09-30 修復報告](Docs/PreReleaseRepair-2026-09-30.md)。實體 HID、Universal Control、Remote、macOS 授權與安裝復原仍須驗收，**目前不宣稱可正式上線**。
+Windows 快捷鍵與唯音／ABC 輸入法輔助整合在一個 macOS Menu Bar App。適用 Apple Silicon、macOS 14+。本次來源分流、逐裝置／遠端偏好、完整測試與限制見 [統一輸入報告](Docs/UnifiedInput-2026-10-01.md)，前批修復見 [2026-09-30 報告](Docs/PreReleaseRepair-2026-09-30.md)。六個跨機情境、TCC、實體 HID、Remote 與 Driver 仍未驗收，**目前不宣稱可正式上線**。
 
 ## 使用與權限
 
-一般 EventTap 模式將 App 放進 Applications 即可，不需 helper／Driver。新安裝開啟 Windows 快捷鍵、所有鍵盤、截圖自動複製與底層 ABC／U.S. 的中文快捷鍵；Finder 增強、亮度鍵開啟檔案、Alt+F4、永久刪除與 Win+R/I/Tab 預設關閉。既有設定保留。MacBook 預設交換本機內建 Fn／Ctrl，桌上型 Mac 預設關閉。
+新安裝使用裝置 HID，需要整合 ZIP 的 Install.command 安裝 helper／Driver並取得 macOS 核准；Windows Experience、所有支援鍵盤、截圖自動複製與中文快捷鍵開啟。Control 與 Fn／Globe 預設保留；Finder 增強、亮度鍵開啟檔案、Alt+F4、永久刪除與 Win+R/I/Tab 關閉。舊版明確的 EventTap／鍵位／Fn 選項保留，不自行安裝 Driver。EventTap 備援不需 helper，但無可靠逐實體裝置與 UC ownership。
 
 授權清單由目前 App 的原生 API 查驗。前往設定按鈕只開啟 macOS 設定；綠勾需系統確認權限。App/helper 使用 ad-hoc 簽章，沒有 Apple 公證；若系統阻擋，使用系統提供的「仍要打開」。不要關閉 Gatekeeper／SIP。完整操作、唯音守護、登入與移除方式見 [UserGuide](Resources/UserGuide.md)。
 
@@ -24,11 +24,11 @@ Windows 快捷鍵與唯音／ABC 輸入法輔助整合在一個 macOS Menu Bar A
 
 暫停、停用、後端／session／generation／Secure Input 改變立即取消舊工作；逾時、權限、程序、磁碟、解碼與編碼失敗各有狀態。單一 capture slot 在工作真正結束前不接受新工作。圖片先檢查檔案、像素、尺寸、解碼記憶體預算；PNG 沿用原始編碼，不同時生成 TIFF。已完成的存檔保留。系統 `⇧⌘4` 保持原樣。
 
-「遠端輸入角色」提供本機自動、接收原始 Windows、接收原生 Mac、來源已有 Bridge，以及傳送／Universal Control 來源。這是手動指定輸入語意，不猜來源。兩端都裝 Bridge 時，先決定哪端翻譯，另一端選穿透。Client 全螢幕、剪貼簿與快捷鍵轉送仍由 Client 控制；瀏覽器遠端分頁可使用專用瀏覽器並指定 Remote App 規則。
+移除全域遠端角色。實體 HID 在來源 Mac 轉換一次，UC 接收端通過；Remote 使用事件 creator PID、程序身份／簽章與來源獨立按鍵帳本。Google host Automatic 將 raw Ctrl 轉成 Mac 操作，已是 Command 的快捷鍵通過；未知 producer 保留原樣，可逐來源校準一次並保存。Remote preference 不停掉本機 HID、Fn 或 UC。其餘 transport 有獨立描述／fallback，沒有因 bundle ID 存在就列為 Verified。目的端 App context、PID 被隱藏、未知 virtual HID、共享 host 的多 peer 和 Client 本機保留快捷鍵仍有限制。
 
 ## 可靠性與資源
 
-統一 immutable runtime policy 綁定 backend、device scope、前景、remote role、pause、Secure Input、session、設定與 generation。輸入 callback 只處理有界 state／查表；AX、檔案、圖片、UI 與 native process 啟動在 callback 外。按鍵16裝置／256 press slots、動作16筆、log128筆／64 KiB，事件風暴只排一個 drain。保留 Secure Input、neutral recovery、session validation、heartbeat lease 與失聯釋放。
+Immutable host policy 綁定 backend、device scope、前景、pause、Secure Input、session、設定與 generation；remote routing snapshot 最多32 producer，來源按鍵帳本最多16 stream，各自128 press。實體 HID 保留16裝置／256 press、動作16筆、log128筆／64 KiB。callback 只查表／更新有界狀態；簽章／程序查詢、AX、檔案、圖片及 UI 在 callback 外。程序辨識最多一個工作，用 Workspace 通知與原有1秒 lifecycle tick；HID 模式不增加新的250ms EventTap timer。來源失效取消自己的工作，60秒靜止遠端持鍵安全失效，所有 Secure Input、neutral、session、heartbeat 防護保留。
 
 Fn／UserKeyMapping 在寫入前同步保存私人還原 journal；按鍵未放開時延後修改。正常關閉還原；force quit 後下次啟動恢復，不能宣稱 SIGKILL 後即時還原。更新 helper 使用 staging → verify → switch，正常失敗還原 App/helper/pin/服務狀態，SIGKILL 中止後下次執行安裝器先由私人 journal 復原；共用 Driver 版本不同時停止，舊 App 備份最多兩份。
 
