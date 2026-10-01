@@ -115,6 +115,19 @@ extern "C" size_t wmb_encode_vendor(const WMBHIDState* state, uint8_t* buffer, s
 extern "C" size_t wmb_encode_desktop(const WMBHIDState* state, uint8_t* buffer, size_t capacity) {
     return wmb_validate_state(state) ? encode(desktop(*state), buffer, capacity) : 0;
 }
+extern "C" size_t wmb_plan_state_transition(const WMBHIDState* previous, const WMBHIDState* next, WMBHIDState* reports, size_t capacity) {
+    if (!reports || !wmb_validate_state(next) || (previous && !wmb_validate_state(previous))) return 0;
+    const bool rollover = previous && (previous->modifiers != next->modifiers || previous->fn != next->fn) &&
+        (previous->key_count || previous->consumer_count || previous->top_case_count || previous->vendor_count || previous->desktop_count);
+    const size_t count = rollover ? 3 : 1;
+    if (capacity < count) return 0;
+    if (rollover) {
+        reports[0] = {}; reports[0].modifiers = previous->modifiers; reports[0].fn = previous->fn;
+        reports[1] = {};
+    }
+    reports[count - 1] = *next;
+    return count;
+}
 extern "C" WMBVirtualHID* wmb_virtual_hid_create() {
     if (geteuid() != 0) return nullptr;
     std::lock_guard<std::mutex> guard(lifecycle);
@@ -187,12 +200,18 @@ extern "C" bool wmb_virtual_hid_post(WMBVirtualHID* client, const WMBHIDState* s
             if (client->outstanding.fetch_add(1) == 0) client->progress.store(now_ns());
             client->client->async_post_report(report);
         };
-        if (!client->has_last || fn(client->last) != fn(*state)) post(fn(*state));
-        if (!client->has_last || keyboard(client->last) != keyboard(*state)) post(keyboard(*state));
-        if (!client->has_last || consumer(client->last) != consumer(*state)) post(consumer(*state));
-        if (!client->has_last || vendor(client->last) != vendor(*state)) post(vendor(*state));
-        if (!client->has_last || desktop(client->last) != desktop(*state)) post(desktop(*state));
-        client->last = *state; client->has_last = true;
+        WMBHIDState sequence[3];
+        const size_t count = wmb_plan_state_transition(client->has_last ? &client->last : nullptr, state, sequence, 3);
+        if (!count) return false;
+        for (size_t index = 0; index < count; ++index) {
+            const auto& next = sequence[index];
+            if (!client->has_last || fn(client->last) != fn(next)) post(fn(next));
+            if (!client->has_last || keyboard(client->last) != keyboard(next)) post(keyboard(next));
+            if (!client->has_last || consumer(client->last) != consumer(next)) post(consumer(next));
+            if (!client->has_last || vendor(client->last) != vendor(next)) post(vendor(next));
+            if (!client->has_last || desktop(client->last) != desktop(next)) post(desktop(next));
+            client->last = next; client->has_last = true;
+        }
         return true; // Enqueued, not a driver delivery acknowledgement.
     } catch (...) { client->status.store(WMB_CONNECTION_FAULT); return false; }
 }

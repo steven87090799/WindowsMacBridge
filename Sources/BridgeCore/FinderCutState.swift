@@ -6,8 +6,16 @@ public struct FinderCutState: Sendable {
         let expiresAt: Double
     }
     private var intent: Intent?
+    private var epoch: UInt64 = 0
     public init() {}
     public mutating func cancel() { intent = nil }
+    /// Navigation stays in the same host epoch; pause/session/backend changes do not.
+    public mutating func synchronize(epoch: UInt64) {
+        if self.epoch != epoch { cancel(); self.epoch = epoch }
+    }
+    public mutating func observe(_ action: FinderAction) {
+        if action == .copy || action == .cut || action == .trash || action == .permanentDelete { cancel() }
+    }
     public mutating func arm(changeCount: Int, finderPID: Int32, now: Double) {
         intent = Intent(changeCount: changeCount, finderPID: finderPID, expiresAt: now + 300)
     }

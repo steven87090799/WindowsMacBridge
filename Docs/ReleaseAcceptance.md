@@ -1,3 +1,5 @@
+> 這份文件保留歷史版本記錄；目前行為、測試與阻擋項目以 [2026-09-30 修復報告](PreReleaseRepair-2026-09-30.md) 為準。自製 Alt+Tab 已移除，不再列為待實作功能。
+
 > 此頁保留 0.2 驗收歷史。0.3 新增項目與仍未完成的 HID 替代要求見 [KarabinerReplacement.md](KarabinerReplacement.md)。中文 IME 與 Finder 功能現為可選預覽；未宣稱實機通過。
 
 # 開發預覽驗收
@@ -43,7 +45,7 @@ Core 規則與 down/up、repeat、左右 Ctrl、modifier 不一致、釋放 Ctrl
 
 1. AppKit/WebKit TestHost，真實 down/up 与 flags-only 改寫驗證。
 2. Layout-aware shortcut compilation 與中英文 IME 測試。
-3. Alt+Tab 的 output ownership、滑鼠互動、中止及 crash 測試，通過前不啟用。
+3. 自製 Alt+Tab 已移除；保留原生 Command+Tab，不重新啟用舊切換器。
 4. Finder move intent、非 callback clipboard metadata、明確確認及 TOCTOU 限制。
 5. 已驗證的 helper/process registry 與 Remote matrix。
 

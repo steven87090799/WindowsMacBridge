@@ -23,12 +23,11 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     private var enabled = false
     private var finderEnabled = false
     private var finderPermanentDeleteEnabled = false
-    private var altF4QuitLastWindow = false
     private var epoch: UInt64 = 0
     private var message = ""
     private let marker: Int64
     @MainActor private var cut = FinderCutState()
-    @MainActor private var cutGeneration: UInt64 = .max
+    private var rejected: UInt64 = 0
 
     public init(marker: Int64) { self.marker = marker }
 
@@ -43,17 +42,16 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     @discardableResult public func update(context: ApplicationContext, enabled: Bool,
                                          finderEnabled: Bool = false,
                                          finderPermanentDeleteEnabled: Bool = false,
-                                         altF4QuitLastWindow: Bool = false,
                                          epoch: UInt64 = 0) -> Bool {
         guard lock.try() else { return false }
         if self.context != context || self.enabled != enabled || self.finderEnabled != finderEnabled ||
             self.finderPermanentDeleteEnabled != finderPermanentDeleteEnabled ||
-            self.altF4QuitLastWindow != altF4QuitLastWindow || self.epoch != epoch {
+            self.epoch != epoch {
             generation &+= 1
             self.context = context; self.enabled = enabled
             self.finderEnabled = finderEnabled
             self.finderPermanentDeleteEnabled = finderPermanentDeleteEnabled
-            self.altF4QuitLastWindow = altF4QuitLastWindow; self.epoch = epoch
+            self.epoch = epoch
         }
         lock.unlock()
         return true
@@ -62,10 +60,11 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         return message
     }
+    public var rejectedCount: UInt64 { lock.lock(); defer { lock.unlock() }; return rejected }
     /// try-lock only on the callback; on contention or overflow the request is dropped.
     @discardableResult public func submit(_ action: ShortcutAction, context expected: ApplicationContext) -> Bool {
         guard lock.try() else { return false }
-        guard enabled, context == expected, count < pending.count else { lock.unlock(); return false }
+        guard enabled, context == expected, count < pending.count else { rejected &+= 1; lock.unlock(); return false }
         if case .finder = action, !finderEnabled { lock.unlock(); return false }
         let lifetime: Double = if case .window = action { 10 } else { 0.6 }
         pending[writeIndex] = Request(action: action, context: context, generation: generation,
@@ -98,8 +97,7 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     }
     @MainActor private func drain() async {
         while let request = pop() {
-            guard allowed(request) else { cut.cancel(); continue }
-            if cutGeneration != request.generation { cut.cancel(); cutGeneration = request.generation }
+            guard allowed(request) else { continue }
             switch request.action {
             case .system(let action):
                 let bundle: String
@@ -110,10 +108,11 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
                 }
                 if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) {
                     do { _ = try await NSWorkspace.shared.openApplication(at: url, configuration: .init()) }
-                    catch { report("系統 App 開啟失敗。") }
+                    catch { if allowed(request) { report("系統 App 開啟失敗。") } }
                 } else { report("找不到要求開啟的系統 App。") }
             case .finder(let action): await performFinder(action, request: request)
-            case .window(let action): performWindow(action, request: request)
+            case .window(let action): await performWindow(action, request: request)
+            case .screenshot: break // screenshot jobs have their own single-flight owner
             }
         }
     }
@@ -122,9 +121,11 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
         guard request.context.bundleID == "com.apple.finder" else { return }
         let pid = request.context.processID
         let focus = await Task.detached(priority: .userInitiated) { FinderFocusReader.read(pid: pid) }.value
-        guard allowed(request) else { cut.cancel(); return }
+        guard allowed(request) else { return }
         let pasteboard = NSPasteboard.general
         let now = ProcessInfo.processInfo.systemUptime
+        cut.synchronize(epoch: request.generation)
+        cut.observe(action)
         switch action {
         case .copy, .cut:
             cut.cancel()
@@ -150,7 +151,9 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
             report("Finder 複製逾時；沒有保留剪下標記。")
         case .paste:
             let count = pasteboard.changeCount
-            let move = focus == .files && pasteboard.types?.contains(.fileURL) == true &&
+            // A destination folder may have no selection. The armed file clipboard and
+            // Finder PID are the move authority; text editing always gets ordinary paste.
+            let move = focus != .text && pasteboard.types?.contains(.fileURL) == true &&
                 cut.consume(changeCount: count, finderPID: pid, now: now)
             cut.cancel()
             guard pasteboard.changeCount == count else { report("剪貼簿已改變，取消本次貼上。"); return }
@@ -158,16 +161,13 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
                 report(move ? "已送出 Finder 移動請求；由 Finder 處理確認與結果。" : "已送出 Finder 貼上請求。")
             }
         case .open:
-            cut.cancel()
             _ = emit(focus == .files ? 31 : 36, focus == .files ? .command : [], request: request)
         case .rename:
-            cut.cancel()
             if focus == .files { _ = emit(36, [], request: request) }
             else { report("F2 改名略過：焦點不是可確認的檔案列表。") }
         case .trash:
-            cut.cancel()
-            if focus == .files { _ = emit(51, .command, request: request) }
-            else { report("刪除略過：焦點不是可確認的檔案列表。") }
+            let output = FinderActionPolicy.deleteOutput(focus: focus)
+            _ = emit(output.keyCode, output.modifiers, request: request)
         case .permanentDelete:
             cut.cancel()
             guard finderPermanentDeleteEnabled, focus == .files else {
@@ -181,40 +181,27 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
             guard alert.runModal() == .alertFirstButtonReturn, allowed(request, ignoreDeadline: true) else { return }
             _ = emit(51, [.command, .option], request: request, ignoreDeadline: true)
         case .parentFolder:
-            cut.cancel()
             if focus == .files { _ = emit(126, .command, request: request) }
             else { _ = emit(51, [], request: request) }
         case .newFolder:
-            cut.cancel()
             if focus == .files { _ = emit(45, [.command, .shift], request: request) }
         case .goToFolder:
-            cut.cancel()
             _ = emit(5, [.command, .shift], request: request)
         }
     }
 
-    @MainActor private func performWindow(_ action: WindowAction, request: Request) {
+    @MainActor private func performWindow(_ action: WindowAction, request: Request) async {
         guard request.context.mode == .macOS else { return }
         switch action {
         case .close:
-            let quit = altF4QuitLastWindow && Self.standardWindowCount(pid: request.context.processID) == 1
-            if emit(quit ? 12 : 13, .command, request: request) {
-                report(quit ? "已送出原生結束 App 請求。" : "已送出原生關閉視窗請求。")
-            }
+            let closed = await Task.detached(priority: .userInitiated) { [self] in
+                WindowCloseExecutor.close(pid: request.context.processID) {
+                    self.isCurrent(request) && !IsSecureEventInputEnabled()
+                }
+            }.value
+            guard allowed(request) else { return }
+            report(closed ? "已請求關閉目前視窗；未儲存內容由 App 原生提示。" : "目前視窗沒有可用的 AX 關閉按鈕；未執行替代關窗或結束 App。")
         }
-    }
-    /// Queried only for an Alt+F4 action when the optional last-window mode is on.
-    @MainActor private static func standardWindowCount(pid: Int32) -> Int {
-        let app = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(app, 0.08)
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
-              let windows = value as? [AXUIElement] else { return 0 }
-        return windows.filter { window in
-            var subrole: CFTypeRef?
-            return AXUIElementCopyAttributeValue(window, kAXSubroleAttribute as CFString, &subrole) == .success &&
-                (subrole as? String) == (kAXStandardWindowSubrole as String)
-        }.count
     }
     /// Complete key pairs, private source, marker and target PID. No global held modifiers.
     @MainActor private func emit(_ key: UInt16, _ modifiers: Modifiers, request: Request,
@@ -230,8 +217,12 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     }
 }
 
-enum FinderFocus: Sendable { case files, text, unknown }
 enum FinderFocusReader {
+    static func classify(role: String, fileSelection: Bool, sidebar: Bool) -> FinderFocus {
+        if [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole].contains(role) { return .text }
+        if !sidebar && fileSelection { return .files }
+        return .unknown
+    }
     /// Runs on a worker. Reads roles/parents only, never selected text or document values.
     static func read(pid: Int32) -> FinderFocus {
         let app = AXUIElementCreateApplication(pid)
@@ -240,18 +231,63 @@ enum FinderFocusReader {
         guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
               let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return .unknown }
         var element = unsafeDowncast(focused, to: AXUIElement.self)
+        let deadline = ProcessInfo.processInfo.systemUptime + 0.25
+        var fileSelection = false
         for _ in 0..<5 {
-            AXUIElementSetMessagingTimeout(element, 0.03)
+            guard ProcessInfo.processInfo.systemUptime < deadline else { return .unknown }
+            AXUIElementSetMessagingTimeout(element, 0.01)
             var value: CFTypeRef?
             guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &value) == .success,
                   let role = value as? String else { return .unknown }
-            if [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole].contains(role) { return .text }
-            if [kAXOutlineRole, kAXTableRole, kAXBrowserRole].contains(role) { return .files }
+            if classify(role: role, fileSelection: false, sidebar: false) == .text { return .text }
+            if role == kAXWindowRole { return fileSelection ? .files : .unknown }
+            var identifier: CFTypeRef?
+            _ = AXUIElementCopyAttributeValue(element, kAXIdentifierAttribute as CFString, &identifier)
+            if (identifier as? String)?.localizedCaseInsensitiveContains("sidebar") == true { return .unknown }
+            var selection: CFArray?
+            // One selected child, never the complete file collection.
+            if AXUIElementCopyAttributeValues(element, kAXSelectedChildrenAttribute as CFString, 0, 1, &selection) == .success,
+               let selected = (selection as? [AXUIElement])?.first {
+                AXUIElementSetMessagingTimeout(selected, 0.01)
+                var url: CFTypeRef?
+                if AXUIElementCopyAttributeValue(selected, kAXURLAttribute as CFString, &url) == .success,
+                   let value = url as? URL, value.isFileURL { fileSelection = true }
+            }
             var parent: CFTypeRef?
             guard AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &parent) == .success,
                   let parent, CFGetTypeID(parent) == AXUIElementGetTypeID() else { return .unknown }
             element = unsafeDowncast(parent, to: AXUIElement.self)
         }
         return .unknown
+    }
+}
+
+enum WindowCloseExecutor {
+    /// Four bounded calls to the focused window only. AXPress preserves the App's save prompt.
+    static func close(pid: Int32, valid: () -> Bool) -> Bool {
+        guard valid() else { return false }
+        let deadline = ProcessInfo.processInfo.systemUptime + 0.3
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.05)
+        var windowValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &windowValue) == .success,
+              let windowValue, CFGetTypeID(windowValue) == AXUIElementGetTypeID() else { return false }
+        let window = unsafeDowncast(windowValue, to: AXUIElement.self)
+        AXUIElementSetMessagingTimeout(window, 0.05)
+        var buttonValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXCloseButtonAttribute as CFString, &buttonValue) == .success,
+              let buttonValue, CFGetTypeID(buttonValue) == AXUIElementGetTypeID() else { return false }
+        let button = unsafeDowncast(buttonValue, to: AXUIElement.self)
+        AXUIElementSetMessagingTimeout(button, 0.05)
+        var enabled: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(button, kAXEnabledAttribute as CFString, &enabled) == .success,
+              (enabled as? Bool) == true, valid(), ProcessInfo.processInfo.systemUptime < deadline else { return false }
+        var frontmost: CFTypeRef?, currentWindow: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFrontmostAttribute as CFString, &frontmost) == .success,
+              (frontmost as? Bool) == true,
+              AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &currentWindow) == .success,
+              let currentWindow, CFEqual(window, currentWindow), valid(),
+              ProcessInfo.processInfo.systemUptime < deadline else { return false }
+        return AXUIElementPerformAction(button, kAXPressAction as CFString) == .success
     }
 }

@@ -4,14 +4,13 @@ import FinderSync
 /// Finder supplies selected and targeted URLs only during menu construction/actions.
 /// No background file scanning or pasteboard reads are needed.
 final class FinderSync: FIFinderSync {
-    private var currentKind: FIMenuKind = .contextualMenuForContainer
     private var modeEnabled = false
     override init() {
         super.init()
         DistributedNotificationCenter.default().addObserver(self, selector: #selector(modeChanged(_:)),
             name: FinderModeChannel.current.stateName, object: nil)
         requestMode()
-        FIFinderSyncController.default().directoryURLs = [URL(fileURLWithPath: "/", isDirectory: true)]
+        FIFinderSyncController.default().directoryURLs = []
     }
     deinit { DistributedNotificationCenter.default().removeObserver(self) }
     override func beginObservingDirectory(at url: URL) { requestMode() }
@@ -19,19 +18,24 @@ final class FinderSync: FIFinderSync {
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {
         requestMode()
         guard finderEnabled, menuKind != .toolbarItemMenu else { return nil }
-        currentKind = menuKind
         let menu = NSMenu(title: "WindowsMacBridge")
         menu.autoenablesItems = false
-        let folder = folderPath
-        let selected = selectedURLs
+        let controller = FIFinderSyncController.default()
+        let selected = Array((controller.selectedItemURLs() ?? []).prefix(1025))
+        let targeted = controller.targetedURL()
+        let folder = FinderPathSelection.folder(targetedURL: targeted, selectedURLs: selected,
+            itemTarget: menuKind == .contextualMenuForItems)
+        let selectedPaths = FinderPathSelection.selected(selected)
         let folderItem = item("複製目前資料夾路徑", #selector(copyFolder(_:)))
+        folderItem.representedObject = folder
         folderItem.isEnabled = folder != nil
         menu.addItem(folderItem)
         let selectedItem = item("複製選取項目完整路徑", #selector(copySelected(_:)))
-        selectedItem.isEnabled = !selected.isEmpty
+        selectedItem.representedObject = selectedPaths
+        selectedItem.isEnabled = selectedPaths != nil
         menu.addItem(selectedItem)
         let displayPath = FinderPathSelection.displayed(selectedURLs: selected,
-            targetedURL: FIFinderSyncController.default().targetedURL(),
+            targetedURL: targeted,
             itemTarget: menuKind == .contextualMenuForItems)
         let displayItem = NSMenuItem(title: "顯示目前資料夾路徑", action: nil, keyEquivalent: "")
         displayItem.isEnabled = displayPath != nil
@@ -40,7 +44,9 @@ final class FinderSync: FIFinderSync {
             let pathItem = NSMenuItem(title: displayPath, action: nil, keyEquivalent: "")
             pathItem.isEnabled = false
             pathMenu.addItem(pathItem)
-            pathMenu.addItem(item("複製此路徑", #selector(copyDisplayed(_:))))
+            let copyItem = item("複製此路徑", #selector(copyDisplayed(_:)))
+            copyItem.representedObject = displayPath
+            pathMenu.addItem(copyItem)
             displayItem.submenu = pathMenu
         }
         menu.addItem(displayItem)
@@ -57,6 +63,7 @@ final class FinderSync: FIFinderSync {
     @objc private func modeChanged(_ notification: Notification) {
         guard let value = FinderModeChannel.enabled(from: notification.object) else { return }
         modeEnabled = value
+        FIFinderSyncController.default().directoryURLs = value ? [URL(fileURLWithPath: "/", isDirectory: true)] : []
     }
 
     private func item(_ title: String, _ action: Selector) -> NSMenuItem {
@@ -65,26 +72,12 @@ final class FinderSync: FIFinderSync {
         return item
     }
 
-    private var folderPath: String? {
-        FinderPathSelection.folder(targetedURL: FIFinderSyncController.default().targetedURL(),
-                                   selectedURLs: selectedURLs,
-                                   itemTarget: currentKind == .contextualMenuForItems)
-    }
-    private var selectedURLs: [URL] {
-        FIFinderSyncController.default().selectedItemURLs() ?? []
-    }
-
-    @objc private func copyFolder(_ sender: Any?) { copy(folderPath) }
-    @objc private func copySelected(_ sender: Any?) {
-        copy(FinderPathSelection.selected(selectedURLs))
-    }
-    @objc private func copyDisplayed(_ sender: Any?) {
-        copy(FinderPathSelection.displayed(selectedURLs: selectedURLs,
-            targetedURL: FIFinderSyncController.default().targetedURL(),
-            itemTarget: currentKind == .contextualMenuForItems))
-    }
+    // Menu actions consume the immutable path captured when this menu was constructed.
+    @objc private func copyFolder(_ sender: Any?) { copy((sender as? NSMenuItem)?.representedObject as? String) }
+    @objc private func copySelected(_ sender: Any?) { copy((sender as? NSMenuItem)?.representedObject as? String) }
+    @objc private func copyDisplayed(_ sender: Any?) { copy((sender as? NSMenuItem)?.representedObject as? String) }
     private func copy(_ path: String?) {
-        guard let path else { return }
+        guard finderEnabled, let path else { return }
         let board = NSPasteboard.general
         board.clearContents()
         board.setString(path, forType: .string)

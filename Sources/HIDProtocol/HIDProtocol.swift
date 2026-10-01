@@ -4,7 +4,7 @@ import BridgeCore
 public enum HIDService {
     public static let name = "local.WindowsMacBridge.HIDHelper"
     public static let root = "/Library/Application Support/WindowsMacBridge"
-    public static let protocolVersion = 2
+    public static let protocolVersion = 3
 }
 
 /// Only bounded policy/status messages cross IPC. Never a stream of typed characters.
@@ -23,10 +23,13 @@ public struct HIDConfiguration: Codable, Sendable {
     public var sessionActive = false
     public var layoutSupported = false
     public var finderEnabled = false
+    public var finderBrightnessEnterEnabled = false
+    public var screenshotEnabled = false
+    public var printScreenBehavior: PrintScreenBehavior = .snipping
+    public var keyboardScope: KeyboardScope = .allKeyboards
     public var finderPermanentDeleteEnabled = false
     public var textNavigationEnabled = true
     public var altF4Enabled = false
-    public var altF4QuitLastWindow = false
     public var windowsKeyModifier: WindowsKeyModifier = .option
     public var macBookFnControlSwap = false
     public var winRunEnabled = false
@@ -71,12 +74,14 @@ public enum HIDActionCodec {
         case .finder(let value): "finder." + value.rawValue
         case .system(let value): "system." + value.rawValue
         case .window(.close): "window.close"
+        case .screenshot(let kind): "screenshot." + kind.rawValue
         }
     }
     public static func decode(_ id: String) -> ShortcutAction? {
         if id.hasPrefix("finder."), let value = FinderAction(rawValue: String(id.dropFirst(7))) { return .finder(value) }
         if id.hasPrefix("system."), let value = SystemAction(rawValue: String(id.dropFirst(7))) { return .system(value) }
         if id == "window.close" { return .window(.close) }
+        if id.hasPrefix("screenshot."), let kind = ScreenshotKind(rawValue: String(id.dropFirst(11))) { return .screenshot(kind) }
         return nil
     }
 }

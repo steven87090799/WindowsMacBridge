@@ -7,6 +7,7 @@ import InputSourceSupport
 import InputSourceCore
 import HIDProtocol
 import FinderSync
+import Carbon
 
 @MainActor final class BridgeController: ObservableObject {
     @Published var settingsPage = SettingsPage.permissions
@@ -36,6 +37,7 @@ import FinderSync
     private let engine = InputEngine()
     private let hid = HIDBackendClient()
     private let store = SettingsStore()
+    private let installationRecoveryPending: Bool
     private let screenshot = ScreenshotManager()
     private let macBookKeyboard = MacBookKeyboardMapper()
     private let finderPublisher = FinderModePublisher()
@@ -43,23 +45,33 @@ import FinderSync
     private let macBookManagedLoginKey = "macbook.loginManaged.v1"
     private var registry: ApplicationRegistry?
     private var timer: Timer?
+    private var timerPlan: RuntimeWakePlan = .stopped
+    private var running = false
     private var observers: [NSObjectProtocol] = []
     private enum SuspensionReason { case systemSleep, screensSleep, inactiveSession }
     private var suspensionReasons = Set<SuspensionReason>()
     private var sessionActive: Bool { suspensionReasons.isEmpty }
     private var restartToken: UInt64 = 0
     private var lastEmergency = false
+    private var policy = RuntimePolicyCoordinator()
+    private var settingsRevision: UInt64 = 0
+    private var sessionEpoch: UInt64 = 0
+    private var lastAppliedSettings: BridgeSettings?
+    private var transitionApplying = false
+    private var transitionRequested = false
     private var debugUntil: Date?
     var onStatusChange: (() -> Void)?
 
     var paused: Bool { pausedUntilRestart || (pauseUntil.map { $0 > Date() } ?? false) }
     var summary: String {
+        if installationRecoveryPending { return "更新尚未復原；請重新執行 HID Install.command，完成後重開 App。" }
         if let configurationError { return configurationError }
         if !settings.enabled { return "已停用" }
         if paused || status.emergencyPaused { return "已暫停" }
+        if !settings.remoteInputProfile.translates { return settings.remoteInputProfile.title }
+        if hid.releasePending { return "等待 Helper 安全釋放；新後端尚未啟動" }
         if settings.inputBackend == .deviceHID {
             if macBookKeyboardStatus.restorePending { return "等待 Fn／Ctrl 原生交換還原；HID 尚未啟動" }
-            if settings.keyboardScope != .builtInAndApple834 { return "HID 後端僅支援指定鍵盤範圍" }
             if hidStatus.manualPassThrough { return "右 Option+P 穿透：ON" }
             if hidStatus.capturedDevices == 0 { return hidStatus.state }
             if !context.mode.allowsTranslation { return context.mode.title }
@@ -80,6 +92,7 @@ import FinderSync
     }
 
     init() {
+        installationRecoveryPending = FileManager.default.fileExists(atPath: HIDService.root + "/.install-recovery")
         settings = store.settings
         refreshPermissions()
         configurationError = store.errorMessage
@@ -87,17 +100,19 @@ import FinderSync
         catch { configurationError = "App 保護清單無法載入；翻譯已停用。" }
     }
     func start() {
+        guard !running else { return }
+        running = true
         macBookKeyboard.onChange = { [weak self] status in
             guard let self else { return }
             let wasPending = macBookKeyboardStatus.restorePending
             macBookKeyboardStatus = status
+            updateRuntimeTimer()
             if wasPending != status.restorePending { publish() }
         }
         macBookKeyboard.onDiagnostic = { KeyboardMappingDiagnostics.append($0) }
-        configureMacBookKeyboard()
-        finderPublisher.start(enabled: settings.finderEnabled)
+        finderPublisher.start(enabled: false)
         inputSources.onChange = { [weak self] status in
-            guard let self else { return }
+            guard let self, running else { return }
             let loginChanged = sourceStatus.loginStatus != status.loginStatus
             if sourceStatus != status { sourceStatus = status }
             if loginChanged { refreshPermissions() }
@@ -122,39 +137,64 @@ import FinderSync
         inputSources.start()
         screenshot.onChange = { [weak self] status in self?.screenshotStatus = status }
         screenshot.onPeriodicCheck = { [weak self] in self?.verifyScreenshotConfiguration() }
-        screenshot.setWindowsKeyModifier(settings.windowsKeyModifier)
-        screenshot.start(enabled: settings.screenshotAutoCopy && settings.inputBackend == .eventTap)
+        screenshot.start(enabled: false)
+        hid.onOwnershipChange = { [weak self] in self?.publish() }
+        hid.onScreenshot = { [weak self] kind in self?.screenshot.requestCapture(kind) }
         if settings.screenshotAutoCopy { ensureScreenshotLogin() }
         if settings.macBookFnControlSwap { ensureMacBookLogin() }
         refreshPermissions()
         engine.start()
         hid.start()
         publish()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.tick() }
+        updateRuntimeTimer()
+    }
+    private func updateRuntimeTimer() {
+        guard running, let snapshot = policy.current else { return }
+        let deadline = [pauseUntil, debugUntil].compactMap { $0?.timeIntervalSince1970 }.min()
+        let plan = RuntimeWakePlan.make(input: snapshot.input,
+                                        awaitingMappingNeutral: macBookKeyboardStatus.awaitingNeutral,
+                                        deadline: deadline)
+        guard plan != timerPlan || (timer == nil && plan != .stopped) else { return }
+        timer?.invalidate(); timer = nil; timerPlan = plan
+        let interval: Double
+        switch plan {
+        case .stopped: return
+        case .periodic: interval = 1
+        case .deadline(let time): interval = max(0.01, time - Date().timeIntervalSince1970)
         }
-        timer?.tolerance = 0.1
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: plan == .periodic) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.running else { return }
+                if self.timerPlan != .periodic { self.timer = nil; self.timerPlan = .stopped }
+                self.tick(); self.updateRuntimeTimer()
+            }
+        }
+        timer?.tolerance = plan == .periodic ? 0.1 : 0.01
     }
     private func observe(_ center: NotificationCenter, _ name: Notification.Name,
                          _ action: @escaping @MainActor (BridgeController) -> Void) {
         observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in if let self { action(self) } }
+            MainActor.assumeIsolated { if let self, self.running { action(self) } }
         })
     }
     func stop() {
+        running = false
         finderPublisher.stop()
-        timer?.invalidate(); timer = nil
+        timer?.invalidate(); timer = nil; timerPlan = .stopped
         for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         observers.removeAll()
-        inputSources.stop()
         screenshot.stop()
         // Restoring a pending lease during quit must not re-enable the HID backend.
         macBookKeyboard.onChange = nil
         macBookKeyboard.stop()
         engine.stop()
+        hid.onOwnershipChange = nil
         hid.stop()
+        inputSources.stop()
     }
     private func tick() {
+        // Reuse the existing lifecycle tick only while a mapping mutation is waiting.
+        if macBookKeyboardStatus.awaitingNeutral { refreshMacBookKeyboard() }
         let previousPassThrough = status.manualPassThrough
         let previousAccessibility = status.accessibility
         let previousPosting = status.postAccess
@@ -192,6 +232,7 @@ import FinderSync
             pausedUntilRestart = true; pauseUntil = nil; publish()
         }
         lastEmergency = status.emergencyPaused
+        publish()
         if changed { onStatusChange?() }
     }
     private func refreshLayout() {
@@ -213,8 +254,6 @@ import FinderSync
     }
     private func refreshApplication() {
         context = currentApplicationContext()
-        screenshot.setContextMode(context.mode,
-                                  ownAppForeground: context.processID == ProcessInfo.processInfo.processIdentifier)
         if context.processID == ProcessInfo.processInfo.processIdentifier { refreshPermissions() }
         if context.processID != ProcessInfo.processInfo.processIdentifier { targetApp = context }
         refreshLayout()
@@ -244,28 +283,32 @@ import FinderSync
         }
     }
     private func sourceSuspension(for app: ApplicationContext) -> InputSourceSuspension? {
-        InputSourcePolicy.suspension(context: app,
+        if installationRecoveryPending { return .protectedApplication }
+        if !settings.remoteInputProfile.translates || IsSecureEventInputEnabled() { return .protectedApplication }
+        return InputSourcePolicy.suspension(context: app,
             isHostApp: app.processID == ProcessInfo.processInfo.processIdentifier,
             paused: paused || status.emergencyPaused || status.manualPassThrough, sessionActive: sessionActive)
     }
     private func setSuspended(_ reason: SuspensionReason, _ suspended: Bool) {
         if suspended { suspensionReasons.insert(reason) } else { suspensionReasons.remove(reason) }
+        sessionEpoch &+= 1
         if !suspended && settings.screenshotAutoCopy && settings.inputBackend == .eventTap {
             screenshot.verifyAndRepair(reason: "Session 恢復")
         }
-        configureMacBookKeyboard()
         publish()
     }
     private func configureMacBookKeyboard() {
-        macBookKeyboard.configure(enabled: settings.macBookFnControlSwap,
-            eventTapBackend: settings.inputBackend == .eventTap, sessionActive: sessionActive)
+        let native = settings.inputBackend == .eventTap ||
+            HIDCapturePolicy.requiresNativePassThrough(mode: context.mode, layoutSupported: layoutSupported) ||
+            !settings.remoteInputProfile.translates
+        macBookKeyboard.configure(enabled: settings.macBookFnControlSwap && policy.current?.permitsPhysicalNormalization == true,
+            eventTapBackend: native, sessionActive: sessionActive)
         macBookKeyboardStatus = macBookKeyboard.status
     }
     func setMacBookFnControlSwap(_ value: Bool) {
         store.update { $0.macBookFnControlSwap = value }; settings = store.settings
         configurationError = store.errorMessage
         guard store.errorMessage == nil else { return }
-        configureMacBookKeyboard()
         if value { ensureMacBookLogin() } else { releaseFeatureLoginIfUnused() }
         publish()
     }
@@ -278,17 +321,16 @@ import FinderSync
         settings = store.settings
         configurationError = store.errorMessage
         guard store.errorMessage == nil else { return }
-        screenshot.setEnabled(value && settings.inputBackend == .eventTap)
         if value {
             ensureScreenshotLogin()
         } else { releaseFeatureLoginIfUnused() }
+        publish()
     }
     func setWindowsKeyModifier(_ value: WindowsKeyModifier) {
         store.update { $0.windowsKeyModifier = value }
         settings = store.settings
         configurationError = store.errorMessage
         guard store.errorMessage == nil else { return }
-        screenshot.setWindowsKeyModifier(value)
         publish()
     }
     func setWinRunEnabled(_ value: Bool) {
@@ -331,7 +373,7 @@ import FinderSync
         }
     }
     private func verifyScreenshotConfiguration() {
-        guard settings.screenshotAutoCopy && settings.inputBackend == .eventTap else { return }
+        guard settings.screenshotAutoCopy else { return }
         let stored = SettingsStore().settings
         if !stored.screenshotAutoCopy {
             store.update { $0.screenshotAutoCopy = true }
@@ -347,7 +389,11 @@ import FinderSync
     var screenshotLogPath: String { screenshot.logPath }
     func refreshSourceDiagnostics() {
         sourceDiagnostics = inputSources.diagnostics
-        sourceLog = inputSources.recentLog
+        let generation = policy.current?.generation
+        inputSources.readRecentLog { [weak self] text in
+            guard let self, self.policy.current?.generation == generation else { return }
+            self.sourceLog = text
+        }
         sourceStatus = inputSources.status
     }
     func refreshSourceStatistics() {
@@ -355,9 +401,39 @@ import FinderSync
         sourceMemoryUsage = inputSources.memoryUsageDescription
     }
     private func publish() {
+        guard running else { return }
+        guard !transitionApplying else { transitionRequested = true; return }
+        transitionApplying = true
+        defer {
+            transitionApplying = false
+            if transitionRequested { transitionRequested = false; publish() }
+        }
+        if settings.inputBackend == .eventTap && hid.hasOwnership { hid.releaseOwnership() }
+        if lastAppliedSettings != settings { settingsRevision &+= 1; lastAppliedSettings = settings }
+        var input = RuntimePolicyInput()
+        input.backend = settings.inputBackend; input.deviceScope = settings.keyboardScope
+        input.foreground = context; input.remoteProfile = settings.remoteInputProfile
+        input.paused = paused || status.emergencyPaused
+        input.manualPassThrough = status.manualPassThrough
+        input.secureInput = IsSecureEventInputEnabled()
+        input.session = sessionEpoch; input.sessionActive = sessionActive
+        input.shortcutEnabled = settings.enabled && registry != nil && configurationError == nil && !installationRecoveryPending
+        input.screenshotEnabled = settings.screenshotAutoCopy
+        input.settingsRevision = settingsRevision
+        input.restartToken = restartToken
+        input.accessibility = AXIsProcessTrusted(); input.posting = CGPreflightPostEventAccess()
+        input.layoutIdentity = layoutID
+        input.layoutSupported = layoutSupported; input.diagnosticsEnabled = diagnosticsEnabled
+        input.hidReleasePending = hid.releasePending
+        input.nativeRestorePending = macBookKeyboardStatus.restorePending
+        let previous = policy.current
+        let snapshot = policy.transition(input)
+        updateRuntimeTimer()
+        guard previous != snapshot else { return }
         var config = EngineConfiguration()
         config.context = context
-        config.enabled = settings.enabled && !paused && registry != nil && configurationError == nil
+        config.enabled = snapshot.permitsInput
+        config.generation = snapshot.generation
         config.sessionActive = sessionActive
         config.layoutSupported = layoutSupported
         config.diagnostics = diagnosticsEnabled
@@ -367,16 +443,26 @@ import FinderSync
         config.finderPermanentDeleteEnabled = settings.finderPermanentDeleteEnabled
         config.textNavigationEnabled = settings.textNavigationEnabled
         config.altF4Enabled = settings.altF4Enabled
-        config.altF4QuitLastWindow = settings.altF4QuitLastWindow
         config.windowsKeyModifier = settings.windowsKeyModifier
         config.macBookFnControlSwap = settings.macBookFnControlSwap
         config.winRunEnabled = settings.winRunEnabled
         config.winSettingsEnabled = settings.winSettingsEnabled
         config.winTaskViewEnabled = settings.winTaskViewEnabled
+        config.finderBrightnessEnterEnabled = settings.finderBrightnessEnterEnabled
+        config.screenshotEnabled = snapshot.permitsScreenshots
+        config.printScreenBehavior = settings.printScreenBehavior
+        // Disable old ownership before native mapping restoration or new capture begins.
+        var stopped = config; stopped.enabled = false
+        engine.update(stopped)
+        if previous?.input.backend != snapshot.input.backend { hid.update(stopped, active: false) }
+        configureMacBookKeyboard()
+        finderPublisher.setEnabled(settings.finderEnabled && snapshot.permitsShortcuts)
+        screenshot.applyRuntimePolicy(snapshot, windowsKey: settings.windowsKeyModifier,
+                                      printScreen: settings.printScreenBehavior)
         hid.update(config, active: settings.inputBackend == .deviceHID && !macBookKeyboardStatus.restorePending)
         config.enabled = config.enabled && settings.inputBackend == .eventTap
         engine.update(config)
-        inputSources.updateProtection(sourceSuspension(for: context))
+        inputSources.updateRuntimePolicy(snapshot, protection: sourceSuspension(for: context))
     }
     func setEnabled(_ value: Bool) {
         store.update { $0.enabled = value }; settings = store.settings
@@ -388,7 +474,6 @@ import FinderSync
         settings = store.settings; configurationError = store.errorMessage
         if let error = store.errorMessage { presetNotice = error; publish(); return }
         syncFinderExtensionPreference()
-        configureMacBookKeyboard()
         refreshApplication()
         resume()
         presetNotice = "已套用建議預設並恢復引擎。"
@@ -399,15 +484,13 @@ import FinderSync
     }
     func setInputBackend(_ value: InputBackend) {
         store.update { $0.inputBackend = value
-            $0.keyboardScope = value == .deviceHID ? .builtInAndApple834 : .allKeyboards
+            $0.keyboardScope = .allKeyboards
         }
         settings = store.settings; configurationError = store.errorMessage
         // Restore native layout before starting HID, which already swaps these physical keys.
-        configureMacBookKeyboard()
         // HID virtual output and uncaptured external keyboards can have different
         // Win modifiers. A session tap cannot identify which device sent S, so
         // do not claim Shift+Alt+S from another keyboard as a screenshot.
-        screenshot.setEnabled(settings.screenshotAutoCopy && value == .eventTap)
         restartToken &+= 1; publish()
     }
     func openHelperLocation() {
@@ -430,7 +513,19 @@ import FinderSync
         configurationError = store.errorMessage; publish()
     }
     private func syncFinderExtensionPreference() {
-        finderPublisher.setEnabled(settings.finderEnabled)
+        publish()
+    }
+    func setRemoteInputProfile(_ value: RemoteInputProfile) {
+        store.update { $0.remoteInputProfile = value }; settings = store.settings
+        configurationError = store.errorMessage; publish()
+    }
+    func setPrintScreenBehavior(_ value: PrintScreenBehavior) {
+        store.update { $0.printScreenBehavior = value }; settings = store.settings
+        configurationError = store.errorMessage; publish()
+    }
+    func setFinderBrightnessEnterEnabled(_ value: Bool) {
+        store.update { $0.finderBrightnessEnterEnabled = value }; settings = store.settings
+        configurationError = store.errorMessage; publish()
     }
     func openFinderExtensionSettings() { FIFinderSyncController.showExtensionManagementInterface() }
     func setFinderPermanentDeleteEnabled(_ value: Bool) {
@@ -443,10 +538,6 @@ import FinderSync
     }
     func setAltF4Enabled(_ value: Bool) {
         store.update { $0.altF4Enabled = value }; settings = store.settings
-        configurationError = store.errorMessage; publish()
-    }
-    func setAltF4QuitLastWindow(_ value: Bool) {
-        store.update { $0.altF4QuitLastWindow = value }; settings = store.settings
         configurationError = store.errorMessage; publish()
     }
     func openScreenRecording() {
@@ -465,7 +556,7 @@ import FinderSync
     }
     func setIMEShortcuts(_ value: Bool) {
         store.update { $0.allowIMEShortcuts = value }; settings = store.settings
-        configurationError = store.errorMessage; refreshLayout()
+        configurationError = store.errorMessage; refreshLayout(); publish()
     }
     func pause(minutes: Int?) {
         pauseUntil = minutes.map { Date().addingTimeInterval(Double($0) * 60) }

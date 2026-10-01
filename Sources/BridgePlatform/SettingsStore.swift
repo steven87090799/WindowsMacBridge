@@ -19,8 +19,10 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     public var finderPermanentDeleteEnabled = false
     public var textNavigationEnabled = true
     public var altF4Enabled = false
-    public var altF4QuitLastWindow = false
     public var macBookFnControlSwap = false
+    public var finderBrightnessEnterEnabled = false
+    public var remoteInputProfile: RemoteInputProfile = .automatic
+    public var printScreenBehavior: PrintScreenBehavior = .snipping
     public init() {}
     public static var safeFallback: Self {
         var settings = Self()
@@ -32,8 +34,9 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     }
     private enum CodingKeys: String, CodingKey {
         case schemaVersion, enabled, overrides, keyboardScope, finderEnabled, allowIMEShortcuts, inputBackend, screenshotAutoCopy
-        case finderPermanentDeleteEnabled, textNavigationEnabled, altF4Enabled, altF4QuitLastWindow
+        case finderPermanentDeleteEnabled, textNavigationEnabled, altF4Enabled
         case macBookFnControlSwap, windowsKeyModifier, winRunEnabled, winSettingsEnabled, winTaskViewEnabled
+        case finderBrightnessEnterEnabled, remoteInputProfile, printScreenBehavior
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -53,8 +56,10 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         finderPermanentDeleteEnabled = try values.decodeIfPresent(Bool.self, forKey: .finderPermanentDeleteEnabled) ?? false
         textNavigationEnabled = try values.decodeIfPresent(Bool.self, forKey: .textNavigationEnabled) ?? true
         altF4Enabled = try values.decodeIfPresent(Bool.self, forKey: .altF4Enabled) ?? false
-        altF4QuitLastWindow = try values.decodeIfPresent(Bool.self, forKey: .altF4QuitLastWindow) ?? false
         macBookFnControlSwap = try values.decodeIfPresent(Bool.self, forKey: .macBookFnControlSwap) ?? false
+        finderBrightnessEnterEnabled = try values.decodeIfPresent(Bool.self, forKey: .finderBrightnessEnterEnabled) ?? false
+        remoteInputProfile = try values.decodeIfPresent(RemoteInputProfile.self, forKey: .remoteInputProfile) ?? .automatic
+        printScreenBehavior = try values.decodeIfPresent(PrintScreenBehavior.self, forKey: .printScreenBehavior) ?? .snipping
     }
 }
 
@@ -118,8 +123,10 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
             $0.finderPermanentDeleteEnabled = preserved.finderPermanentDeleteEnabled
             $0.textNavigationEnabled = preserved.textNavigationEnabled
             $0.altF4Enabled = preserved.altF4Enabled
-            $0.altF4QuitLastWindow = preserved.altF4QuitLastWindow
             $0.macBookFnControlSwap = preserved.macBookFnControlSwap
+            $0.finderBrightnessEnterEnabled = preserved.finderBrightnessEnterEnabled
+            $0.remoteInputProfile = preserved.remoteInputProfile
+            $0.printScreenBehavior = preserved.printScreenBehavior
             $0.overrides.merge(existingOverrides) { _, existing in existing }
             $0.overrides["com.openai.codex"] = .macOS
         }

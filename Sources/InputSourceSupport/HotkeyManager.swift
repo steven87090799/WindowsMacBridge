@@ -1,12 +1,14 @@
 // Adapted from vchewing-input-helper @ 43779320 (MIT). See Resources/Licenses/VChewingGuard.txt.
 import Carbon
 import Foundation
+import BridgeCore
 
 final class HotkeyManager {
     var onHotkey: (() -> Void)?
     private var eventHandler: EventHandlerRef?
     private var hotKeyReference: EventHotKeyRef?
     private var activePreset: HotkeyPreset?
+    private let events = DeferredSignalMailbox()
 
     var isRegistered: Bool { hotKeyReference != nil }
 
@@ -22,6 +24,7 @@ final class HotkeyManager {
         }
 
         let previousPreset = activePreset
+        events.invalidate()
         if let hotKeyReference {
             UnregisterEventHotKey(hotKeyReference)
             self.hotKeyReference = nil
@@ -52,7 +55,10 @@ final class HotkeyManager {
         return status
     }
 
+    func discardPending() { events.invalidate() }
+
     func suspend() {
+        events.invalidate()
         if let hotKeyReference {
             UnregisterEventHotKey(hotKeyReference)
             self.hotKeyReference = nil
@@ -117,7 +123,11 @@ final class HotkeyManager {
             return OSStatus(eventNotHandledErr)
         }
         let manager = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
-        DispatchQueue.main.async { manager.onHotkey?() }
+        guard manager.events.offer(1) else { return noErr }
+        DispatchQueue.main.async { [weak manager] in
+            guard let manager, manager.events.take() != 0, manager.isRegistered else { return }
+            manager.onHotkey?()
+        }
         return noErr
     }
 }

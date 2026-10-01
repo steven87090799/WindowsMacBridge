@@ -1,3 +1,5 @@
+> 這份文件保留歷史版本記錄；目前行為、測試與阻擋項目以 [2026-09-30 修復報告](PreReleaseRepair-2026-09-30.md) 為準。自製 Alt+Tab 已移除，不再列為待實作功能。
+
 # 0.5.13 保護與一般使用者情境檢查
 
 0.5.13 移除自製 Alt+Tab 逐視窗切換器及其常駐視窗觀察器。實體 Alt 若映射為 Command，Alt+Tab 使用 macOS 原生逐 App 切換器；若映射為 Option，須按實際 Command+Tab。HID 接管的本機鍵盤依所選 Win 鍵位置輸出原生 Command+Tab，Remote／VM／Game 保持原樣。這個原生功能不逐一列出同一 App 的所有視窗；同一 App 可使用 Command+反引號切換。截圖圖片只發佈 PNG，PDF 以有上限的 bitmap 轉碼，避免同時保留 PNG 和 TIFF payload。

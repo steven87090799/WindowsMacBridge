@@ -3,11 +3,17 @@ import IOKit
 import IOKit.hid
 import IOKit.hidsystem
 import BridgeCore
+import ApplicationServices
 
 /// Apple TN2450 service properties. The client cannot receive a keyboard event stream.
 @MainActor public final class NativeMacBookKeyboardBackend: MacBookKeyboardMappingBackend {
     public let portable: Bool
     public let bootID: String
+    public var keysNeutral: Bool {
+        let flags = CGEventSource.flagsState(.hidSystemState)
+        guard flags.intersection([.maskControl, .maskCommand, .maskAlternate, .maskShift, .maskSecondaryFn]).isEmpty else { return false }
+        return !(UInt16(0)..<128).contains { $0 != 57 && CGEventSource.keyState(.hidSystemState, key: $0) }
+    }
     private let client: IOHIDEventSystemClient
     private var handles: [UInt64: IOHIDServiceClient] = [:]
     private var port: IONotificationPortRef?
@@ -33,8 +39,8 @@ import BridgeCore
     }
     public func services() -> [MacBookKeyboardService]? {
         handles.removeAll(keepingCapacity: true)
-        guard let all = IOHIDEventSystemClientCopyServices(client) as? [IOHIDServiceClient] else { return nil }
-        return all.compactMap { service in
+        guard let all = IOHIDEventSystemClientCopyServices(client) as? [IOHIDServiceClient], all.count <= 128 else { return nil }
+        return all.prefix(128).compactMap { service in
             guard IOHIDServiceClientConformsTo(service, UInt32(kHIDPage_GenericDesktop), UInt32(kHIDUsage_GD_Keyboard)) != 0,
                   let id = IOHIDServiceClientGetRegistryID(service) as? NSNumber else { return nil }
             func property(_ key: String) -> Any? { IOHIDServiceClientCopyProperty(service, key as CFString) }

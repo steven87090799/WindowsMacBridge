@@ -6,15 +6,14 @@ source "$task_root/scripts/build-environment.sh"
 configuration="${CONFIGURATION:-release}"
 swift build --scratch-path "$task_scratch" -c "$configuration" --product WindowsMacBridge
 binary_directory="$(swift build --scratch-path "$task_scratch" -c "$configuration" --show-bin-path)"
-app_directory="$task_scratch/Artifacts/WindowsMacBridge.app"
+mkdir -p "$task_scratch/Artifacts"
+bridge_stage="$(mktemp -d "$task_scratch/Artifacts/.app-stage.XXXXXX")"
+trap 'rm -rf "$bridge_stage"' EXIT
+app_directory="$bridge_stage/WindowsMacBridge.app"
 mkdir -p "$app_directory/Contents/MacOS" "$app_directory/Contents/Resources"
 cp "$binary_directory/WindowsMacBridge" "$app_directory/Contents/MacOS/WindowsMacBridge"
 cp "$task_root/Resources/Info.plist" "$app_directory/Contents/Info.plist"
-bridge_revision="$(git -C "$task_root" rev-parse HEAD)"
-bridge_source_state=clean
-if [ -n "$(git -C "$task_root" status --porcelain --untracked-files=normal)" ]; then
-    bridge_source_state=modified
-fi
+source "$task_root/scripts/source-version.sh"
 bridge_build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 /usr/libexec/PlistBuddy -c "Add :WMBGitRevision string $bridge_revision" "$app_directory/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :WMBBuildDateUTC string $bridge_build_date" "$app_directory/Contents/Info.plist"
@@ -26,16 +25,18 @@ cp "$task_root/Resources/UserGuide.md" "$app_directory/Contents/Resources/UserGu
 cp "$task_root/Resources/AcceptanceGuide.md" "$app_directory/Contents/Resources/AcceptanceGuide.md"
 /usr/bin/ditto "$task_root/Resources/Licenses" "$app_directory/Contents/Resources/Licenses"
 # The App adapter explicitly loads from Contents/Resources; no build-path fallback.
-for resource_bundle in "$binary_directory"/*.bundle; do
-    [ -d "$resource_bundle" ] || continue
-    /usr/bin/ditto "$resource_bundle" "$app_directory/Contents/Resources/$(basename "$resource_bundle")"
-done
+resource_bundle="$binary_directory/WindowsMacBridge_BridgePlatform.bundle"
+[[ -d "$resource_bundle" ]] || { echo 'Required BridgePlatform resource bundle missing.' >&2; exit 1; }
+/usr/bin/ditto "$resource_bundle" "$app_directory/Contents/Resources/WindowsMacBridge_BridgePlatform.bundle"
 extension_directory="$app_directory/Contents/PlugIns/WindowsMacBridgeFinderSync.appex"
 mkdir -p "$extension_directory/Contents/MacOS"
 cp "$task_root/Extensions/FinderSync/Info.plist" "$extension_directory/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_directory/Contents/Info.plist")" "$extension_directory/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app_directory/Contents/Info.plist")" "$extension_directory/Contents/Info.plist"
-swiftc -emit-executable -parse-as-library -module-name WindowsMacBridgeFinderSync \
+bridge_optimization=-Onone
+if [[ "$configuration" == release ]]; then bridge_optimization="${FINDER_RELEASE_OPTIMIZATION:--O}"; fi
+[[ "$bridge_optimization" == -Onone || "$bridge_optimization" == -O || "$bridge_optimization" == -Osize ]] || exit 1
+swiftc "$bridge_optimization" -emit-executable -parse-as-library -module-name WindowsMacBridgeFinderSync \
     -target arm64-apple-macos14.0 -framework FinderSync -framework AppKit \
     -Xlinker -e -Xlinker _NSExtensionMain \
     "$task_root/Sources/BridgeCore/FinderPathSelection.swift" \
@@ -51,7 +52,16 @@ swiftc -emit-executable -parse-as-library -module-name WindowsMacBridgeFinderSyn
 /usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --options runtime \
     --entitlements "$task_root/Resources/AppEntitlements.plist" "$app_directory"
 /usr/bin/codesign --verify --strict "$app_directory"
+"$app_directory/Contents/MacOS/WindowsMacBridge" --self-check
+bridge_final="$task_scratch/Artifacts/WindowsMacBridge.app"
+bridge_previous="$task_scratch/Artifacts/.WindowsMacBridge-previous-$$.app"
+if [[ -e "$bridge_final" ]]; then mv "$bridge_final" "$bridge_previous"; fi
+if ! mv "$app_directory" "$bridge_final"; then
+    if [[ -e "$bridge_previous" ]]; then mv "$bridge_previous" "$bridge_final"; fi
+    exit 1
+fi
+rm -rf "$bridge_previous"
+app_directory="$bridge_final"
 mkdir -p "$task_root/build"
 printf '%s\n' "$app_directory" > "$task_root/build/APP_PATH.txt"
-"$app_directory/Contents/MacOS/WindowsMacBridge" --self-check
 printf '%s\n' "$app_directory"

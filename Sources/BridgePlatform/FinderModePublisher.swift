@@ -23,6 +23,7 @@ import BridgeCore
         publish(enabled)
     }
     public func setEnabled(_ value: Bool) {
+        guard enabled != value else { return }
         enabled = value
         if observer != nil { publish(value) }
     }

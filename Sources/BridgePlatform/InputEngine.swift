@@ -15,12 +15,15 @@ public struct EngineConfiguration: Sendable {
     public var finderPermanentDeleteEnabled = false
     public var textNavigationEnabled = true
     public var altF4Enabled = false
-    public var altF4QuitLastWindow = false
     public var windowsKeyModifier: WindowsKeyModifier = .option
     public var macBookFnControlSwap = false
     public var winRunEnabled = false
     public var winSettingsEnabled = false
     public var winTaskViewEnabled = false
+    public var finderBrightnessEnterEnabled = false
+    public var screenshotEnabled = false
+    public var printScreenBehavior: PrintScreenBehavior = .snipping
+    public var generation: UInt64 = 0
     public init() {}
 }
 
@@ -57,6 +60,8 @@ private final class EngineMailbox: @unchecked Sendable {
     var revision: UInt64 = 0
     var status = EngineStatus()
     var stopping = false
+    var runLoop: CFRunLoop?
+    var wakeQueued = false
 }
 
 /// @unchecked Sendable is confined here: mutable event state belongs exclusively to run().
@@ -85,6 +90,10 @@ public final class InputEngine: @unchecked Sendable {
     private var publishedDiagnosticRevision: UInt64 = .max
     private var diagnosticDeadline: TimeInterval = 0
     private var actionEpoch: UInt64 = 0
+    private var policyGeneration: UInt64 = 0
+    private var safetyTimer: Timer?
+    private var releases = [(UInt16, Modifiers, Int32)?](repeating: nil, count: 128)
+    private var releaseCount = 0
 
     public init() {
         let marker = EventRewriter.generatedEventMarker
@@ -99,12 +108,12 @@ public final class InputEngine: @unchecked Sendable {
         mailbox.lock.lock()
         let previous = mailbox.configuration
         let cancel = previous.context != configuration.context || previous.enabled != configuration.enabled ||
+            previous.generation != configuration.generation ||
             previous.sessionActive != configuration.sessionActive || previous.keyboardScope != configuration.keyboardScope ||
             previous.finderEnabled != configuration.finderEnabled || previous.layoutSupported != configuration.layoutSupported ||
             previous.finderPermanentDeleteEnabled != configuration.finderPermanentDeleteEnabled ||
             previous.textNavigationEnabled != configuration.textNavigationEnabled ||
             previous.altF4Enabled != configuration.altF4Enabled ||
-            previous.altF4QuitLastWindow != configuration.altF4QuitLastWindow ||
             previous.windowsKeyModifier != configuration.windowsKeyModifier ||
             previous.winRunEnabled != configuration.winRunEnabled ||
             previous.winSettingsEnabled != configuration.winSettingsEnabled ||
@@ -113,6 +122,7 @@ public final class InputEngine: @unchecked Sendable {
         mailbox.configuration = configuration; mailbox.revision &+= 1
         mailbox.lock.unlock()
         if cancel { actions.cancelPending() }
+        wake()
     }
     public func snapshot() -> EngineStatus {
         mailbox.lock.lock(); defer { mailbox.lock.unlock() }
@@ -120,18 +130,38 @@ public final class InputEngine: @unchecked Sendable {
     }
     public func stop() {
         actions.cancelPending(disable: true)
-        mailbox.lock.lock(); defer { mailbox.lock.unlock() }
+        mailbox.lock.lock()
         mailbox.stopping = true
+        mailbox.lock.unlock()
+        wake()
+    }
+
+    private func wake() {
+        mailbox.lock.lock()
+        guard let loop = mailbox.runLoop, !mailbox.wakeQueued else { mailbox.lock.unlock(); return }
+        mailbox.wakeQueued = true; mailbox.lock.unlock()
+        CFRunLoopPerformBlock(loop, CFRunLoopMode.commonModes.rawValue) { [weak self] in
+            guard let self else { return }
+            mailbox.lock.lock(); mailbox.wakeQueued = false; mailbox.lock.unlock()
+            autoreleasepool { tick() }
+        }
+        CFRunLoopWakeUp(loop)
     }
 
     private func run() {
         Thread.current.name = "WindowsMacBridge.Input"
-        let timer = Timer(timeInterval: 0.25, repeats: true) { [self] _ in autoreleasepool { tick() } }
-        timer.tolerance = 0.025
-        RunLoop.current.add(timer, forMode: .common)
+        mailbox.lock.lock(); mailbox.runLoop = CFRunLoopGetCurrent(); mailbox.lock.unlock()
+        // A source keeps the inactive loop alive without a recurring timer.
+        var context = CFRunLoopSourceContext()
+        context.perform = { _ in }
+        let idleSource = CFRunLoopSourceCreate(kCFAllocatorDefault, 0, &context)!
+        CFRunLoopAddSource(CFRunLoopGetCurrent(), idleSource, .commonModes)
         autoreleasepool { tick() }
         CFRunLoopRun()
-        timer.invalidate()
+        safetyTimer?.invalidate(); safetyTimer = nil
+        queueReleases(); deliverReleases()
+        mailbox.lock.lock(); mailbox.runLoop = nil; mailbox.lock.unlock()
+        CFRunLoopRemoveSource(CFRunLoopGetCurrent(), idleSource, .commonModes)
         destroyTap()
         actions.update(context: .init(), enabled: false)
     }
@@ -142,6 +172,10 @@ public final class InputEngine: @unchecked Sendable {
         if changed { configuration = mailbox.configuration; revision = mailbox.revision }
         mailbox.lock.unlock()
         if changed {
+            if policyGeneration != configuration.generation {
+                queueReleases()
+                policyGeneration = configuration.generation; actionEpoch &+= 1; processor.invalidate()
+            }
             if lastRestart != configuration.restartToken {
                 lastRestart = configuration.restartToken
                 status.fault = nil; status.emergencyPaused = false
@@ -164,6 +198,25 @@ public final class InputEngine: @unchecked Sendable {
         if changed { configureProcessor() }
     }
 
+    private func queueReleases() {
+        processor.drainTranslatedReleases { key, flags, pid in
+            guard releaseCount < releases.count else { return }
+            releases[releaseCount] = (key, flags, pid); releaseCount += 1
+        }
+    }
+    private func deliverReleases() {
+        let allowed = configuration.sessionActive && !IsSecureEventInputEnabled() && CGPreflightPostEventAccess()
+        for i in 0..<releaseCount {
+            if allowed, let (key, flags, pid) = releases[i], pid > 0,
+               let up = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: false) {
+                EventRewriter.apply(to: up, keyCode: key, modifiers: flags, marker: marker)
+                up.postToPid(pid)
+            }
+            releases[i] = nil
+        }
+        releaseCount = 0
+    }
+
     private func configureProcessor() {
         let scopeSupported = BackendCapabilities.eventTap.supports(configuration.keyboardScope)
         status.backendIssue = scopeSupported ? nil : "內建鍵盤限定需要裝置攔截後端；目前不會套用到其他鍵盤。"
@@ -184,7 +237,6 @@ public final class InputEngine: @unchecked Sendable {
                            enabled: active && configuration.layoutSupported && !processor.manualPassThrough,
                            finderEnabled: configuration.finderEnabled,
                            finderPermanentDeleteEnabled: configuration.finderPermanentDeleteEnabled,
-                           altF4QuitLastWindow: configuration.altF4QuitLastWindow,
                            epoch: actionEpoch) {
             processor.invalidate()
         }
@@ -193,7 +245,14 @@ public final class InputEngine: @unchecked Sendable {
     private func tick() {
         readConfiguration()
         mailbox.lock.lock(); let stopping = mailbox.stopping; mailbox.lock.unlock()
-        if stopping { CFRunLoopStop(CFRunLoopGetCurrent()); return }
+        if stopping { queueReleases(); deliverReleases(); CFRunLoopStop(CFRunLoopGetCurrent()); return }
+        if configuration.enabled && safetyTimer == nil {
+            safetyTimer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+                autoreleasepool { self?.tick() }
+            }
+            safetyTimer?.tolerance = 0.025
+            RunLoop.current.add(safetyTimer!, forMode: .common)
+        } else if !configuration.enabled { safetyTimer?.invalidate(); safetyTimer = nil }
         if needsRecreation { destroyTap(); needsRecreation = false }
 
         status.accessibility = AXIsProcessTrusted()
@@ -202,13 +261,15 @@ public final class InputEngine: @unchecked Sendable {
         status.secureInput = IsSecureEventInputEnabled()
         if status.accessibility != lastTrust || status.secureInput != lastSecure ||
             configuration.sessionActive != lastSessionActive {
+            queueReleases()
             processor.invalidate()
             actionEpoch &+= 1
             if status.accessibility && !lastTrust { attemptedStart = false }
             lastTrust = status.accessibility; lastSecure = status.secureInput
             lastSessionActive = configuration.sessionActive
         }
-        if !status.accessibility || !status.postAccess || !configuration.sessionActive {
+        deliverReleases()
+        if !configuration.enabled || !status.accessibility || !status.postAccess || !configuration.sessionActive {
             destroyTap()
             attemptedStart = false
         } else if tap == nil && configuration.enabled && !attemptedStart && status.fault == nil {
@@ -278,6 +339,7 @@ public final class InputEngine: @unchecked Sendable {
 
     private func handle(_ type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            queueReleases(); wake()
             processor.invalidate()
             actionEpoch &+= 1
             if configuration.enabled && configuration.sessionActive && status.accessibility &&
@@ -291,6 +353,11 @@ public final class InputEngine: @unchecked Sendable {
             return Unmanaged.passUnretained(event)
         }
         if event.getIntegerValueField(.eventSourceUserData) == marker { return Unmanaged.passUnretained(event) }
+        if IsSecureEventInputEnabled() {
+            queueReleases(); processor.invalidate(); status.secureInput = true
+            configureProcessor(); wake()
+            return Unmanaged.passUnretained(event)
+        }
         readConfiguration()
         // Secure/session gaps must never perform delayed cleanup by rewriting input.
         if status.secureInput || !configuration.sessionActive || !status.accessibility || !status.postAccess {
@@ -312,16 +379,18 @@ public final class InputEngine: @unchecked Sendable {
         case .passThrough: break
         case .suppress: result = nil
         case .emergencyPause:
+            queueReleases(); wake()
             status.emergencyPaused = true
             configureProcessor()
             result = nil
         case .togglePassThrough:
+            queueReleases(); wake()
             status.manualPassThrough = processor.manualPassThrough
             configureProcessor()
             result = nil
         case .action(let action, _):
-            _ = actions.submit(action, context: configuration.context)
-            result = nil
+            if actions.submit(action, context: configuration.context) { result = nil }
+            else { processor.rejectAction(keyCode: key) }
         case let .rewrite(outputKey, outputModifiers, ruleID):
             EventRewriter.apply(to: event, keyCode: outputKey, modifiers: outputModifiers, marker: marker)
             if phase == .down && !normalized.isRepeat && configuration.diagnostics &&

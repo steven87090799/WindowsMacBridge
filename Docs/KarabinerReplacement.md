@@ -1,3 +1,5 @@
+> 這份文件保留歷史版本記錄；目前行為、測試與阻擋項目以 [2026-09-30 修復報告](PreReleaseRepair-2026-09-30.md) 為準。自製 Alt+Tab 已移除，不再列為待實作功能。
+
 > 以下記錄 0.3 預覽的歷史狀態。0.4 已接上 capture／IPC／installer；目前狀態與未驗收項目以 [HIDIntegration](HIDIntegration.md) 為準。
 
 # Karabiner 替代工作與 0.3.0-preview 的界線
