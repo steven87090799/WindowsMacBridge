@@ -10,7 +10,15 @@ public enum FinderPathSelection {
         return itemTarget ? targetedURL.deletingLastPathComponent().path : targetedURL.path
     }
     public static func selected(_ urls: [URL]) -> String? {
-        let paths = urls.filter(\.isFileURL).map(\.path)
+        guard urls.count <= 1024 else { return nil }
+        var paths: [String] = []
+        var bytes = 0
+        for url in urls where url.isFileURL {
+            let path = url.path
+            bytes += path.utf8.count + 1
+            guard bytes <= 1024 * 1024 else { return nil }
+            paths.append(path)
+        }
         return paths.isEmpty ? nil : paths.joined(separator: "\n")
     }
     public static func displayed(selectedURLs: [URL], targetedURL: URL?, itemTarget: Bool = false) -> String? {

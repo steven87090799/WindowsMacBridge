@@ -12,17 +12,20 @@ shutil.copytree(source, destination, dirs_exist_ok=True)
 path = destination / 'pqrs/karabiner/driverkit/virtual_hid_device_service/client.hpp'
 text = path.read_text()
 signal = '  nod::signal<void(const std::string&)> warning_reported;'
-assert text.count(signal) == 1
+if text.count(signal) != 1:
+    raise RuntimeError('SDK warning signal shape changed')
 text = text.replace(signal, signal + '\n  nod::signal<void()> output_request_completed; // WindowsMacBridge bounded-output adapter')
 begin = text.index('  void async_post_report(')
 end = text.index('\nprivate:', begin)
 section = text[begin:end]
-assert section.count('report));') == 6
+if section.count('report));') != 6:
+    raise RuntimeError('SDK report overload shape changed')
 text = text[:begin] + section.replace('report));', 'report), true);') + text[end:]
 begin = text.index('  void async_request(')
 end = text.index('\n  pqrs::not_null_shared_ptr_t', begin)
 section = text[begin:end]
-assert 'request_buffer) {' in section
+if section.count('request_buffer) {') != 1:
+    raise RuntimeError('SDK request signature shape changed')
 section = section.replace('request_buffer) {', 'request_buffer, bool output = false) {', 1)
 section = section.replace('[this, request_buffer]', '[this, request_buffer, output]')
 section = section.replace('[this](auto&& error_code', '[this, output](auto&& error_code')

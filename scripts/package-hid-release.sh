@@ -18,16 +18,24 @@ mkdir -p "$bridge_output/Driver" "$bridge_output/BridgeHIDHelper.app/Contents/Ma
 ditto --noextattr --norsrc "$bridge_app" "$bridge_output/WindowsMacBridge.app"
 cp "$bridge_helper" "$bridge_output/BridgeHIDHelper.app/Contents/MacOS/BridgeHIDHelper"
 cp Resources/Installer/HIDHelper-Info.plist "$bridge_output/BridgeHIDHelper.app/Contents/Info.plist"
+for bridge_key in CFBundleShortVersionString CFBundleVersion; do
+    /usr/libexec/PlistBuddy -c "Set :$bridge_key $(/usr/libexec/PlistBuddy -c "Print :$bridge_key" "$bridge_app/Contents/Info.plist")" \
+        "$bridge_output/BridgeHIDHelper.app/Contents/Info.plist"
+done
 cp Resources/UserGuide.md "$bridge_output/UserGuide.md"
 ditto Resources/Licenses "$bridge_output/Licenses"
 # Keep SDK/vendor header copyright and license notices with distributed binaries.
 ditto "$bridge_sdk/include" "$bridge_output/Licenses/SDKHeaders"
 ditto "$bridge_sdk/vendor/vendor/include" "$bridge_output/Licenses/VendorHeaders"
 cp "$bridge_sdk/dist/Karabiner-DriverKit-VirtualHIDDevice-8.6.0.pkg" "$bridge_output/Driver/"
-for bridge_file in Resources/Installer/*.command Resources/Installer/*Backend.sh Resources/Installer/local.*.plist Resources/Installer/READ-ME-FIRST.md; do
-    cp "$bridge_file" "$bridge_output/"
+for bridge_file in Install.command ActivateDriver.command Stop.command Uninstall.command \
+    InstallBackend.sh UninstallBackend.sh local.WindowsMacBridge.HIDHelper.plist \
+    local.WindowsMacBridge.VirtualHIDService.plist READ-ME-FIRST.md; do
+    cp "Resources/Installer/$bridge_file" "$bridge_output/"
 done
-chmod +x "$bridge_output"/*.command "$bridge_output"/*Backend.sh
+for bridge_file in Install.command ActivateDriver.command Stop.command Uninstall.command InstallBackend.sh UninstallBackend.sh; do
+    chmod +x "$bridge_output/$bridge_file"
+done
 xattr -dr com.apple.FinderInfo "$bridge_output" 2>/dev/null || true
 xattr -dr com.apple.ResourceFork "$bridge_output" 2>/dev/null || true
 codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --options runtime "$bridge_output/BridgeHIDHelper.app"

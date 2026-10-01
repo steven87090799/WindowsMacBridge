@@ -6,7 +6,7 @@
 
 ## 準備（約兩分鐘）
 
-0.5.13 鍵位驗收：先看「這臺 Mac 收到的 Windows 鍵」。Mac mini 的現有 Win 若送出 Option，選 Option；MacBook 內建 Command 當 Win 時選 Command。分別實測 Shift+Win+S 會截圖、Shift+Alt+S 不會截圖、Win+E 開 Finder、Win+L 鎖定，以及 Alt+Tab 是否直接顯示 macOS 原生 App 切換器、啟用時 Alt+F4 是否使用實體 Alt。若實體 Alt 送出 Option，原生切換器需改按 Command+Tab。若用通用控制換了來源鍵盤，在接收端再核對一次。截圖框選期間關閉再重開開關，上一輪不應覆寫剪貼簿。這些需實體操作，純核心測試不替代它。
+0.5.14（build 26）鍵位驗收：先看「這臺 Mac 收到的 Windows 鍵」。Mac mini 的現有 Win 若送出 Option，選 Option；MacBook 內建 Command 當 Win 時選 Command。分別實測 Shift+Win+S 會截圖、Shift+Alt+S 不會截圖、Win+E 開 Finder、Win+L 鎖定，以及 Alt+Tab 是否直接顯示 macOS 原生 App 切換器、啟用時 Alt+F4 是否使用實體 Alt。若實體 Alt 送出 Option，原生切換器需改按 Command+Tab。若用通用控制換了來源鍵盤，在接收端再核對一次。截圖框選期間關閉再重開開關，上一輪不應覆寫剪貼簿。這些需實體操作，純核心測試不替代它。
 
 1. 從 Applications 啟動 App；診斷應顯示 EventTap Active、Secure Input OFF。
 2. 記下 App 版本、macOS 版本、鍵盤型號、輸入來源。先關掉 Karabiner 中重複的規則。
@@ -104,3 +104,17 @@ HID 不在一般 DMG 的安裝流程內，不要為了完成本機快捷鍵驗�
 
 提供「版本、鍵盤、App／Profile、操作步驟、預期與實際結果、暫停 Bridge 後是否仍發生」。
 可以附 App 診斷頁的狀態／計數，不需貼上密碼、文件、Clipboard 或完整按鍵歷史。
+
+## 本次修復必測矩陣
+
+以下測試先在 EventTap，再在 HID 做；HID 需保留第二把鍵盤及滑鼠。每次記錄是否完全釋放：
+
+- Ctrl↓ C↓ C↑ Tab↓ Tab↑ Ctrl↑；Ctrl↓ C↓ Right↓（C 尚未放開）；左右 modifier、不同釋放順序與快速重複。
+- 兩把鍵盤同時操作；按住 Ctrl／Shift／Alt 時切 App、backend、Pause／Resume、Secure Input、session 或斷線。後端交接逾時應保持新後端停用。
+- Finder 各顯示方式：Ctrl+X → 開子資料夾／上一層／Ctrl+L → Ctrl+V；rename／搜尋／前往路徑欄 Delete 不移動檔案；只有確認 file selection 才移到垃圾桶。
+- Alt+F4 在多視窗、最後視窗、未儲存文件、沒有 AX close button 的 App；不能退出 App 或關錯分頁。
+- 四組截圖快捷鍵與 PrintScreen 兩個設定；取消、拒絕 Screen Recording、磁碟不可寫、巨大圖與 120 秒 timeout。框選／processing 中 Pause、切 backend、session 或 Secure Input 後不得更新 Clipboard。
+- Windows→Mac、Mac→Mac、兩端已有 Bridge：指定角色只翻譯一次；Universal Control 用內建及外接鍵盤按住 modifier 跨裝置，往返後不殘留。
+- 管理員專用測試：全新 Driver、相同版 Driver、不同版 fail-closed、helper／driver bootstrap failure、更新中止與備份復原；force quit 後重新啟動 Fn journal recovery、重開機與讀回失敗。
+
+離線通過不代表以上實機項目通過，判定與限制見原始碼的 Docs/PreReleaseRepair-2026-09-30.md。

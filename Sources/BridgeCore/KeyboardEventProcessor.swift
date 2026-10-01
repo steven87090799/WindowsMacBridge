@@ -8,6 +8,8 @@ public struct KeyboardEventProcessor: Sendable {
         var contextMode: ApplicationMode
         var suppress: Bool
         var repeatSuppressed = false
+        var outputModifiers: Modifiers = []
+        var releaseDrained = false
     }
     private var presses = [Press?](repeating: nil, count: 128)
     private var context = ApplicationContext()
@@ -69,6 +71,21 @@ public struct KeyboardEventProcessor: Sendable {
     }
 
     public mutating func resumeManualPassThrough() { manualPassThrough = false; invalidate() }
+    /// If the bounded action mailbox rejects a down, preserve its original down/up pair.
+    public mutating func rejectAction(keyCode: UInt16) {
+        guard keyCode < 128, presses[Int(keyCode)]?.rule?.action != nil else { return }
+        presses[Int(keyCode)]?.rule = nil
+        presses[Int(keyCode)]?.suppress = false
+    }
+    /// Called on the input thread before policy changes. Retain tombstones so physical
+    /// repeat/up cannot generate a second release or resurrect the old shortcut.
+    public mutating func drainTranslatedReleases(_ release: (UInt16, Modifiers, Int32) -> Void) {
+        for i in presses.indices {
+            guard let press = presses[i], let rule = press.rule, rule.action == nil, !press.releaseDrained else { continue }
+            presses[i]?.releaseDrained = true; presses[i]?.suppress = true
+            release(rule.output.keyCode, press.outputModifiers, press.contextPID)
+        }
+    }
 
     /// A gap makes retained presses tombstones, swallowing their later repeat/up.
     public mutating func invalidate() {
@@ -164,6 +181,7 @@ public struct KeyboardEventProcessor: Sendable {
                                contextBundle: context.bundleID, contextMode: context.mode, suppress: false)
         pressCount += 1
         guard let rule else { return .passThrough }
+        if case .rewrite(_, let flags, _) = rewrite(event, rule: rule) { presses[index]?.outputModifiers = flags }
         translatedCount &+= 1
         if let action = rule.action {
             presses[index]?.suppress = true

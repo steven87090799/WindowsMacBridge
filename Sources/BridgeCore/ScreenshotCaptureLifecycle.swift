@@ -9,10 +9,12 @@ public struct ScreenshotCaptureLifecycle: Sendable {
     private var revision: UInt64 = 0
     private var sequence: UInt64 = 0
     private var active: Token?
+    private var epoch: UInt64 = 0
     public init() {}
-    public mutating func configure(enabled: Bool) {
-        guard self.enabled != enabled else { return }
+    public mutating func configure(enabled: Bool, epoch: UInt64 = 0) {
+        guard self.enabled != enabled || self.epoch != epoch else { return }
         self.enabled = enabled
+        self.epoch = epoch
         revision &+= 1
     }
     public mutating func begin() -> Token? {
@@ -22,6 +24,7 @@ public struct ScreenshotCaptureLifecycle: Sendable {
         active = token
         return token
     }
+    public mutating func invalidate() { revision &+= 1 }
     public func isCurrent(_ token: Token) -> Bool {
         enabled && active == token && token.revision == revision
     }

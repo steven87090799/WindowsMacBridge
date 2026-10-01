@@ -1,8 +1,9 @@
 import AppKit
 import Foundation
+import ImageIO
 import Testing
 import BridgeCore
-import BridgePlatform
+@testable import BridgePlatform
 
 struct ScreenshotShortcutTests {
     private func nativeEvent(isDown: Bool) throws -> CGEvent {
@@ -255,5 +256,47 @@ struct ScreenshotShortcutTests {
         #expect(ScreenshotClipboard.write(payload, to: pasteboard) == .success)
         #expect(pasteboard.data(forType: .init("public.png")) == original)
         #expect(NSImage(pasteboard: pasteboard) != nil)
+    }
+}
+
+@MainActor struct ScreenshotImageBudgetTests {
+    @Test func oversizedPNGMetadataIsRejectedBeforeBitmapCreation() throws {
+        let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        var data = try #require(bitmap.representation(using: .png, properties: [:]))
+        data.replaceSubrange(16..<20, with: [0, 0, 0x9c, 0x40]) // width 40000, valid PNG IHDR checksum
+        var crc: UInt32 = .max
+        for byte in data[12..<29] {
+            crc ^= UInt32(byte)
+            for _ in 0..<8 { crc = (crc >> 1) ^ ((crc & 1) == 1 ? 0xedb88320 : 0) }
+        }
+        crc ^= .max
+        data.replaceSubrange(29..<33, with: (0..<4).map { UInt8(truncatingIfNeeded: crc >> (24 - $0 * 8)) })
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("BridgeBudget-\(UUID().uuidString).png")
+        defer { try? FileManager.default.removeItem(at: path) }
+        try data.write(to: path)
+        let result = ScreenshotImagePreparation.prepareResult(at: path)
+        if case .failure(let failure) = result { #expect(failure == .decodeFailure) }
+        else { Issue.record("Oversized image passed decoding policy") }
+    }
+}
+
+struct ScreenshotEncodingBudgetTests {
+    @Test func realPNGEncoderStopsAtEncodedByteBudgetAndProducesDecodableOutputWithinBudget() throws {
+        let bitmap = try #require(CGContext(data: nil, width: 32, height: 32, bitsPerComponent: 8,
+            bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        bitmap.setFillColor(CGColor(red: 0.2, green: 0.4, blue: 0.8, alpha: 1))
+        bitmap.fill(CGRect(x: 0, y: 0, width: 32, height: 32))
+        let image = try #require(bitmap.makeImage())
+        if case .failure(let error) = ScreenshotImagePreparation.encodePNG(image, maximumBytes: 32) {
+            #expect(error == .encodeFailure)
+        } else { Issue.record("Encoder exceeded its 32-byte test budget") }
+        let encoded = try ScreenshotImagePreparation.encodePNG(image, maximumBytes: 4096).get()
+        #expect(encoded.png.count <= 4096)
+        let source = try #require(CGImageSourceCreateWithData(encoded.png as CFData, nil))
+        let decoded = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        #expect(decoded.width == 32 && decoded.height == 32)
     }
 }

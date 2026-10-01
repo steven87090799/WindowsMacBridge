@@ -141,4 +141,5 @@ public enum ShortcutAction: Equatable, Sendable {
     case finder(FinderAction)
     case system(SystemAction)
     case window(WindowAction)
+    case screenshot(ScreenshotKind)
 }

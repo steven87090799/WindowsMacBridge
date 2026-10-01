@@ -33,6 +33,7 @@ uint64_t wmb_driver_version(void);
 uint16_t wmb_client_protocol_version(void);
 bool wmb_hid_element_is_neutral(IOHIDDeviceRef device, IOHIDElementRef element);
 bool wmb_validate_state(const WMBHIDState *state);
+size_t wmb_plan_state_transition(const WMBHIDState *previous, const WMBHIDState *next, WMBHIDState *reports, size_t capacity);
 size_t wmb_encode_keyboard(const WMBHIDState *state, uint8_t *buffer, size_t capacity);
 size_t wmb_encode_fn(const WMBHIDState *state, uint8_t *buffer, size_t capacity);
 size_t wmb_encode_consumer(const WMBHIDState *state, uint8_t *buffer, size_t capacity);

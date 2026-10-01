@@ -173,4 +173,16 @@ import BridgePlatform
         #expect(migrated["windowSwitcherEnabled"] == nil)
         #expect(migrated["windowThumbnailsEnabled"] == nil)
     }
+    @Test func removedQuitLastWindowPreferenceCannotReenableApplicationQuit() throws {
+        let (name, defaults) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        defaults.set(Data(#"{"schemaVersion":4,"enabled":true,"overrides":{},"altF4Enabled":true,"altF4QuitLastWindow":true}"#.utf8),
+                     forKey: "bridge.settings.v1")
+        let store = SettingsStore(defaults: defaults, portableHost: false)
+        store.update { $0.finderEnabled = true }
+        let encoded = try #require(defaults.data(forKey: "bridge.settings.v1"))
+        let fields = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        #expect(fields["altF4QuitLastWindow"] == nil)
+        #expect(store.settings.altF4Enabled && store.settings.finderEnabled)
+    }
 }

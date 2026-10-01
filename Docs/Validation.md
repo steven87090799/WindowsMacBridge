@@ -1,3 +1,5 @@
+> 這份文件保留歷史版本記錄；目前行為、測試與阻擋項目以 [2026-09-30 修復報告](PreReleaseRepair-2026-09-30.md) 為準。自製 Alt+Tab 已移除，不再列為待實作功能。
+
 # 0.5.10-preview.1 生命週期保護與資源檢查（2026-09-29）
 
 - 截圖新增 single-flight token，關閉／重開／停止會取消上一輪 Clipboard 寫入資格；即使圖片解碼稍後才完成也不更新剪貼簿或新狀態。背景轉換只回傳不可變 Data，局部 autorelease pool 釋放 NSImage／bitmap 暫存，PNG 原始 bytes 保留；不把圖檔刪除。

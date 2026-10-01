@@ -165,7 +165,7 @@ struct SettingsView: View {
                     Picker("鍵盤範圍", selection: Binding(get: { controller.settings.keyboardScope }, set: { controller.setKeyboardScope($0) })) {
                         ForEach(KeyboardScope.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
-                    explanation("預設「所有鍵盤」，包含 USB、Bluetooth 與內建鍵盤。EventTap 無法只指定某一把鍵盤；選內建／Apple 範圍時必須使用 HID，否則停止翻譯。HID 目前只接受支援的內建鍵盤或 Apple 1452/834，不包含所有 Apple 鍵盤。")
+                    explanation("預設「所有鍵盤」，包含 USB、Bluetooth 與內建鍵盤。EventTap 無法只指定某一把鍵盤；選內建／Apple 範圍時必須使用 HID，否則停止翻譯。HID 只接管可完整回報支援按鍵的實體 keyboard service；複合滑鼠、虛擬與通用控制服務保持原樣。")
                     explanation("不要同時在 Karabiner 套用相同映射。若系統已交換 Control／Command，程式收到的是交換後的按鍵；請依完整操作說明確認實際結果，再決定是否還原。")
                     if controller.settings.inputBackend == .deviceHID {
                         LabeledContent("Helper 狀態", value: controller.hidStatus.state)
@@ -186,32 +186,33 @@ struct SettingsView: View {
                 Button("重新檢查鍵盤模式") { controller.refreshMacBookKeyboard() }
                 if let issue = controller.macBookKeyboardStatus.issue { Text(issue).foregroundStyle(.orange) }
                 Toggle("Finder 檔案快捷鍵加強", isOn: Binding(get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
-                explanation("預設關閉。開啟後，確認焦點在檔案列表才提供開啟、改名及 Ctrl+X → Ctrl+V 移動；文字框仍使用文字操作。剪下標記在剪貼簿更新、切換 App、暫停或 5 分鐘後失效；程式無法確認 Finder 是否真的移動成功。")
+                explanation("預設關閉。開啟後，確認焦點在檔案列表才提供開啟、改名及 Ctrl+X → Ctrl+V 移動；文字框仍使用文字操作。剪下標記保留跨資料夾及路徑導覽；剪貼簿更新、Finder 重新啟動或 5 分鐘後失效；程式無法確認 Finder 是否真的移動成功。")
                 explanation("右鍵路徑選單由 App 內的 Finder Sync 擴充功能提供。首次安裝後請在「一般 → 登入項目與擴充功能 → Finder」啟用 WindowsMacBridge Finder；此開關關閉時選單不顯示。")
+                Toggle("Finder 亮度增加鍵作為 Enter（HID，預設關閉）", isOn: Binding(get: { controller.settings.finderBrightnessEnterEnabled }, set: { controller.setFinderBrightnessEnterEnabled($0) }))
+                    .disabled(!controller.settings.finderEnabled || controller.settings.inputBackend != .deviceHID)
+                explanation("僅在 Finder 檔案模式及 HID 接管鍵盤生效；其他 App 保留原 consumer 亮度鍵。")
                 Toggle("Finder Shift+Delete 永久刪除", isOn: Binding(get: { controller.settings.finderPermanentDeleteEnabled }, set: { controller.setFinderPermanentDeleteEnabled($0) }))
                     .disabled(!controller.settings.finderEnabled)
                 explanation("預設關閉；每次執行前另行確認。")
                 Toggle("Windows 文字游標操作", isOn: Binding(get: { controller.settings.textNavigationEnabled }, set: { controller.setTextNavigationEnabled($0) }))
                 explanation("Ctrl+方向鍵按單字移動、Home／End 到行首行尾、Ctrl+Home／End 到文件邊界；Shift 組合選取。預設開啟，以維持舊版 Ctrl 文字操作。")
                 Toggle("Alt+F4 關閉目前視窗", isOn: Binding(get: { controller.settings.altF4Enabled }, set: { controller.setAltF4Enabled($0) }))
-                Toggle("最後一個視窗改為退出 App", isOn: Binding(get: { controller.settings.altF4QuitLastWindow }, set: { controller.setAltF4QuitLastWindow($0) }))
-                    .disabled(!controller.settings.altF4Enabled)
-                explanation("使用 App 原生關閉／退出快捷鍵；未儲存文件仍由 App 自己確認。")
+                explanation("透過輔助使用按下目前視窗的關閉按鈕；保留 App 的未儲存提示。不支援 AX 關閉時顯示失敗，避免誤關分頁或整個 App。")
                 explanation("Alt+Tab 交由 macOS 原生 App 切換器處理（依鍵盤映射可能顯示為 ⌘Tab）；同一 App 的視窗可用 ⌘` 切換。")
                 Toggle("Win+R 開啟 Spotlight 搜尋", isOn: Binding(get: { controller.settings.winRunEnabled }, set: { controller.setWinRunEnabled($0) }))
                 Toggle("Win+I 開啟系統設定", isOn: Binding(get: { controller.settings.winSettingsEnabled }, set: { controller.setWinSettingsEnabled($0) }))
                 Toggle("Win+Tab 開啟 Mission Control", isOn: Binding(get: { controller.settings.winTaskViewEnabled }, set: { controller.setWinTaskViewEnabled($0) }))
-                explanation("這三項預設關閉，各自選用；僅在 Default macOS Profile 的 EventTap 後端生效。Win+R 使用 macOS ⌘Space，Win+Tab 使用 ⌃↑；若你已改過系統快捷鍵，結果會跟隨 macOS 設定。")
-                explanation("Alt+F4 與 Finder／文字鍵位使用 EventTap；進階 HID 後端的鍵位規則另外顯示。")
+                explanation("這三項預設關閉，各自選用；僅在 Default macOS Profile 生效。Win+R 使用 macOS ⌘Space，Win+Tab 使用 ⌃↑；若你已改過系統快捷鍵，結果會跟隨 macOS 設定。")
+                explanation("Alt+F4、Finder、文字及截圖功能共用安全政策；切換後端或暫停會取消尚未完成的操作。")
             }
             Section("截圖") {
                 Toggle("截圖自動複製（Shift+Win+S）", isOn: Binding(
                     get: { controller.settings.screenshotAutoCopy },
                     set: { controller.setScreenshotAutoCopy($0) }))
-                    .disabled(controller.settings.inputBackend == .deviceHID)
-                if controller.settings.inputBackend == .deviceHID {
-                    explanation("HID 模式暫停此截圖攔截：虛擬鍵盤與未接管的外接鍵盤可能送出不同 Win 修飾鍵，Event Tap 無法分辨來源；切回 EventTap 會依保存的開關恢復。")
+                Picker("PrintScreen", selection: Binding(get: { controller.settings.printScreenBehavior }, set: { controller.setPrintScreenBehavior($0) })) {
+                    ForEach(PrintScreenBehavior.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
+                explanation("Win+Shift+S 框選；Alt+PrintScreen 複製目前視窗；Win+PrintScreen 儲存全螢幕並複製；PrintScreen 依上方設定。HID 使用已接管的實體按鍵；EventTap 的 PrintScreen 對應 F13。")
                 explanation("使用上方所選的 Windows 鍵位置。若實體 Alt+Shift+S 觸發截圖，代表此處選錯了映射。")
                 explanation("框選完成後存檔並複製 PNG 圖片供 ⌘V 貼上。Ctrl+Shift+S 不會觸發截圖。原本的 ⇧⌘4 交由 macOS 處理；Esc 取消時不改剪貼簿。")
                 LabeledContent("截圖狀態", value: controller.screenshotStatus.lastResult)
@@ -339,6 +340,10 @@ struct SettingsView: View {
     private var profiles: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("App 規則").font(.title2)
+            Picker("遠端／通用控制輸入角色", selection: Binding(get: { controller.settings.remoteInputProfile }, set: { controller.setRemoteInputProfile($0) })) {
+                ForEach(RemoteInputProfile.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            explanation("在接收端明確選擇來源角色。來源端已有 Bridge 時，接收端選原樣通過；Windows 軟體注入到 Mac 請在接收端選 EventTap。傳輸未保留來源資訊時，無法自動可靠辨識或協調兩端。")
             explanation("規則依 App 的 bundle ID 套用到整個 App。Codex 新安裝預設 Default macOS，適合聊天與文字輸入；若使用內建終端機，改成 IDE 或移除規則，避免 Ctrl+C 被當成複製。")
             if let app = controller.targetApp {
                 HStack {

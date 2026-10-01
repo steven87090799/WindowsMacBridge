@@ -32,12 +32,19 @@ jobs:
         run: swift --version
       - name: Unit and in-process AppKit tests
         run: bash scripts/test.sh
-      - name: Optimized native notification and screenshot regressions
-        run: bash scripts/test.sh -c release --filter 'nativeServiceNotificationRegistrationRetainsBridgedKeys|backgroundImagePreparationPublishesOnlyImmutableImageData'
+      - name: Full optimized regressions
+        run: bash scripts/test.sh -c release
+      - name: Installer, rollback and ZIP version regressions
+        run: python3 -m unittest discover -s Tests/InstallerTests -v
       - name: Resource measurement regressions
         run: python3 -m unittest discover -s Tests/MonitoringTests -v
       - name: Build and verify development app
         run: bash scripts/build-app.sh
+      - name: Build GitHub ZIP source without .git
+        run: |
+          bridge_zip_source="$(mktemp -d)"
+          git archive HEAD | tar -x -C "$bridge_zip_source"
+          bash "$bridge_zip_source/scripts/build-app.sh"
       - name: Package app
         run: bash scripts/package-app-dmg.sh
       - uses: actions/upload-artifact@v4

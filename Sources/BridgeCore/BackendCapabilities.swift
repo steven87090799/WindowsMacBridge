@@ -4,7 +4,7 @@ public enum KeyboardScope: String, Codable, CaseIterable, Sendable {
     case builtInAndApple834
     public var title: String {
         switch self {
-        case .allKeyboards: "所有鍵盤（EventTap 預覽）"
+        case .allKeyboards: "所有支援的鍵盤"
         case .builtInAndApple834: "內建或 Apple 1452/834（裝置 HID）"
         }
     }

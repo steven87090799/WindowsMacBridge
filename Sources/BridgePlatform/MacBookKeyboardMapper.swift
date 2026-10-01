@@ -15,6 +15,7 @@ public struct MacBookKeyboardService: Sendable {
 @MainActor public protocol MacBookKeyboardMappingBackend: AnyObject {
     var portable: Bool { get }
     var bootID: String { get }
+    var keysNeutral: Bool { get }
     func services() -> [MacBookKeyboardService]?
     func write(_ mapping: [NativeKeyMapping], serviceID: UInt64) -> Bool
     func observeChanges(_ action: @escaping @MainActor () -> Void) -> Bool
@@ -26,6 +27,7 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
     public var summary = "已關閉"
     public var issue: String?
     public var restorePending = false
+    public var awaitingNeutral = false
     public init() {}
 }
 
@@ -38,6 +40,7 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
     private let backend: any MacBookKeyboardMappingBackend
     private let defaults: UserDefaults
     private let journalKey = "macbook.fnControl.journal.v1"
+    private let journalURL: URL
     private var journal: Journal
     private var enabled = false
     private var permitted = true
@@ -46,12 +49,16 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
     public var onChange: ((MacBookKeyboardMappingStatus) -> Void)?
     public var onDiagnostic: ((String) -> Void)?
 
-    public init(backend: (any MacBookKeyboardMappingBackend)? = nil, defaults: UserDefaults = .standard) {
+    public init(backend: (any MacBookKeyboardMappingBackend)? = nil, defaults: UserDefaults = .standard,
+                journalURL: URL? = nil) {
         let backend = backend ?? NativeMacBookKeyboardBackend()
         self.backend = backend; self.defaults = defaults
+        self.journalURL = journalURL ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/WindowsMacBridge/fn-control-journal.json")
         journal = Journal(bootID: backend.bootID)
-        if let data = defaults.data(forKey: journalKey),
-           let stored = try? JSONDecoder().decode(Journal.self, from: data), stored.bootID == backend.bootID {
+        if let data = PrivateMappingJournal.load(self.journalURL) ?? defaults.data(forKey: journalKey),
+           let stored = try? JSONDecoder().decode(Journal.self, from: data), stored.bootID == backend.bootID,
+           stored.originals.count <= 128 {
             journal = stored
         }
     }
@@ -120,6 +127,10 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
                 restore(serviceID: id, current: current, next: &next)
                 next.issue = "其他映射正在使用 Fn／Ctrl；已停止交換並保留外部修改。"; continue
             }
+            guard backend.keysNeutral else {
+                next.awaitingNeutral = true
+                next.issue = "請放開所有按鍵後套用 Fn／Ctrl 交換。"; continue
+            }
             let original = current.filter { MacBookFnControlMapping.owns($0.source) }
             // Save ownership before mutation so a crash can be recovered on the next launch.
             journal.originals[key] = original
@@ -165,6 +176,10 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
         let key = String(serviceID)
         guard let original = journal.originals[key] else { return }
         let restored = MacBookFnControlMapping.restoring(current, original: original)
+        guard restored == current || backend.keysNeutral else {
+            next.awaitingNeutral = true
+            next.issue = "請放開所有按鍵後還原 Fn／Ctrl 交換。"; return
+        }
         if restored == current || (backend.write(restored, serviceID: serviceID) && verified(id: serviceID, mapping: restored)) {
             journal.originals.removeValue(forKey: key)
         } else { next.issue = "鍵盤交換尚未還原；請按重新檢查，或重新開機清除暫存映射。" }
@@ -172,10 +187,13 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
     private func saveJournal() -> Bool {
         guard let data = try? JSONEncoder().encode(journal) else { return false }
         if journal.originals.isEmpty {
+            guard PrivateMappingJournal.remove(journalURL) else { return false }
             if defaults.object(forKey: journalKey) != nil { defaults.removeObject(forKey: journalKey) }
             return true
         }
+        guard PrivateMappingJournal.write(data, to: journalURL) else { return false }
+        // Retain a legacy mirror for migration only; the durable file is authoritative.
         defaults.set(data, forKey: journalKey)
-        return defaults.data(forKey: journalKey) == data
+        return true
     }
 }

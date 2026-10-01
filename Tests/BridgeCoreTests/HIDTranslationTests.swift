@@ -50,7 +50,7 @@ struct HIDTranslationTests {
         _ = e.observe(device: 1, page: 7, usage: 6, down: true)
         let down = output(&e); #expect(!down.fn); #expect(down.modifiers == 8); #expect(down.keys[0] == 6)
         _ = e.observe(device: 1, page: 7, usage: 6, down: false)
-        #expect(output(&e).isEmpty)
+        #expect(output(&e).modifiers == 1) // Physical Ctrl outlives this shortcut.
         _ = e.observe(device: 1, page: 7, usage: 0xe0, down: false)
         #expect(output(&e).isEmpty)
     }
@@ -243,6 +243,8 @@ struct HIDTranslationTests {
     }
     @Test func brightnessAndManualToggleArePairedWithoutRecursion() {
         var e = engine()
+        e.configure(context: .init(processID: 10, bundleID: "com.apple.finder", mode: .macOS),
+                    layoutSupported: true, finderEnabled: true, finderBrightnessEnterEnabled: true)
         _ = e.observe(device: 1, page: 0x0c, usage: 0x6f, down: true)
         #expect(output(&e).keys[0] == 0x28)
         _ = e.observe(device: 1, page: 0x0c, usage: 0x6f, down: false)

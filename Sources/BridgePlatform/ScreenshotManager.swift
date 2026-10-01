@@ -17,61 +17,100 @@ public struct ScreenshotImagePayload: Sendable {
     let png: Data
 }
 
+/// ImageIO writes incrementally. Refuse a chunk before it can grow the encoded
+/// buffer beyond its budget; a post-finalize size check alone is too late.
+private final class PNGEncodingBuffer {
+    let limit: Int
+    private(set) var data = Data()
+    private(set) var overflow = false
+    init(limit: Int) { self.limit = limit; data.reserveCapacity(min(limit, 64 * 1024)) }
+    func append(_ pointer: UnsafeRawPointer, count: Int) -> Int {
+        guard !overflow, count >= 0, count <= limit - data.count else { overflow = true; return 0 }
+        data.append(pointer.assumingMemoryBound(to: UInt8.self), count: count)
+        return count
+    }
+}
+
 public enum ScreenshotImagePreparation {
+    static func encodePNG(_ image: CGImage, maximumBytes: Int = ImageMemoryBudget.maximumFileBytes) -> Result<ScreenshotImagePayload, ScreenshotFailure> {
+        guard maximumBytes > 0 else { return .failure(.encodeFailure) }
+        let buffer = PNGEncodingBuffer(limit: min(maximumBytes, ImageMemoryBudget.maximumFileBytes))
+        var callbacks = CGDataConsumerCallbacks(putBytes: { info, bytes, count in
+            guard let info else { return 0 }
+            return Unmanaged<PNGEncodingBuffer>.fromOpaque(info).takeUnretainedValue().append(bytes, count: count)
+        }, releaseConsumer: nil)
+        return withExtendedLifetime(buffer) {
+            guard let consumer = CGDataConsumer(info: Unmanaged.passUnretained(buffer).toOpaque(), cbks: &callbacks),
+                  let destination = CGImageDestinationCreateWithDataConsumer(consumer, "public.png" as CFString, 1, nil) else {
+                return .failure(.encodeFailure)
+            }
+            CGImageDestinationAddImage(destination, image, nil)
+            guard CGImageDestinationFinalize(destination), !buffer.overflow, !buffer.data.isEmpty else { return .failure(.encodeFailure) }
+            return .success(ScreenshotImagePayload(png: buffer.data))
+        }
+    }
     /// Local image/bitmap objects never cross threads. Only immutable image data
     /// leaves the pool; AppKit UI and Clipboard remain on the main actor.
     public static func prepare(at url: URL) -> ScreenshotImagePayload? {
+        try? prepareResult(at: url).get()
+    }
+    public static func prepareResult(at url: URL) -> Result<ScreenshotImagePayload, ScreenshotFailure> {
         autoreleasepool {
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+                  let bytes = (attributes[.size] as? NSNumber)?.intValue,
+                  bytes > 0, bytes <= ImageMemoryBudget.maximumFileBytes else { return .failure(.diskFailure) }
             if url.pathExtension.lowercased() == "pdf" {
                 return preparePDF(at: url)
             }
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+            let options = [kCGImageSourceShouldCache: false] as CFDictionary
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, options),
                   CGImageSourceGetCount(source) > 0,
-                  CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete else { return nil }
+                  CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete,
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, options) as? [CFString: Any],
+                  let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+                  let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue,
+                  let depth = (properties[kCGImagePropertyDepth] as? NSNumber)?.intValue,
+                  (1...64).contains(depth),
+                  ImageMemoryBudget.allows(width: width, height: height, bytesPerPixel: 4 * ((depth + 7) / 8)) else {
+                return .failure(.decodeFailure)
+            }
             if url.pathExtension.lowercased() == "png",
                let original = try? Data(contentsOf: url, options: .mappedIfSafe),
                original.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]) {
-                return ScreenshotImagePayload(png: original)
+                return .success(ScreenshotImagePayload(png: original))
             }
-            guard let encoded = CFDataCreateMutable(kCFAllocatorDefault, 0),
-                  let destination = CGImageDestinationCreateWithData(encoded, "public.png" as CFString, 1, nil) else {
-                return nil
-            }
-            CGImageDestinationAddImageFromSource(destination, source, 0, nil)
-            guard CGImageDestinationFinalize(destination) else { return nil }
-            return ScreenshotImagePayload(png: encoded as Data)
+            guard let image = CGImageSourceCreateImageAtIndex(source, 0, options),
+                  ImageMemoryBudget.allows(width: image.width, height: image.height,
+                    bytesPerPixel: max(4, (image.bitsPerPixel + 7) / 8)),
+                  image.bytesPerRow <= ImageMemoryBudget.maximumDecodedBytes / image.height else { return .failure(.decodeFailure) }
+            return encodePNG(image)
         }
     }
 
-    private static func preparePDF(at url: URL) -> ScreenshotImagePayload? {
+    private static func preparePDF(at url: URL) -> Result<ScreenshotImagePayload, ScreenshotFailure> {
         guard let document = CGPDFDocument(url as CFURL),
-              let page = document.page(at: 1) else { return nil }
+              let page = document.page(at: 1) else { return .failure(.decodeFailure) }
         let bounds = page.getBoxRect(.mediaBox).standardized
         guard bounds.width.isFinite, bounds.height.isFinite,
               bounds.width > 0, bounds.height > 0,
-              (bounds.width * bounds.height).isFinite else { return nil }
+              (bounds.width * bounds.height).isFinite else { return .failure(.decodeFailure) }
         // PDF is an uncommon screenshot format. Bound its bitmap so a malformed
         // or enormous document cannot cause an unbounded allocation.
-        let scale = min(1, 8_192 / max(bounds.width, bounds.height),
-                        sqrt(32_000_000 / (bounds.width * bounds.height)))
-        let width = max(1, Int(ceil(bounds.width * scale)))
-        let height = max(1, Int(ceil(bounds.height * scale)))
+        guard bounds.width <= Double(ImageMemoryBudget.maximumDimension),
+              bounds.height <= Double(ImageMemoryBudget.maximumDimension) else { return .failure(.decodeFailure) }
+        let width = max(1, Int(ceil(bounds.width)))
+        let height = max(1, Int(ceil(bounds.height)))
+        guard ImageMemoryBudget.allows(width: width, height: height, bytesPerPixel: 4) else { return .failure(.decodeFailure) }
         guard let context = CGContext(data: nil, width: width, height: height,
                                       bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return .failure(.decodeFailure) }
         context.concatenate(page.getDrawingTransform(.mediaBox,
             rect: CGRect(x: 0, y: 0, width: width, height: height),
             rotate: 0, preserveAspectRatio: true))
         context.drawPDFPage(page)
-        guard let image = context.makeImage(),
-              let encoded = CFDataCreateMutable(kCFAllocatorDefault, 0),
-              let destination = CGImageDestinationCreateWithData(encoded, "public.png" as CFString, 1, nil) else {
-            return nil
-        }
-        CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination) else { return nil }
-        return ScreenshotImagePayload(png: encoded as Data)
+        guard let image = context.makeImage() else { return .failure(.decodeFailure) }
+        return encodePNG(image)
     }
 }
 
@@ -107,6 +146,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private let defaults: UserDefaults
     private let fileManager: FileManager
     private let logURL: URL
+    private let logger: BoundedDiagnosticLogger
     private let lastCheckKey = "screenshot.lastCheck.v1"
     private var enabled = false
     private var captureAllowed = false
@@ -119,19 +159,45 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private var recovery = RecoveryPolicy()
     private var tapGeneration: UInt64 = 0
     private var recoveryQueued: UInt64?
+    private var runtimePolicy: RuntimePolicySnapshot?
+    private var policyEpoch: UInt64 = 0
+    private var activeJob: (any ScreenshotCaptureJob)?
+    private var jobKind: ScreenshotKind = .region
+    private let driver: any ScreenshotCaptureDriving
+    private let validatesNativeContext: Bool
+    private let captureDirectoryOverride: URL?
+    private let authorization: @MainActor () -> Bool
+    private let clipboard: NSPasteboard
+    private var awaitingNeutral = false
+    private var jobTimer: DispatchSourceTimer?
+    private var processing: Task<Result<ScreenshotImagePayload, ScreenshotFailure>, Never>?
+    private let prepareImage: @Sendable (URL) -> Result<ScreenshotImagePayload, ScreenshotFailure>
+    private let captureTimeout: TimeInterval
 
-    public init(defaults: UserDefaults = .standard, fileManager: FileManager = .default) {
+    public init(defaults: UserDefaults = .standard, fileManager: FileManager = .default,
+                driver: (any ScreenshotCaptureDriving)? = nil, clipboard: NSPasteboard = .general,
+                authorization: (@MainActor () -> Bool)? = nil,
+                prepareImage: @escaping @Sendable (URL) -> Result<ScreenshotImagePayload, ScreenshotFailure> = ScreenshotImagePreparation.prepareResult,
+                captureTimeout: TimeInterval = 120, captureDirectory: URL? = nil) {
         // Initialize the shared marker outside the native event callback.
         _ = EventRewriter.generatedEventMarker
         self.defaults = defaults
         self.fileManager = fileManager
+        self.driver = driver ?? NativeScreenshotCaptureDriver()
+        self.clipboard = clipboard
+        self.validatesNativeContext = authorization == nil
+        self.captureDirectoryOverride = captureDirectory
+        self.prepareImage = prepareImage
+        self.captureTimeout = captureTimeout.isFinite && captureTimeout > 0 ? min(120, captureTimeout) : 120
+        self.authorization = authorization ?? { !IsSecureEventInputEnabled() && CGPreflightScreenCaptureAccess() }
         logURL = fileManager.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/WindowsMacBridge/Screenshot.log")
+        logger = BoundedDiagnosticLogger(url: logURL)
     }
 
     public func start(enabled: Bool) {
         self.enabled = enabled
-        capture.configure(enabled: enabled)
+        capture.configure(enabled: enabled, epoch: policyEpoch)
         guard enabled else { return }
         verifyAndRepair(reason: "App 啟動")
         if defaults.object(forKey: lastCheckKey) == nil { defaults.set(Date(), forKey: lastCheckKey) }
@@ -141,13 +207,15 @@ public struct ScreenshotStatus: Equatable, Sendable {
     public func setEnabled(_ value: Bool) {
         guard enabled != value else { return }
         enabled = value
-        capture.configure(enabled: value)
+        capture.configure(enabled: value, epoch: policyEpoch)
         recovery.reset()
         if value {
             verifyAndRepair(reason: "功能啟用")
             defaults.set(Date(), forKey: lastCheckKey)
             scheduleNextCheck()
         } else {
+            activeJob?.cancel(.policyCancelled)
+        processing?.cancel(); jobTimer?.cancel(); jobTimer = nil
             checkTimer?.invalidate(); checkTimer = nil
             destroyTap()
             shortcut.reset()
@@ -156,15 +224,27 @@ public struct ScreenshotStatus: Equatable, Sendable {
         }
     }
 
-    public func setWindowsKeyModifier(_ value: WindowsKeyModifier) {
-        guard shortcut.windowsKeyModifier != value else { return }
-        shortcut.reset()
-        shortcut.windowsKeyModifier = value
-        if enabled { verifyAndRepair(reason: "Windows 鍵映射已變更") }
+    public func applyRuntimePolicy(_ policy: RuntimePolicySnapshot, windowsKey: WindowsKeyModifier,
+                                   printScreen: PrintScreenBehavior) {
+        guard runtimePolicy != policy || shortcut.windowsKeyModifier != windowsKey || shortcut.printScreenBehavior != printScreen else { return }
+        runtimePolicy = policy; policyEpoch = policy.generation
+        activeJob?.cancel(.policyCancelled)
+        processing?.cancel(); jobTimer?.cancel(); jobTimer = nil
+        capture.configure(enabled: policy.permitsScreenshots, epoch: policyEpoch)
+        captureAllowed = policy.permitsScreenshots
+        shortcut.windowsKeyModifier = windowsKey; shortcut.printScreenBehavior = printScreen
+        setEnabled(policy.permitsScreenshots)
+        if enabled && policy.input.backend == .eventTap && tap == nil { performVerification(reason: "執行政策變更") }
+        awaitingNeutral = !InputEngine.modifiers(CGEventSource.flagsState(.hidSystemState)).isEmpty
+        if policy.input.backend == .deviceHID { destroyTap() }
     }
 
-    public func setContextMode(_ value: ApplicationMode, ownAppForeground: Bool = false) {
-        captureAllowed = value == .macOS || ownAppForeground
+    /// HID dispatches the physical shortcut through versioned IPC, so its virtual reports
+    /// can never be mistaken for an uncaptured keyboard's Alt+Shift+S by a second tap.
+    public func requestCapture(_ kind: ScreenshotKind) {
+        guard enabled, captureAllowed, let token = capture.begin() else { return }
+        jobKind = kind
+        beginCapture(token, kind: kind)
     }
 
     public func stop() {
@@ -172,7 +252,9 @@ public struct ScreenshotStatus: Equatable, Sendable {
         destroyTap()
         shortcut.reset()
         enabled = false
-        capture.configure(enabled: false)
+        activeJob?.cancel(.policyCancelled)
+        processing?.cancel(); jobTimer?.cancel(); jobTimer = nil
+        capture.configure(enabled: false, epoch: policyEpoch)
         recovery.reset()
         accessibilityTrusted = false
     }
@@ -207,6 +289,11 @@ public struct ScreenshotStatus: Equatable, Sendable {
         if let tap, (!CFMachPortIsValid(tap) || !CGEvent.tapIsEnabled(tap: tap)) {
             destroyTap()
             log("\(reason)：事件攔截已停用，重新建立")
+        }
+        if runtimePolicy?.input.backend == .deviceHID {
+            destroyTap()
+            setStatus(issue: nil, result: "HID 實體截圖快捷鍵已啟用")
+            return
         }
         if tap == nil { createTap() }
         if let tap, CGEvent.tapIsEnabled(tap: tap) {
@@ -250,7 +337,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     private func createTap() {
-        let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+        let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue) | (1 << CGEventType.flagsChanged.rawValue)
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
             guard let userInfo else { return Unmanaged.passUnretained(event) }
             let manager = Unmanaged<ScreenshotManager>.fromOpaque(userInfo).takeUnretainedValue()
@@ -301,10 +388,18 @@ public struct ScreenshotStatus: Equatable, Sendable {
             }
             return Unmanaged.passUnretained(event)
         }
-        guard enabled, type == .keyDown || type == .keyUp else { return Unmanaged.passUnretained(event) }
+        guard enabled else { return Unmanaged.passUnretained(event) }
+        if type == .flagsChanged {
+            if InputEngine.modifiers(event.flags).isEmpty { awaitingNeutral = false }
+            return Unmanaged.passUnretained(event)
+        }
+        guard type == .keyDown || type == .keyUp else { return Unmanaged.passUnretained(event) }
         let key = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
-        guard key == ScreenshotShortcut.keyCode else { return Unmanaged.passUnretained(event) }
-        let decision = shortcut.handle(type: type, event: event, allowsCapture: captureAllowed)
+        if key == 53 && type == .keyDown && jobKind == .region && !EventRewriter.isGeneratedByBridge(event) {
+            activeJob?.noteUserCancellation()
+        }
+        guard ScreenshotShortcut.supports(key) else { return Unmanaged.passUnretained(event) }
+        let decision = shortcut.handle(type: type, event: event, allowsCapture: captureAllowed && !awaitingNeutral)
         switch decision {
         case .passThrough: return Unmanaged.passUnretained(event)
         case .suppress: return nil
@@ -314,50 +409,88 @@ public struct ScreenshotStatus: Equatable, Sendable {
                 return Unmanaged.passUnretained(event)
             }
             if let token = capture.begin() {
-                DispatchQueue.main.async { [weak self] in self?.beginCapture(token) }
+                let kind = shortcut.captureKind
+                DispatchQueue.main.async { [weak self] in self?.beginCapture(token, kind: kind) }
             }
             return nil
         }
     }
 
-    private func beginCapture(_ token: ScreenshotCaptureLifecycle.Token) {
-        guard capture.isCurrent(token) else { _ = capture.complete(token); return }
-        let destination = captureURL()
-        setStatus(issue: nil, result: "正在框選截圖")
-        log("快捷鍵已接收，開始框選截圖")
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        process.arguments = ["-i", "-s", "-t", destination.pathExtension, destination.path]
-        process.terminationHandler = { [weak self] finished in
-            let code = finished.terminationStatus
-            Task { @MainActor [weak self] in await self?.finishCapture(exitCode: code, url: destination, token: token) }
+    private func beginCapture(_ token: ScreenshotCaptureLifecycle.Token, kind: ScreenshotKind) {
+        guard capture.isCurrent(token), isAuthorized() else {
+            if capture.complete(token) { setStatus(issue: "螢幕錄製權限不可用。", result: "permissionDenied") }
+            return
         }
+        let destination = captureURL()
+        jobTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + captureTimeout)
+        timer.setEventHandler { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.capture.isCurrent(token) else { return }
+                self.capture.invalidate()
+                self.processing?.cancel(); self.activeJob?.cancel(.timedOut)
+                self.setStatus(issue: "截圖工作逾時。", result: "timedOut")
+            }
+        }
+        jobTimer = timer; timer.resume()
+        jobKind = kind
+        setStatus(issue: nil, result: kind == .region ? "正在框選截圖" : "正在截圖")
         do {
-            try process.run()
+            activeJob = try driver.launch(to: destination, kind: kind,
+                processID: runtimePolicy?.input.foreground.processID ?? 0) { [weak self] code, failure in
+                Task { @MainActor [weak self] in
+                    await self?.finishCapture(exitCode: code, failure: failure, url: destination, token: token)
+                }
+            }
         } catch {
+            jobTimer?.cancel(); jobTimer = nil
             guard capture.complete(token) else { return }
-            setStatus(issue: "無法啟動 macOS 截圖工具：\(error.localizedDescription)", result: "截圖失敗")
+            setStatus(issue: "無法啟動 macOS 截圖工具：\(error.localizedDescription)", result: "processFailure")
             log("截圖工具啟動失敗：\(error.localizedDescription)")
         }
     }
 
-    private func finishCapture(exitCode: Int32, url: URL, token: ScreenshotCaptureLifecycle.Token) async {
-        guard capture.isCurrent(token) else { _ = capture.complete(token); return }
-        guard let size = (try? fileManager.attributesOfItem(atPath: url.path)[.size]) as? NSNumber,
-              size.intValue > 0 else {
+    private func finishCapture(exitCode: Int32, failure: ScreenshotFailure?, url: URL, token: ScreenshotCaptureLifecycle.Token) async {
+        activeJob = nil
+        guard capture.isCurrent(token) else {
+            jobTimer?.cancel(); jobTimer = nil
+            _ = capture.complete(token); return
+        }
+        let size = (try? fileManager.attributesOfItem(atPath: url.path)[.size]) as? NSNumber
+        if let failure = failure ?? ScreenshotFailure.classify(exitCode: exitCode, hasImage: (size?.intValue ?? 0) > 0,
+            permission: isAuthorized(), writable: fileManager.isWritableFile(atPath: url.deletingLastPathComponent().path),
+            interactive: jobKind == .region) {
             guard capture.complete(token) else { return }
-            if exitCode != 0 { log("截圖已取消或失敗，結束碼 \(exitCode)") }
-            setStatus(issue: nil, result: "截圖已取消")
+            jobTimer?.cancel(); jobTimer = nil
+            setStatus(issue: failure == .userCancelled ? nil : "截圖失敗：\(failure.rawValue)", result: failure.rawValue)
             return
         }
-        if exitCode != 0 { log("截圖工具結束碼 \(exitCode)，但已產生圖片；繼續複製") }
-        let payload = await Task.detached(priority: .userInitiated) {
-            ScreenshotImagePreparation.prepare(at: url)
-        }.value
+        let prepare = prepareImage
+        let work = Task.detached(priority: .userInitiated) {
+            guard !Task.isCancelled else { return Result<ScreenshotImagePayload, ScreenshotFailure>.failure(.policyCancelled) }
+            let result = prepare(url)
+            return Task.isCancelled ? .failure(.policyCancelled) : result
+        }
+        processing = work
+        let payload = await work.value
+        processing = nil; jobTimer?.cancel(); jobTimer = nil
         // Off/on while decoding or while the native selection UI is open must
         // not let the previous capture overwrite Clipboard or status.
+        guard capture.isCurrent(token) else { _ = capture.complete(token); return }
+        guard isAuthorized() else {
+            if capture.complete(token) { setStatus(issue: "螢幕錄製權限不可用。", result: "permissionDenied") }
+            return
+        }
         guard capture.complete(token) else { return }
-        let result = payload.map { ScreenshotClipboard.write($0, to: .general) } ?? .unreadableImage
+        let image: ScreenshotImagePayload
+        switch payload {
+        case .success(let value): image = value
+        case .failure(let failure):
+            setStatus(issue: "圖片處理失敗：\(failure.rawValue)", result: failure.rawValue)
+            return
+        }
+        let result = ScreenshotClipboard.write(image, to: clipboard)
         switch result {
         case .unreadableImage:
             setStatus(issue: "圖片已儲存，但無法讀取以複製到剪貼簿。", result: "儲存成功、複製失敗")
@@ -373,19 +506,26 @@ public struct ScreenshotStatus: Equatable, Sendable {
         log("截圖已儲存並複製：\(url.path)")
     }
 
+    private func isAuthorized() -> Bool {
+        guard authorization() else { return false }
+        guard validatesNativeContext, let policy = runtimePolicy else { return true }
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == policy.input.foreground.processID,
+              let session = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
+        return (session[kCGSessionOnConsoleKey as String] as? Bool) == true &&
+            (session[kCGSessionLoginDoneKey as String] as? Bool) == true &&
+            (session[kCGSessionUserIDKey as String] as? NSNumber)?.uint32Value == getuid()
+    }
+
     private func captureURL() -> URL {
-        let preferences = UserDefaults(suiteName: "com.apple.screencapture")
         let directory = captureDirectory()
-        let preferredType = preferences?.string(forKey: "type")?.lowercased() ?? "png"
-        let format = preferredType == "jpeg" ? "jpg"
-            : (["png", "jpg", "tiff", "pdf"].contains(preferredType) ? preferredType : "png")
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        let name = "Screenshot \(formatter.string(from: Date()))-\(UUID().uuidString.prefix(8)).\(format)"
+        let name = "Screenshot \(formatter.string(from: Date()))-\(UUID().uuidString.prefix(8)).png"
         return directory.appendingPathComponent(name)
     }
 
     private func captureDirectory() -> URL {
+        if let captureDirectoryOverride { return captureDirectoryOverride }
         let preferences = UserDefaults(suiteName: "com.apple.screencapture")
         let configuredLocation = preferences?.string(forKey: "location")
         let desktop = fileManager.urls(for: .desktopDirectory, in: .userDomainMask).first
@@ -402,24 +542,6 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     private func log(_ message: String) {
-        do {
-            try fileManager.createDirectory(at: logURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if let bytes = (try? fileManager.attributesOfItem(atPath: logURL.path)[.size]) as? NSNumber,
-               bytes.intValue >= 512 * 1024 {
-                let previous = logURL.appendingPathExtension("1")
-                try? fileManager.removeItem(at: previous)
-                try fileManager.moveItem(at: logURL, to: previous)
-            }
-            let line = "[\(ISO8601DateFormatter().string(from: Date()))] \(message)\n"
-            let data = Data(line.utf8)
-            if fileManager.fileExists(atPath: logURL.path) {
-                let handle = try FileHandle(forWritingTo: logURL)
-                try handle.seekToEnd()
-                try handle.write(contentsOf: data)
-                try handle.close()
-            } else { try data.write(to: logURL, options: .atomic) }
-        } catch {
-            NSLog("WindowsMacBridge screenshot diagnostic logging failed: %@", error.localizedDescription)
-        }
+        logger.log(message)
     }
 }

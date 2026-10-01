@@ -2,14 +2,31 @@ import Foundation
 import HIDProtocol
 import BridgeCore
 
-public enum InputBackend: String, Codable, CaseIterable, Sendable {
-    case deviceHID, eventTap
-    public var title: String { self == .deviceHID ? "指定鍵盤 HID 後端（需要安裝 helper）" : "CGEventTap 快捷鍵預覽" }
+/// NSXPCConnection retains its exported object. Keep the controller weak so a pending
+/// stop acknowledgement cannot form controller -> connection -> controller ownership.
+private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unchecked Sendable {
+    private weak var controller: HIDBackendClient?
+    init(_ controller: HIDBackendClient) { self.controller = controller }
+    func performAction(_ id: String, processID: Int32, generation: UInt64) {
+        controller?.performAction(id, processID: processID, generation: generation)
+    }
 }
 
 @MainActor public final class HIDBackendClient: NSObject, HIDControllerProtocol {
     public private(set) var status = HIDStatus()
     public var actionStatus: String { actions.status() }
+    public var onOwnershipChange: (() -> Void)?
+    public private(set) var releasePending = false
+    public var hasOwnership: Bool { connection != nil || stoppingConnection != nil }
+    private var stoppingConnection: NSXPCConnection?
+    private var stopTimeout: DispatchSourceTimer?
+    private var stopID: UUID?
+    private var connectionFactory: @MainActor () -> NSXPCConnection = {
+        NSXPCConnection(machServiceName: HIDService.name, options: .privileged)
+    }
+    private var stopAcknowledgementTimeout: TimeInterval = 1.5
+    public var onScreenshot: ((ScreenshotKind) -> Void)?
+    private nonisolated let incomingActions = BoundedActionInbox()
     private let actions = ShortcutActionDispatcher(marker: EventRewriter.generatedEventMarker)
     private var connection: NSXPCConnection?
     private var configuration = HIDConfiguration()
@@ -20,33 +37,41 @@ public enum InputBackend: String, Codable, CaseIterable, Sendable {
     private var inFlight = false
     private var sentAt: Double = 0, retryAt: Double = 0
     public override init() { super.init() }
+    public init(connectionFactory: @escaping @MainActor () -> NSXPCConnection,
+                stopAcknowledgementTimeout: TimeInterval = 1.5) {
+        self.connectionFactory = connectionFactory
+        self.stopAcknowledgementTimeout = stopAcknowledgementTimeout.isFinite && stopAcknowledgementTimeout > 0 ? min(1.5, stopAcknowledgementTimeout) : 1.5
+        super.init()
+    }
     public func start() {
         guard !started else { return }
         started = true
-        if backendActive { startHeartbeat() }
+        if backendActive && configuration.enabled { startHeartbeat() }
     }
     private func startHeartbeat() {
         guard timer == nil else { return }
-        timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
+        timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tick() }
+        }
     }
     public func update(_ engine: EngineConfiguration, active: Bool) {
         let wasActive = backendActive
-        let effectiveEnabled = engine.enabled && active && engine.keyboardScope == .builtInAndApple834
+        let effectiveEnabled = engine.enabled && active
         let changed = configuration.processID != engine.context.processID || configuration.bundleID != engine.context.bundleID ||
+            configuration.generation != engine.generation || configuration.keyboardScope != engine.keyboardScope ||
             configuration.mode != engine.context.mode || configuration.isBrowser != engine.context.isBrowser ||
             configuration.enabled != effectiveEnabled ||
             configuration.layoutSupported != engine.layoutSupported || configuration.finderEnabled != engine.finderEnabled ||
             configuration.finderPermanentDeleteEnabled != engine.finderPermanentDeleteEnabled ||
             configuration.textNavigationEnabled != engine.textNavigationEnabled ||
             configuration.altF4Enabled != engine.altF4Enabled ||
-            configuration.altF4QuitLastWindow != engine.altF4QuitLastWindow ||
             configuration.windowsKeyModifier != engine.windowsKeyModifier ||
             configuration.macBookFnControlSwap != engine.macBookFnControlSwap ||
             configuration.winRunEnabled != engine.winRunEnabled ||
             configuration.winSettingsEnabled != engine.winSettingsEnabled ||
             configuration.winTaskViewEnabled != engine.winTaskViewEnabled ||
             configuration.sessionActive != engine.sessionActive || configuration.restartToken != engine.restartToken || backendActive != active
-        if changed { generation &+= 1; actions.cancelPending() }
+        if changed { generation = engine.generation; actions.cancelPending() }
         backendActive = active
         configuration.enabled = effectiveEnabled
         configuration.sessionActive = engine.sessionActive; configuration.layoutSupported = engine.layoutSupported
@@ -54,12 +79,15 @@ public enum InputBackend: String, Codable, CaseIterable, Sendable {
         configuration.finderPermanentDeleteEnabled = engine.finderPermanentDeleteEnabled
         configuration.textNavigationEnabled = engine.textNavigationEnabled
         configuration.altF4Enabled = engine.altF4Enabled
-        configuration.altF4QuitLastWindow = engine.altF4QuitLastWindow
         configuration.windowsKeyModifier = engine.windowsKeyModifier
         configuration.macBookFnControlSwap = engine.macBookFnControlSwap
         configuration.winRunEnabled = engine.winRunEnabled
         configuration.winSettingsEnabled = engine.winSettingsEnabled
         configuration.winTaskViewEnabled = engine.winTaskViewEnabled
+        configuration.keyboardScope = engine.keyboardScope
+        configuration.finderBrightnessEnterEnabled = engine.finderBrightnessEnterEnabled
+        configuration.screenshotEnabled = engine.screenshotEnabled
+        configuration.printScreenBehavior = engine.printScreenBehavior
         configuration.diagnostics = engine.diagnostics
         configuration.bundleID = engine.context.bundleID; configuration.mode = engine.context.mode
         configuration.isBrowser = engine.context.isBrowser; configuration.generation = generation
@@ -67,8 +95,8 @@ public enum InputBackend: String, Codable, CaseIterable, Sendable {
         _ = actions.update(context: configuration.context, enabled: configuration.enabled && !status.manualPassThrough,
                            finderEnabled: configuration.finderEnabled,
                            finderPermanentDeleteEnabled: configuration.finderPermanentDeleteEnabled,
-                           altF4QuitLastWindow: configuration.altF4QuitLastWindow, epoch: generation)
-        if !active {
+                           epoch: generation)
+        if !active || !effectiveEnabled {
             if wasActive || timer != nil || connection != nil {
                 timer?.invalidate(); timer = nil
                 disconnect()
@@ -83,25 +111,52 @@ public enum InputBackend: String, Codable, CaseIterable, Sendable {
         guard backendActive, let proxy = connection?.remoteObjectProxy as? HIDHelperProtocol else { return }
         proxy.requestInputAccess { _ in }
     }
+    /// New input ownership is gated until the old helper confirms physical close and virtual teardown.
+    public func releaseOwnership() { backendActive = false; configuration.enabled = false; disconnect() }
     private func disconnect() {
         actions.cancelPending(disable: true)
-        if let proxy = connection?.remoteObjectProxy as? HIDHelperProtocol { proxy.stop {} }
-        connection?.invalidate(); connection = nil; inFlight = false
-        status = HIDStatus()
+        timer?.invalidate(); timer = nil
+        guard let old = connection else { inFlight = false; return }
+        connection = nil; inFlight = false
+        guard stoppingConnection == nil else { old.invalidate(); return }
+        stoppingConnection = old; releasePending = true
+        let id = UUID(); stopID = id
+        onOwnershipChange?()
+        let timeout = DispatchSource.makeTimerSource(queue: .main)
+        timeout.schedule(deadline: .now() + stopAcknowledgementTimeout)
+        timeout.setEventHandler { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.stopID == id else { return }
+                self.stopTimeout?.cancel(); self.stopTimeout = nil
+                // A timeout is no acknowledgement. Keep every new backend stopped.
+                self.status.state = "Helper 停止未獲確認；新後端保持停用，請重新啟動 App／helper。"
+            }
+        }
+        stopTimeout = timeout; timeout.resume()
+        let proxy = old.remoteObjectProxyWithErrorHandler { _ in } as? HIDHelperProtocol
+        proxy?.stop { [weak self, weak old] in
+            Task { @MainActor in
+                guard let self, let old, self.stopID == id, self.stoppingConnection === old else { return }
+                self.stopTimeout?.cancel(); self.stopTimeout = nil
+                self.stopID = nil; self.stoppingConnection = nil; old.invalidate()
+                self.releasePending = false; self.status = HIDStatus()
+                self.onOwnershipChange?()
+            }
+        }
     }
     private func tick() {
-        guard backendActive else { return }
+        guard backendActive, configuration.enabled, !releasePending else { return }
         let now = ProcessInfo.processInfo.systemUptime
         if inFlight {
-            if now - sentAt > 1 { connection?.invalidate(); connection = nil; inFlight = false; retryAt = now + 2; status.state = "Helper 回應逾時；已停止擷取" }
+            if now - sentAt > 1 { disconnect(); retryAt = now + 2; status.state = "Helper 回應逾時；已停止擷取" }
             return
         }
         guard now >= retryAt else { return }
         if connection == nil {
-            let next = NSXPCConnection(machServiceName: HIDService.name, options: .privileged)
+            let next = connectionFactory()
             next.remoteObjectInterface = NSXPCInterface(with: HIDHelperProtocol.self)
             next.exportedInterface = NSXPCInterface(with: HIDControllerProtocol.self)
-            next.exportedObject = self
+            next.exportedObject = HIDControllerReceiver(self)
             next.resume(); connection = next
         }
         guard let connection, let data = try? JSONEncoder().encode(configuration) else { return }
@@ -118,6 +173,7 @@ public enum InputBackend: String, Codable, CaseIterable, Sendable {
             Task { @MainActor in
                 guard let self, self.connection === connection else { return }
                 self.inFlight = false
+                guard self.backendActive, sentGeneration == self.generation else { self.tick(); return }
                 guard data.count <= 4096, let status = try? JSONDecoder().decode(HIDStatus.self, from: data),
                       status.version == HIDService.protocolVersion else { self.disconnect(); return }
                 self.status = status
@@ -125,18 +181,23 @@ public enum InputBackend: String, Codable, CaseIterable, Sendable {
                     enabled: self.configuration.enabled && !status.manualPassThrough && !status.emergencyPaused,
                     finderEnabled: self.configuration.finderEnabled,
                     finderPermanentDeleteEnabled: self.configuration.finderPermanentDeleteEnabled,
-                    altF4QuitLastWindow: self.configuration.altF4QuitLastWindow, epoch: self.generation)
+                    epoch: self.generation)
                 if sentGeneration != self.generation { self.tick() }
             }
         }
     }
     public nonisolated func performAction(_ id: String, processID: Int32, generation: UInt64) {
-        guard id.utf8.count <= 32, let action = HIDActionCodec.decode(id) else { return }
-        Task { @MainActor [weak self] in
-            guard let self, backendActive, configuration.enabled, configuration.layoutSupported,
+        guard id.utf8.count <= 32, let action = HIDActionCodec.decode(id),
+              incomingActions.offer(.init(action: action, processID: processID, generation: generation)) else { return }
+        Task { @MainActor [weak self] in self?.drainActions() }
+    }
+    private func drainActions() {
+        while let entry = incomingActions.pop() {
+            guard backendActive, configuration.enabled, !releasePending, configuration.layoutSupported,
                   !status.manualPassThrough, !status.emergencyPaused,
-                  self.generation == generation, configuration.processID == processID else { return }
-            _ = actions.submit(action, context: configuration.context)
+                  generation == entry.generation, configuration.processID == entry.processID else { continue }
+            if case .screenshot(let kind) = entry.action { onScreenshot?(kind) }
+            else { _ = actions.submit(entry.action, context: configuration.context) }
         }
     }
 }

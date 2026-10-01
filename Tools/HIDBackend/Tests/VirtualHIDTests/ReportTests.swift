@@ -3,6 +3,18 @@ import Darwin
 import VirtualHID
 
 struct ReportTests {
+    @Test func rolloverReleasesOldKeysThenModifiersBeforeNewChord() {
+        var old = WMBHIDState(); old.modifiers = 8; old.key_count = 1; old.keys.0 = 6
+        var next = WMBHIDState(); next.modifiers = 4; next.key_count = 1; next.keys.0 = 0x4f
+        var reports = [WMBHIDState](repeating: .init(), count: 3)
+        #expect(wmb_plan_state_transition(&old, &next, &reports, reports.count) == 3)
+        #expect(reports[0].key_count == 0 && reports[0].modifiers == 8)
+        #expect(reports[1].key_count == 0 && reports[1].modifiers == 0)
+        #expect(reports[2].key_count == 1 && reports[2].modifiers == 4 && reports[2].keys.0 == 0x4f)
+        #expect(wmb_plan_state_transition(&old, &next, &reports, 2) == 0)
+        next.modifiers = 8
+        #expect(wmb_plan_state_transition(&old, &next, &reports, reports.count) == 1)
+    }
     @Test func vendorAndDesktopEventsArePreservedAndBounded() {
         var state = WMBHIDState()
         state.fn = true; state.top_case_count = 1; state.top_case_keys.0 = 8

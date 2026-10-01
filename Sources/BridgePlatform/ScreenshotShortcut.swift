@@ -6,13 +6,16 @@ import BridgeCore
 /// corresponding key-up is consumed even if the modifiers were released first.
 public struct ScreenshotShortcut: Sendable {
     public static let keyCode: UInt16 = 1
-    private var pressed = false
+    private var pressed: UInt8 = 0
+    public var captureKind: ScreenshotKind = .region
+    public var printScreenBehavior: PrintScreenBehavior = .snipping
     public var windowsKeyModifier: WindowsKeyModifier
     public init(windowsKeyModifier: WindowsKeyModifier = .option) {
         self.windowsKeyModifier = windowsKeyModifier
     }
 
-    public mutating func reset() { pressed = false }
+    public mutating func reset() { pressed = 0 }
+    public static func supports(_ key: UInt16) -> Bool { key == keyCode || key == 105 }
 
     /// The same native event adapter used by the screenshot tap and regression tests.
     public mutating func handle(type: CGEventType, event: CGEvent, allowsCapture: Bool = true) -> ScreenshotDecision {
@@ -31,18 +34,23 @@ public struct ScreenshotShortcut: Sendable {
 
     public mutating func handle(keyCode: UInt16, isDown: Bool, isRepeat: Bool,
                                 command: Bool, shift: Bool, option: Bool, control: Bool) -> ScreenshotDecision {
-        guard keyCode == Self.keyCode else { return .passThrough }
+        guard Self.supports(keyCode) else { return .passThrough }
+        let bit: UInt8 = keyCode == Self.keyCode ? 1 : 2
         if !isDown {
-            guard pressed else { return .passThrough }
-            pressed = false
+            guard pressed & bit != 0 else { return .passThrough }
+            pressed &= ~bit
             return .suppress
         }
-        if pressed && isRepeat { return .suppress }
+        if pressed & bit != 0 && isRepeat { return .suppress }
         // A non-repeat down after a lost key-up starts a fresh chord.
-        if pressed { pressed = false }
-        let windowsKeyDown = windowsKeyModifier == .option ? option && !command : command && !option
-        guard !isRepeat, windowsKeyDown, shift, !control else { return .passThrough }
-        pressed = true
+        pressed &= ~bit
+        var flags: Modifiers = []
+        if command { flags.insert(.command) }; if option { flags.insert(.option) }
+        if shift { flags.insert(.shift) }; if control { flags.insert(.control) }
+        guard !isRepeat, let kind = WindowsScreenshotShortcuts.match(key: keyCode, modifiers: flags,
+            windowsKey: windowsKeyModifier, printScreen: printScreenBehavior) else { return .passThrough }
+        captureKind = kind
+        pressed |= bit
         return .capture
     }
 }

@@ -40,6 +40,7 @@ public struct InputSourceStatus: Equatable, Sendable {
     public var liveSelectionAllowed: () -> Bool = { false }
     private let controller: GuardController
     private var hotkey: HotkeyManager?
+    private var hostPolicy: RuntimePolicyInput?
     private var started = false
     private var hotkeyRegistered = false
     private var hotkeyIssue: String?
@@ -75,6 +76,14 @@ public struct InputSourceStatus: Equatable, Sendable {
         hotkey?.stop(); hotkey = nil; hotkeyRegistered = false
         controller.stop()
         FileLogger.shared.flush()
+    }
+
+    public func updateRuntimePolicy(_ policy: RuntimePolicySnapshot, protection reason: InputSourceSuspension?) {
+        if hostPolicy != policy.sourceWorkPolicy {
+            hostPolicy = policy.sourceWorkPolicy
+            controller.invalidateHostWork(); hotkey?.discardPending()
+        }
+        updateProtection(reason)
     }
 
     public func updateProtection(_ reason: InputSourceSuspension?) {
@@ -160,7 +169,9 @@ public struct InputSourceStatus: Equatable, Sendable {
         return result
     }
     public var diagnostics: String { controller.diagnostics + "\nHost policy: \(suspension?.rawValue ?? "Local")\nHotkey registered: \(hotkeyRegistered)" }
-    public var recentLog: String { FileLogger.shared.recentText() }
+    public func readRecentLog(_ completion: @escaping @MainActor (String) -> Void) {
+        FileLogger.shared.readRecent { text in Task { @MainActor in completion(text) } }
+    }
     /// Resource measurements run only when settings are opened or refreshed.
     public var memoryUsageDescription: String { DiagnosticMetrics.currentMemorySnapshot()?.description ?? "無法讀取" }
 

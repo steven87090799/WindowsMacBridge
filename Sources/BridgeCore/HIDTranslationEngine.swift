@@ -7,7 +7,7 @@ public enum HIDKeyMap {
         let values: [(Int, UInt16)] = [(30,18),(31,19),(32,20),(33,21),(34,23),(35,22),(36,26),(37,28),(38,25),(39,29),
             (40,36),(41,53),(42,51),(43,48),(44,49),(45,27),(46,24),(47,33),(48,30),(49,42),(50,10),
             (51,41),(52,39),(53,50),(54,43),(55,47),(56,44),(57,57),(58,122),(59,120),(60,99),(61,118),
-            (62,96),(63,97),(64,98),(65,100),(66,101),(67,109),(68,103),(69,111),(73,114),(74,115),(75,116),
+            (62,96),(63,97),(64,98),(65,100),(66,101),(67,109),(68,103),(69,111),(70,105),(73,114),(74,115),(75,116),
             (76,117),(77,119),(78,121),(79,124),(80,123),(81,125),(82,126),(83,71),(84,75),(85,67),
             (86,78),(87,69),(88,76),(89,83),(90,84),(91,85),(92,86),(93,87),(94,88),(95,89),(96,91),
             (97,92),(98,82),(99,65),(100,10),(103,81),(104,105),(105,107),(106,113),(107,106),(108,64),
@@ -45,6 +45,8 @@ public struct HIDTranslationEngine: Sendable {
         var usage: UInt16 = 0, outputPage: UInt32 = 0, outputUsage: UInt16 = 0
         var modifiers: Modifiers = [], trigger: Modifiers = []
         var suppressed = false
+        var ownsModifiers = false
+        var ownerSlots: UInt16 = 0
     }
     private var devices = [UInt64?](repeating: nil, count: 16)
     private var builtIn = [Bool](repeating: false, count: 16)
@@ -54,6 +56,9 @@ public struct HIDTranslationEngine: Sendable {
     private var context = ApplicationContext()
     private var layoutSupported = false, finderEnabled = false
     private var finderPermanentDeleteEnabled = false, textNavigationEnabled = true, altF4Enabled = false
+    private var finderBrightnessEnterEnabled = false
+    private var screenshotEnabled = false
+    private var printScreenBehavior: PrintScreenBehavior = .snipping
     private var windowsKeyModifier: WindowsKeyModifier = .option
     private var macBookFnControlSwap = false
     private var winRunEnabled = false, winSettingsEnabled = false, winTaskViewEnabled = false
@@ -72,7 +77,10 @@ public struct HIDTranslationEngine: Sendable {
     public mutating func disconnect(_ id: UInt64) {
         guard let i = devices.firstIndex(of: id) else { return }
         devices[i] = nil; builtIn[i] = false; physical[i] = 0; consumed[i] = 0
-        for j in presses.indices where presses[j]?.device == id { presses[j] = nil }
+        for j in presses.indices {
+            if presses[j]?.device == id { presses[j] = nil }
+            else { presses[j]?.ownerSlots &= ~(UInt16(1) << i) }
+        }
         suppressShortcutsMissingModifiers()
         reconcile()
     }
@@ -80,23 +88,31 @@ public struct HIDTranslationEngine: Sendable {
                                    finderPermanentDeleteEnabled: Bool = false, textNavigationEnabled: Bool = true,
                                    altF4Enabled: Bool = false, windowsKeyModifier: WindowsKeyModifier = .option,
                                    macBookFnControlSwap: Bool = false, winRunEnabled: Bool = false,
-                                   winSettingsEnabled: Bool = false, winTaskViewEnabled: Bool = false) {
+                                   winSettingsEnabled: Bool = false, winTaskViewEnabled: Bool = false,
+                                   finderBrightnessEnterEnabled: Bool = false, screenshotEnabled: Bool = false,
+                                   printScreenBehavior: PrintScreenBehavior = .snipping) {
         if self.context != context || self.layoutSupported != layoutSupported || self.finderEnabled != finderEnabled ||
             self.finderPermanentDeleteEnabled != finderPermanentDeleteEnabled ||
             self.textNavigationEnabled != textNavigationEnabled || self.altF4Enabled != altF4Enabled ||
             self.windowsKeyModifier != windowsKeyModifier || self.macBookFnControlSwap != macBookFnControlSwap ||
             self.winRunEnabled != winRunEnabled || self.winSettingsEnabled != winSettingsEnabled ||
-            self.winTaskViewEnabled != winTaskViewEnabled { invalidate() }
+            self.winTaskViewEnabled != winTaskViewEnabled ||
+            self.finderBrightnessEnterEnabled != finderBrightnessEnterEnabled || self.screenshotEnabled != screenshotEnabled ||
+            self.printScreenBehavior != printScreenBehavior { invalidate() }
         self.context = context; self.layoutSupported = layoutSupported; self.finderEnabled = finderEnabled
         self.finderPermanentDeleteEnabled = finderPermanentDeleteEnabled
         self.textNavigationEnabled = textNavigationEnabled; self.altF4Enabled = altF4Enabled
         self.windowsKeyModifier = windowsKeyModifier; self.macBookFnControlSwap = macBookFnControlSwap
         self.winRunEnabled = winRunEnabled; self.winSettingsEnabled = winSettingsEnabled
         self.winTaskViewEnabled = winTaskViewEnabled
+        self.finderBrightnessEnterEnabled = finderBrightnessEnterEnabled
+        self.screenshotEnabled = screenshotEnabled; self.printScreenBehavior = printScreenBehavior
     }
     public mutating func restart() { manualPassThrough = false; emergencyPaused = false; faulted = false; invalidate() }
     public mutating func invalidate() {
-        for i in presses.indices where presses[i] != nil { presses[i]?.suppressed = true }
+        for i in presses.indices where presses[i] != nil {
+            presses[i]?.suppressed = true; presses[i]?.ownsModifiers = false
+        }
         for i in physical.indices { consumed[i] = physical[i] }
         waitingForNeutral = true; reconcile()
     }
@@ -114,11 +130,10 @@ public struct HIDTranslationEngine: Sendable {
     }
     private var aggregate: UInt16 { physical.reduce(0, |) }
     private mutating func suppressShortcutsMissingModifiers() {
-        let held = matchingFlags
         for i in presses.indices {
             if let press = presses[i], !press.trigger.isEmpty,
-               !held.isSuperset(of: press.trigger) {
-                presses[i]?.suppressed = true
+               !heldFlags(owners: press.ownerSlots).isSuperset(of: press.trigger) {
+                presses[i]?.suppressed = true; presses[i]?.ownsModifiers = false
             }
         }
     }
@@ -145,9 +160,12 @@ public struct HIDTranslationEngine: Sendable {
     /// Rules see the physical Win/Alt key, but the built-in Fn/Ctrl exchange
     /// takes effect before Ctrl shortcut matching.
     private var matchingFlags: Modifiers {
-        if !macBookFnControlSwap || !builtIn.contains(true) { return Self.flags(aggregate) }
+        heldFlags(owners: .max)
+    }
+    private func heldFlags(owners: UInt16) -> Modifiers {
+        if owners == .max && (!macBookFnControlSwap || !builtIn.contains(true)) { return Self.flags(aggregate) }
         var result: Modifiers = []
-        for slot in physical.indices {
+        for slot in physical.indices where owners & (1 << slot) != 0 {
             for modifier in HIDModifier.allCases where physical[slot] & modifier.bit != 0 {
                 result.formUnion(Self.flags(inputModifier(modifier, slot: slot).bit))
             }
@@ -252,10 +270,20 @@ public struct HIDTranslationEngine: Sendable {
         }
         var rule: ShortcutRule?
         if local && !waitingForNeutral, page == 7, Int(usage) < HIDKeyMap.carbon.count, let key = HIDKeyMap.carbon[Int(usage)] {
+            if screenshotEnabled, (key != 105 || usage == 0x46),
+               let kind = WindowsScreenshotShortcuts.match(key: key, modifiers: flags,
+                windowsKey: windowsKeyModifier, printScreen: printScreenBehavior) {
+                press.trigger = flags; press.ownsModifiers = true; press.suppressed = true
+                for i in physical.indices where physical[i] != 0 { press.ownerSlots |= 1 << i }
+                retireIncompatiblePresses(with: press)
+                presses[free] = press; translated &+= 1
+                return .screenshot(kind)
+            }
             rule = match(key: key, flags: flags)
         }
-        // Rule #77: consumer brightness increment -> Enter, only while local mapping is enabled.
-        if local && !waitingForNeutral && page == 0x0c && usage == 0x6f {
+        // Personal rule #77 is opt-in and retains its original Finder scope.
+        if local && finderEnabled && finderBrightnessEnterEnabled && context.bundleID == "com.apple.finder" &&
+            !waitingForNeutral && page == 0x0c && usage == 0x6f {
             lastRuleID = "karabiner.77.brightness-enter"
             press.outputPage = 7; press.outputUsage = 0x28; translated &+= 1
         }
@@ -263,18 +291,45 @@ public struct HIDTranslationEngine: Sendable {
             lastRuleID = rule.id
             press.trigger = rule.input.modifiers
             press.modifiers = rule.output.modifiers
+            press.ownsModifiers = true
             for i in physical.indices {
                 for m in HIDModifier.allCases where physical[i] & m.bit != 0 &&
                     !Self.flags(inputModifier(m, slot: i).bit).intersection(rule.input.modifiers).isEmpty {
-                    consumed[i] |= m.bit
+                    press.ownerSlots |= 1 << i
                 }
             }
             translated &+= 1
-            if let action = rule.action { press.suppressed = true; presses[free] = press; return action }
+            if let action = rule.action {
+                retireIncompatiblePresses(with: press)
+                press.suppressed = true; presses[free] = press; return action
+            }
             guard let output = HIDKeyMap.usage[Int(rule.output.keyCode)] else { faulted = true; invalidate(); return nil }
             press.outputPage = 7; press.outputUsage = output
         }
+        if !press.suppressed { retireIncompatiblePresses(with: press) }
         presses[free] = press; return nil
+    }
+    /// A single virtual keyboard cannot hold C under Command and Right under Option.
+    /// Retire the previous incompatible chord; it stays retired until physical key-up.
+    private mutating func retireIncompatiblePresses(with next: Press) {
+        let wanted = effectiveFlags(next)
+        for i in presses.indices {
+            guard let old = presses[i], !old.suppressed || old.ownsModifiers else { continue }
+            if effectiveFlags(old) != wanted {
+                presses[i]?.suppressed = true; presses[i]?.ownsModifiers = false
+            }
+        }
+    }
+    private func effectiveFlags(_ press: Press) -> Modifiers {
+        var result = press.modifiers
+        for slot in physical.indices {
+            for m in HIDModifier.allCases where physical[slot] & m.bit != 0 {
+                let input = Self.flags(inputModifier(m, slot: slot).bit)
+                if press.ownsModifiers && press.ownerSlots & (1 << slot) != 0 && !input.intersection(press.trigger).isEmpty { continue }
+                result.formUnion(Self.flags((local ? outputModifier(m, slot: slot) : inputModifier(m, slot: slot)).bit))
+            }
+        }
+        return result
     }
     private static func usb(_ flags: Modifiers) -> UInt8 {
         (flags.contains(.control) ? 1 : 0) | (flags.contains(.shift) ? 2 : 0) |
@@ -285,18 +340,29 @@ public struct HIDTranslationEngine: Sendable {
         output.modifiers = 0; output.fn = false
         output.keyCount = 0; output.consumerCount = 0; output.topCaseCount = 0; output.vendorCount = 0; output.desktopCount = 0
         guard !waitingForNeutral && !emergencyPaused && !faulted else { return !faulted }
+        // Consumption is derived from surviving shortcut owners, never latched until Ctrl-up.
+        for i in consumed.indices { consumed[i] = 0 }
+        for press in presses {
+            guard let press, press.ownsModifiers,
+                  heldFlags(owners: press.ownerSlots).isSuperset(of: press.trigger) else { continue }
+            for slot in physical.indices where press.ownerSlots & (1 << slot) != 0 {
+                for m in HIDModifier.allCases where physical[slot] & m.bit != 0 &&
+                    !Self.flags(inputModifier(m, slot: slot).bit).intersection(press.trigger).isEmpty {
+                    consumed[slot] |= m.bit
+                }
+            }
+        }
         for i in physical.indices {
             for m in HIDModifier.allCases where physical[i] & ~consumed[i] & m.bit != 0 {
-                let mapped = local ? outputModifier(m, slot: i) : m
+                let mapped = local ? outputModifier(m, slot: i) : inputModifier(m, slot: i)
                 if mapped == .fn { output.fn = true; continue }
                 let usb: [UInt8] = [1,16,8,128,4,64,2,32,0]
                 output.modifiers |= usb[mapped.rawValue]
             }
         }
-        let live = matchingFlags
         for press in presses {
             guard let press, !press.suppressed else { continue }
-            guard live.isSuperset(of: press.trigger) else { continue }
+            guard heldFlags(owners: press.ownerSlots).isSuperset(of: press.trigger) else { continue }
             output.modifiers |= Self.usb(press.modifiers)
             if press.modifiers.contains(.fn) { output.fn = true }
             let ok: Bool

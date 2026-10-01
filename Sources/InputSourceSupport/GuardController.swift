@@ -4,6 +4,7 @@ import Carbon
 import CoreFoundation
 import Foundation
 import InputSourceCore
+import BridgeCore
 
 final class GuardController {
     private enum EnvironmentSuspensionReason: Hashable {
@@ -54,6 +55,8 @@ final class GuardController {
     private var didReportRetryExhaustion = false
     private var startupRetryCount = 0
     private var isStarted = false
+    private var workEpoch: UInt64 = 0
+    private let notifications = DeferredSignalMailbox()
 
     private var automaticCorrectionTimestamps: [Date] = []
     private var correctionCooldownUntil: Date?
@@ -79,7 +82,8 @@ final class GuardController {
     var detectionPauseUntil: Date? { detectionPause.until }
     var detectionPauseIndefinite: Bool { detectionPause.indefinite }
     private var automaticReconciliationAllowed: Bool {
-        isEnabled && !isEnvironmentSuspended && !isDetectionPaused && machine.preservedSelection == nil
+        isStarted && isEnabled && !isEnvironmentSuspended && !isDetectionPaused &&
+            machine.preservedSelection == nil && selectionAllowed()
     }
 
     private var isEnvironmentSuspended: Bool {
@@ -187,6 +191,11 @@ final class GuardController {
         correctionCooldownUntil = nil
 
         FileLogger.shared.log("Guard stopped")
+    }
+
+    func invalidateHostWork() {
+        cancelScheduledWork(); stopSecureRecoveryTimer(); cancelCorrectionCooldownWork()
+        pendingInternalSourceID = nil; pendingExplicitSelection = nil; pendingSelectionWasAutomatic = false
     }
 
     func request(_ source: DesiredInputSource) {
@@ -518,17 +527,14 @@ final class GuardController {
         guard let observer else { return }
         let controller = Unmanaged<GuardController>.fromOpaque(observer).takeUnretainedValue()
 
-        DispatchQueue.main.async {
-            guard let name else {
-                controller.handleSelectedSourceChange()
-                return
-            }
-
-            if (name.rawValue as String) == (kTISNotifyEnabledKeyboardInputSourcesChanged as String) {
-                controller.handleEnabledSourcesChange()
-            } else {
-                controller.handleSelectedSourceChange()
-            }
+        let enabledChanged = name.map { ($0.rawValue as String) == (kTISNotifyEnabledKeyboardInputSourcesChanged as String) } ?? false
+        guard controller.notifications.offer(enabledChanged ? 2 : 1) else { return }
+        DispatchQueue.main.async { [weak controller] in
+            guard let controller else { return }
+            let signals = controller.notifications.take()
+            guard controller.isStarted, !controller.isEnvironmentSuspended else { return }
+            if signals & 2 != 0 { controller.handleEnabledSourcesChange() }
+            if signals & 1 != 0 { controller.handleSelectedSourceChange() }
         }
     }
 
@@ -634,8 +640,10 @@ final class GuardController {
     private func scheduleStartupReconciliation(after milliseconds: Int) {
         guard automaticReconciliationAllowed else { return }
         startupWork?.cancel()
+        let epoch = workEpoch
         let work = DispatchWorkItem { [weak self] in
-            self?.performStartupReconciliation()
+            guard let self, self.workEpoch == epoch else { return }
+            self.performStartupReconciliation()
         }
         startupWork = work
         DispatchQueue.main.asyncAfter(
@@ -682,8 +690,10 @@ final class GuardController {
     private func scheduleReconciliation(after milliseconds: Int) {
         guard automaticReconciliationAllowed else { return }
         cancelReconciliationWork()
+        let epoch = workEpoch
         let work = DispatchWorkItem { [weak self] in
-            self?.attemptReconciliation()
+            guard let self, self.workEpoch == epoch else { return }
+            self.attemptReconciliation()
         }
         reconciliationWork = work
         DispatchQueue.main.asyncAfter(
@@ -827,9 +837,11 @@ final class GuardController {
 
     private func scheduleVerification(for identifier: String) {
         cancelVerificationWork()
-
+        let epoch = workEpoch
         let work = DispatchWorkItem { [weak self] in
-            guard let self, self.pendingInternalSourceID == identifier else { return }
+            guard let self, self.isStarted, self.workEpoch == epoch, !self.isEnvironmentSuspended,
+                  self.selectionAllowed(), !self.isSecureInputEnabled,
+                  self.pendingInternalSourceID == identifier else { return }
 
             let currentIdentifier = self.inputSources.currentSource().identifier
             if currentIdentifier == identifier {
@@ -913,13 +925,14 @@ final class GuardController {
             Configuration.secureInputPollDelaysSeconds.count - 1
         )
         let delay = Configuration.secureInputPollDelaysSeconds[index]
+        let epoch = workEpoch
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(
             deadline: .now() + .seconds(delay),
             leeway: .milliseconds(500)
         )
         timer.setEventHandler { [weak self] in
-            guard let self else { return }
+            guard let self, self.workEpoch == epoch, self.isStarted else { return }
 
             self.secureRecoveryTimer?.cancel()
             self.secureRecoveryTimer = nil
@@ -1011,8 +1024,9 @@ final class GuardController {
         guard correctionCooldownWork == nil else { return }
 
         let delay = max(0, until.timeIntervalSinceNow)
+        let epoch = workEpoch
         let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
+            guard let self, self.workEpoch == epoch, self.isStarted else { return }
 
             self.correctionCooldownWork = nil
             guard !self.isEnvironmentSuspended else { return }
@@ -1097,6 +1111,8 @@ final class GuardController {
     }
 
     private func cancelScheduledWork() {
+        notifications.invalidate()
+        workEpoch &+= 1
         startupWork?.cancel()
         startupWork = nil
         cancelReconciliationWork()
