@@ -26,7 +26,8 @@ with (root/'commands.log').open('a') as f: f.write(json.dumps([name]+args)+'\n')
 fail = os.environ.get('WMB_FAIL', '')
 def copy(src, dst):
     src, dst = pathlib.Path(src), pathlib.Path(dst)
-    if dst.resolve() != root and root not in dst.resolve().parents:
+    fixture_root = root.resolve()  # macOS /var and /private/var refer to the same temporary directory.
+    if dst.resolve() != fixture_root and fixture_root not in dst.resolve().parents:
         sys.exit(78)  # Regression failures must never write outside the fixture.
     if src.is_dir(): shutil.copytree(src, dst, dirs_exist_ok=True)
     else:
