@@ -2,7 +2,7 @@
 
 使用完整 DMG，將 WindowsMacBridge 拖進「應用程式」，再从那裡開啟。需要時完成 macOS 管理員驗證；App 自動準備內含鍵盤处理與已簽署的官方 Driver，沒有獨立 HID Helper App。
 
-在權限分頁依序核准七項；輸入監控只授權 WindowsMacBridge。第 6 項「WindowsMacBridge 鍵盤驅動」連到系統核准頁，目前官方 Driver 的系統名稱是 Karabiner‑VirtualHIDDevice。Driver 的核准／重開機由 macOS 決定；安裝成功不代表已核准。
+在權限分頁依序核准七項；輸入監控只授權 WindowsMacBridge。第 6 項「WindowsMacBridge 鍵盤驅動」連到系統核准頁，目前官方 Driver 的系統名稱是 .Karabiner‑VirtualHIDDevice‑Manager。Driver 的核准／重開機由 macOS 決定；安裝成功不代表已核准。
 
 共享 Driver 不降版、不移除其他軟體使用的服務。未知 ABI 或簽章不符時停止安裝；失敗保留記錄並嘗試還原，更新中斷保留私人 journal 供下一次安裝復原。
 

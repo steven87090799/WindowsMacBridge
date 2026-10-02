@@ -2,6 +2,7 @@ import Foundation
 import Security
 import IOKit.hid
 import HIDProtocol
+import HIDLifecycle
 
 /// Installed root-owned pin + console UID authenticate the single controller.
 /// No commands, paths, arbitrary output reports or clipboard data are accepted over IPC.
@@ -38,7 +39,8 @@ final class InputService: NSObject, NSXPCListenerDelegate {
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
         source.setEventHandler { [weak self] in self?.captureStorage?.stop(); exit(0) }
         source.resume(); termination = source
-        listener.resume(); RunLoop.main.run()
+        guard let lifetime = PassiveRunLoopLifetime() else { exit(70) }
+        withExtendedLifetime(lifetime) { listener.resume(); RunLoop.main.run() }
     }
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection candidate: NSXPCConnection) -> Bool {
         guard authenticated(candidate) else { return false }

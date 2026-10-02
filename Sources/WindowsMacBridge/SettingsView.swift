@@ -111,8 +111,8 @@ struct SettingsView: View {
                     }
                     permissionRow("6. WindowsMacBridge 鍵盤驅動",
                                   verification: controller.driverVerification, required: usesHID,
-                                  location: "一般 → 登入項目與延伸功能 → 驅動程式延伸功能 → Karabiner‑VirtualHIDDevice",
-                                  detail: "按本列即可申請並開啟驅動設定。系統中的名稱為 Karabiner‑VirtualHIDDevice；開啟該開關，若要求重開機請依提示完成。",
+                                  location: "一般 → 登入項目與延伸功能 → 驅動程式延伸功能 → .Karabiner‑VirtualHIDDevice‑Manager",
+                                  detail: "按本列即可申請並開啟驅動設定。系統中的名稱為 .Karabiner‑VirtualHIDDevice‑Manager；開啟該開關，若要求重開機請依提示完成。",
                                   enabledLabel: "已核准／啟用", disabledLabel: "未核准／未啟用",
                                   actionLabel: "開啟設定") {
                         controller.requestDriverActivation()
