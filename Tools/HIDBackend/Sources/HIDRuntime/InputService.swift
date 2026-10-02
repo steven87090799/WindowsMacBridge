@@ -56,9 +56,9 @@ final class InputService: NSObject, NSXPCListenerDelegate {
                 if self.connection === candidate {
                     self.captureStorage?.stop(); self.connection = nil
                 }
-                // A read-only peer remains owned until its reply is delivered.
-                // After the final peer closes, a fresh process checks future TCC grants.
-                if self.acceptedConnections.isEmpty { exit(0) }
+                // Keep the passive service available between permission checks.
+                // Exiting after each probe triggers launchd's restart throttle;
+                // an idle service has no capture timer or periodic wakeups.
             }
         }
         candidate.interruptionHandler = candidate.invalidationHandler
