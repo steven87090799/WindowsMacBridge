@@ -293,7 +293,10 @@ private final class DelayedImagePreparation: @unchecked Sendable {
     var started: Bool { lock.lock(); defer { lock.unlock() }; return didStart }
     func prepare(_ url: URL) -> Result<ScreenshotImagePayload, ScreenshotFailure> {
         lock.lock(); didStart = true; lock.unlock()
-        guard finish.wait(timeout: .now() + 5) == .success else { return .failure(.timedOut) }
+        // Parallel model tests can occupy CI's executor for longer than five
+        // seconds. Keep the decoder held until the test releases it; retain a
+        // bounded fallback for a broken test, not a capture timeout simulation.
+        guard finish.wait(timeout: .now() + 60) == .success else { return .failure(.timedOut) }
         return .success(.init(png: Data([137, 80, 78, 71])))
     }
 }
