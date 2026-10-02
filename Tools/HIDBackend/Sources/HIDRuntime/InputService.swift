@@ -50,7 +50,12 @@ final class InputService: NSObject, NSXPCListenerDelegate {
         candidate.remoteObjectInterface = NSXPCInterface(with: HIDControllerProtocol.self)
         candidate.invalidationHandler = { [weak self, weak candidate] in
             DispatchQueue.main.async {
-                if self?.connection === candidate { self?.captureStorage?.stop(); self?.connection = nil; exit(0) }
+                if self?.connection === candidate {
+                    self?.captureStorage?.stop(); self?.connection = nil; exit(0)
+                }
+                // A permission-only probe has no capture lease. Exit after its
+                // reply/connection ends so the next check uses a fresh TCC client.
+                if self?.connection == nil && self?.captureStorage == nil { exit(0) }
             }
         }
         candidate.interruptionHandler = candidate.invalidationHandler
