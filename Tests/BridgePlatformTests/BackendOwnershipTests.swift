@@ -41,8 +41,15 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         let listener = NSXPCListener.anonymous(); listener.delegate = helper; listener.resume()
         defer { listener.invalidate() }
         let client = HIDBackendClient(connectionFactory: { NSXPCConnection(listenerEndpoint: listener.endpoint) })
-        let grant: Bool? = await withCheckedContinuation { continuation in
-            client.checkInputAccess { continuation.resume(returning: $0) }
+        var grant: Bool?
+        // The production deadline deliberately returns unknown under stalled
+        // scheduling. A bounded recheck still has to obtain an explicit reply;
+        // repeated transport failures cannot satisfy the assertion below.
+        for _ in 0..<3 {
+            grant = await withCheckedContinuation { continuation in
+                client.checkInputAccess { continuation.resume(returning: $0) }
+            }
+            if grant != nil { break }
         }
         #expect(grant == false)
         #expect(helper.configurations == 0 && !client.hasOwnership && !client.releasePending)

@@ -27,3 +27,5 @@ PR CI 的較舊 Swift／CoreGraphics SDK 發現本機新版工具鏈未報告的
 CI 當機堆疊另確認 helper permission probe 的 XPC error handler 被舊 SDK 的非 Sendable closure 推斷為 MainActor；XPC 背景回呼在執行 Task hop 前已觸發 actor 檢查中斷。XPC 回呼現在明確標為 Sendable，再回主 actor 處理；連線以 UUID 辨識，舊回呼不能作用於新連線，停止回覆仍須符合自己的 stop UUID。新增不存在的 helper service 回歸，BackendOwnershipTests 五項針對性檢查通過，涵蓋失聯、獨立權限查詢、停止回覆及釋放 controller。CI 保留失敗時的當機診斷輸出。
 
 XPC 修正後 CI 可完成完整 Debug 執行；三個截圖失敗顯示 decoder fixture 已在 5 秒自行逾時，而平行模型測試使主 actor 約 13 秒後才繼續。僅將這個測試閘門 fallback 改為 60 秒，仍由測試主動釋放，保留單一工作、Pause／session 失效、剪貼簿不被覆寫及普通 App 切換可複製的原斷言。production capture／decode 逾時沒有改動。
+
+其後三個截圖斷言在完整 Debug CI 通過；獨立 permission probe fixture 偶發因排程超過正式三秒 deadline 而回 unknown。該測試最多重查三次，仍要求取得明確 false 且沒有 capture configuration／ownership；一直失聯仍失敗，正式 deadline 不變。不存在 service 的回歸仍直接要求 nil，不把逾時誤認為已核准。
