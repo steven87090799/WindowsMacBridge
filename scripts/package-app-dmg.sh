@@ -1,12 +1,15 @@
 #!/bin/bash
-# User-space installation: drag the App into Applications. No installer or driver.
+# Drag the selected App into Applications. A single-App bundle may include its
+# background payload; users never install its components separately.
 set -euo pipefail
 task_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$task_root"
 source "$task_root/scripts/build-environment.sh"
-[[ -f build/APP_PATH.txt ]] || { echo 'Build the App first.' >&2; exit 1; }
-bridge_app="$(cat build/APP_PATH.txt)"
+bridge_path_file="${BRIDGE_APP_PATH_FILE:-build/SINGLE_APP_PATH.txt}"
+[[ -f "$bridge_path_file" ]] || { echo 'Build the App first.' >&2; exit 1; }
+bridge_app="$(cat "$bridge_path_file")"
 codesign --verify --strict "$bridge_app"
+[[ -f "$bridge_app/Contents/Resources/BackendPayload/InstallBackend.sh" ]] || { echo 'DMG requires the complete single App.' >&2; exit 1; }
 bridge_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$bridge_app/Contents/Info.plist")"
 bridge_release="${BRIDGE_RELEASE_VERSION:-$bridge_version-preview.1}"
 [[ "$bridge_release" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]] || { echo 'Invalid release version.' >&2; exit 1; }

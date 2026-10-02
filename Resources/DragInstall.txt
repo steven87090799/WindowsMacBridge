@@ -1,29 +1,18 @@
-WindowsMacBridge — 拖曳安裝
+WindowsMacBridge — 開始使用
 
-1. 將 WindowsMacBridge.app 拖到旁邊的 Applications（應用程式）。
-   更新時先從 Menu Bar 結束舊版，再替換 App；原本的設定會保留。
+1. 將 WindowsMacBridge 拖到旁邊的 Applications（應用程式）。
+   更新時先結束舊版，再選擇取代；原本設定會保留。
 2. 從「應用程式」開啟 WindowsMacBridge。
-3. 首次使用，按 App 的「開啟輔助使用設定」，核准 WindowsMacBridge。
-   0.5.15 新安裝預設使用裝置 HID。此 DMG 只有主 App；完整 Windows Experience
-   需要整合 ZIP 的 Install.command 安裝 helper／Driver，並完成 macOS 核准。
-   若暫時不安裝 Driver，可在「進階：輸入方式」明確選 EventTap 備援。
+   首次使用若系統要求管理員驗證，完成即可；不需另外安裝元件。
+3. 在「權限」分頁依序點第 1 到第 8 項。
+   每次只申請目前那一項。在系統核准後返回 App，確認綠燈再繼續。
+   若第一項顯示「需重新開啟」，直接按該列「重新開啟 App」。
+   若系統要求結束重開或重新開機，依系統提示完成。
 
-這是免費的個人測試版，沒有 Apple Developer ID／公證。
-若 macOS 阻擋開啟：嘗試開啟 App 後，到「系統設定 → 隱私權與安全性」，
-確認來源後使用系統的「仍要打開」。請勿停用 Gatekeeper、SIP 或清除 quarantine。
-更新後若 macOS 再次要求輔助使用權限，需要核准目前版本；程式不能自動批准。
+全部必要項目通過後，Ctrl+C／V 可用於文字 App；Win+Shift+S
+和 macOS 的 ⌘⇧3／⌘⇧4 截圖完成後會自動複製，可以直接貼上。
 
-Windows Experience 預設開啟；HID Ready 且接管鍵盤後，Control+C/X/V/A/Z/Y/S/F/P、文字導覽才會執行。
-EventTap 備援授權後可用本機快捷鍵，無法保證逐裝置偏好與通用控制接收端來源區分。
-「截圖自動複製」也預設開啟：Shift+Win+S（⇧⌘S）框選後存檔，並將圖片複製供 ⌘V 貼上。原本的 ⇧⌘4 維持 macOS 原樣。
-此功能會註冊登入啟動；若系統要求核准，請到「登入項目」允許本 App。
-Terminal、遠端、VM、遊戲會依 App 規則保留原按鍵；Codex 預設用於聊天文字框。
-既有設定不會被覆蓋，需要恢復這些預設時按「套用建議預設」。
+這是尚未公證的個人測試版。若 macOS 阻擋開啟，請在「隱私權與安全性」
+確認來源後使用系統提供的「仍要打開」。
 
-Fn／Globe 新安裝維持原功能，Control 使用真正的 Control。
-HID／逐裝置 Windows 與 Native Mac 偏好使用整合包；這個 DMG 不會自動安裝 Driver。
-Finder 檔案剪下移動仍是選用功能，預設關閉。
-
-遇到不符合預期的按鍵：從 Menu Bar 暫停，或按 Control+Option+Command+P。
-完整操作與驗收步驟：App 設定 →「完整操作說明」。
-移除方式：從 Menu Bar 結束 App，再將 Applications 裡的 App 移到垃圾桶。
+完整說明與實機驗收方法可從 App 的「一般設定」開啟。

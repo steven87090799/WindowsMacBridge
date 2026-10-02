@@ -8,10 +8,11 @@ import BridgeCore
         return "輔助使用"
     }
     public static func plan(for current: PermissionSnapshot) -> [PermissionKind] {
-        var missing: [PermissionKind] = []
-        if !current.posting { missing.append(.posting) }
-        if !current.accessibility { missing.append(.accessibility) }
-        return missing
+        // Both capabilities share one system switch. Native requests can prompt
+        // asynchronously, so issuing both in one click stacks system dialogs.
+        if !current.posting { return [.posting] }
+        if !current.accessibility { return [.accessibility] }
+        return []
     }
     public static func perform(read: @MainActor () -> PermissionSnapshot,
                                request: @MainActor (PermissionKind) -> Bool = requestNative) -> PermissionSnapshot {

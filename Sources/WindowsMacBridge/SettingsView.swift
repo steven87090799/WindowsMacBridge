@@ -51,7 +51,7 @@ struct SettingsView: View {
             HStack {
                 Text("權限設定").font(.title2.bold())
                 Spacer()
-                    Button("重新檢查") { controller.refreshPermissions(userInitiated: true) }
+                    Button("重新檢查") { controller.refreshPermissions(userInitiated: true, recheckScreenshotFolder: true) }
             }
             explanation("程式已準備好需要的元件。依序按各項「開啟設定」，在 macOS 核准後回到此頁；確認通過才會變成綠燈，再繼續下一項。")
             ScrollView {
@@ -60,10 +60,19 @@ struct SettingsView: View {
                                   verification: controller.permissionChecklist.verification(for: [.accessibility, .posting]),
                                   required: keyboardNeeded,
                                   location: "隱私權與安全性 → \(KeyboardPermissionRequest.settingsTitle) → WindowsMacBridge",
-                                  detail: controller.permissions.accessibility && !controller.permissions.posting ?
-                                  "視窗存取已取得，按鍵輸出尚未取得；此項尚未完整通過。" : "允許按鍵輸出及視窗操作；同一系統開關會分別確認這兩項能力。",
-                                  actionLabel: "開啟設定") {
-                        controller.requestAccessibility(); controller.openPermissionSettings(.accessibility)
+                                  detail: controller.keyboardPermissionRestartSuggested ?
+                                  "授權尚未完整套用。若已開啟系統開關，請按「重新開啟 App」；重開後會再次確認。" :
+                                  "允許按鍵輸出及視窗操作；核准後若尚未變綠，請結束並重新開啟 App。",
+                                  disabledLabel: controller.keyboardPermissionRestartSuggested ? "需重新開啟" : "未取得",
+                                  actionLabel: controller.keyboardPermissionRestartSuggested ? "重新開啟 App" : "開啟設定") {
+                        if controller.keyboardPermissionRestartSuggested { controller.restartForPermissions() }
+                        else {
+                            controller.requestAccessibility(); controller.openPermissionSettings(.accessibility)
+                        }
+                    }
+                    .disabled(controller.permissionRelaunchPending)
+                    if let notice = controller.permissionRelaunchNotice {
+                        Text(notice).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
                     }
                     permissionRow("2. 輸入監控：WindowsMacBridge",
                                   verification: controller.permissionChecklist.verification(for: [.listening]),
@@ -86,9 +95,9 @@ struct SettingsView: View {
                                   verification: controller.permissionChecklist.verification(for: [.loginItem]),
                                   required: controller.settings.screenshotAutoCopy || controller.settings.macBookFnControlSwap,
                                   location: "一般 → 登入項目與延伸功能 → WindowsMacBridge",
-                                  detail: "登入後自動啟動；截圖自動複製或 MacBook Fn／Ctrl 模式開啟時會註冊。",
+                                  detail: "登入後自動啟動，並在需要時還原內建鍵盤設定；只有按本列才提出申請。",
                                   enabledLabel: "已核准", disabledLabel: "未核准") {
-                        controller.openPermissionSettings(.loginItem)
+                        controller.requestLoginItem()
                     }
                     permissionRow("5. Finder 擴充功能",
                                   verification: controller.permissionChecklist.verification(for: [.finderExtension]), required: controller.settings.finderEnabled,
@@ -140,7 +149,7 @@ struct SettingsView: View {
                 }
             }.font(.caption).foregroundStyle(.secondary)
             if !controller.permissions.keyboardControlGranted || !controller.permissions.listening {
-                explanation("回到此頁會自動檢查。若 macOS 要求重新開啟 App，請依系統提示完成。")
+                explanation("回到此頁會自動檢查。系統不一定會提示重開；若第一項顯示「需重新開啟」，請按該列按鈕。")
             }
         }
         .onAppear { controller.refreshPermissions() }
@@ -173,7 +182,7 @@ struct SettingsView: View {
                 Text(label).font(.callout).foregroundStyle(color)
                     Button(granted ? grantedActionLabel : actionLabel, action: action)
                         .buttonStyle(.bordered)
-                        .accessibilityLabel("開啟設定：\(title)")
+                        .accessibilityLabel("\(granted ? grantedActionLabel : actionLabel)：\(title)")
             }
             .padding(.vertical, 10)
             Divider()
@@ -308,9 +317,7 @@ struct SettingsView: View {
                 explanation("啟用時立即檢查，之後每 30 天檢查與修復。需要的鍵盤控制、輸入監控、螢幕錄製、登入啟動及截圖資料夾存取統一列在「授權」頁。")
             }
             Section("登入時啟動") {
-                Toggle("登入時啟動 WindowsMacBridge", isOn: Binding(get: { controller.sourceStatus.loginRegistered }, set: { controller.inputSources.setLoginEnabled($0) }))
-                    .disabled(controller.settings.screenshotAutoCopy || controller.settings.macBookFnControlSwap)
-                explanation("截圖自動複製或 MacBook Fn／Ctrl 模式開啟時，會註冊登入啟動。兩者都關閉才移除由這些功能新增的註冊；原先手動開啟的登入項目保留。")
+                explanation("到權限頁第 4 項設定登入時啟動。")
                 LabeledContent("系統登入項目狀態", value: controller.sourceStatus.loginStatus)
                 Button("前往授權清單") { controller.settingsPage = .permissions }
                 explanation("若顯示待核准或啟動失敗，到系統設定檢查 WindowsMacBridge 是否被允許啟動。")

@@ -20,6 +20,7 @@ public struct RuntimePolicyInput: Equatable, Sendable {
     public var settingsRevision: UInt64 = 0
     public var restartToken: UInt64 = 0
     public var accessibility = true, posting = true
+    public var loginItemEnabled = true
     public var hidReleasePending = false
     public var layoutIdentity = ""
     public var layoutSupported = true, diagnosticsEnabled = false, nativeRestorePending = false
@@ -43,7 +44,7 @@ public struct RuntimePolicySnapshot: Equatable, Sendable {
     }
     public var permitsPhysicalNormalization: Bool {
         input.shortcutEnabled && !input.manualPassThrough && !input.hidReleasePending && !input.paused && !input.secureInput && input.sessionActive &&
-            input.accessibility && input.posting
+            input.accessibility && input.posting && input.loginItemEnabled
     }
     public var permitsInput: Bool {
         input.shortcutEnabled && !input.hidReleasePending && !input.paused && !input.secureInput && input.sessionActive &&
