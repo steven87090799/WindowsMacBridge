@@ -14,7 +14,7 @@ struct ReleasePolicyRegressionTests {
         let result = lifecycle.complete(token); #expect(!result)
         let next = lifecycle.begin(); #expect(next != nil)
     }
-    @Test func runtimeTransitionsInvalidatePauseBackendSecureSessionAndRemoteJobs() {
+    @Test func runtimeTransitionsInvalidatePauseBackendSecureSessionAndSettingsJobs() {
         var coordinator = RuntimePolicyCoordinator()
         var input = RuntimePolicyInput()
         input.shortcutEnabled = true; input.screenshotEnabled = true
@@ -22,13 +22,17 @@ struct ReleasePolicyRegressionTests {
         let first = coordinator.transition(input)
         #expect(first.permitsScreenshots)
         #expect(coordinator.transition(input).generation == first.generation)
+        input.manualPassThrough = true
+        let manual = coordinator.transition(input)
+        #expect(manual.permitsInput && !manual.permitsShortcuts && !manual.permitsPhysicalNormalization)
+        input.manualPassThrough = false
         for mutation in 0..<5 {
             switch mutation {
             case 0: input.paused.toggle()
             case 1: input.backend = .deviceHID
             case 2: input.secureInput = true
             case 3: input.session &+= 1
-            default: input.remoteProfile = .alreadyTranslated
+            default: input.settingsRevision &+= 1
             }
             let previous = coordinator.current!.generation
             let next = coordinator.transition(input)
@@ -36,14 +40,10 @@ struct ReleasePolicyRegressionTests {
         }
         #expect(!coordinator.current!.permitsShortcuts)
     }
-    @Test func ownershipIsExclusiveAndRemoteRoleIsExplicit() {
+    @Test func physicalBackendOwnershipIsExclusive() {
         #expect(KeyboardOwnership.owner(backend: .deviceHID, seized: true) == .hid)
         #expect(KeyboardOwnership.owner(backend: .deviceHID, seized: false) == .native)
         #expect(KeyboardOwnership.owner(backend: .eventTap, seized: false) == .eventTap)
-        #expect(RemoteInputProfile.windowsReceiver.translates)
-        #expect(!RemoteInputProfile.macReceiver.translates)
-        #expect(!RemoteInputProfile.alreadyTranslated.translates)
-        #expect(!RemoteInputProfile.sourcePassThrough.translates)
     }
     @Test func finderNavigationKeepsCutButCopyAndClipboardChangeCancelIt() {
         var cut = FinderCutState()
@@ -130,8 +130,8 @@ struct RuntimeWakeRegressionTests {
         #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: true, deadline: nil) == .periodic)
         input.paused = false; input.sessionActive = false
         #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: false, deadline: nil) == .stopped)
-        input.sessionActive = true; input.remoteProfile = .alreadyTranslated
-        #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: false, deadline: nil) == .stopped)
+        input.sessionActive = true
+        #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: false, deadline: nil) == .periodic)
     }
 }
 

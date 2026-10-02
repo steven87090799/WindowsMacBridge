@@ -14,11 +14,11 @@ import BridgePlatform
         defer { defaults.removePersistentDomain(forName: name) }
         let settings = SettingsStore(defaults: defaults).settings
         #expect(settings.enabled)
-        #expect(settings.inputBackend == .eventTap)
+        #expect(settings.inputBackend == .deviceHID)
         #expect(settings.keyboardScope == .allKeyboards)
         #expect(!settings.finderEnabled && settings.allowIMEShortcuts)
         #expect(settings.screenshotAutoCopy)
-        #expect(settings.windowsKeyModifier == .option)
+        #expect(settings.windowsKeyModifier == .command)
         #expect(!settings.winRunEnabled && !settings.winSettingsEnabled && !settings.winTaskViewEnabled)
         #expect(KeyboardLayoutResolver.supports(sourceID: "org.atelierInmu.inputmethod.vChewing.IMECHT", asciiLayoutID: "com.apple.keylayout.ABC", allowIME: settings.allowIMEShortcuts))
         let registry = try ApplicationRegistry()
@@ -70,11 +70,28 @@ import BridgePlatform
             $0.overrides["custom.browser"] = .remoteWindows
         }
         store.applyRecommendedPreset()
-        #expect(store.settings.enabled && store.settings.inputBackend == .eventTap)
+        #expect(store.settings.enabled && store.settings.inputBackend == .deviceHID)
         #expect(store.settings.overrides["com.openai.codex"] == .macOS)
         #expect(store.settings.overrides["custom.browser"] == .remoteWindows)
         #expect(!store.settings.finderEnabled)
         #expect(store.settings.screenshotAutoCopy)
+        #expect(SettingsStore(defaults: defaults).settings == store.settings)
+    }
+
+    @Test(arguments: [true, false]) func oneClickSetupEnablesFeaturesAndPreservesPerAppChoices(_ builtIn: Bool) {
+        let (name, defaults) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = SettingsStore(defaults: defaults)
+        store.update {
+            $0.enabled = false; $0.inputBackend = .eventTap; $0.screenshotAutoCopy = false
+            $0.windowsKeyModifier = .option; $0.overrides["custom.remote"] = .remoteWindows
+        }
+        store.prepareOneClickSetup(hasBuiltInAppleKeyboard: builtIn)
+        #expect(store.settings.enabled && store.settings.inputBackend == .deviceHID)
+        #expect(store.settings.screenshotAutoCopy && store.settings.finderEnabled)
+        #expect(store.settings.winRunEnabled && store.settings.winSettingsEnabled && store.settings.winTaskViewEnabled)
+        #expect(!store.settings.finderBrightnessEnterEnabled && store.settings.macBookFnControlSwap == builtIn)
+        #expect(store.settings.windowsKeyModifier == .option && store.settings.overrides["custom.remote"] == .remoteWindows)
         #expect(SettingsStore(defaults: defaults).settings == store.settings)
     }
 
@@ -102,16 +119,16 @@ import BridgePlatform
         defaults.set(previous, forKey: "bridge.settings.v1")
         let migrated = SettingsStore(defaults: defaults, portableHost: true)
         #expect(migrated.settings.windowsKeyModifier == .command)
-        #expect(migrated.settings.macBookFnControlSwap)
+        #expect(!migrated.settings.macBookFnControlSwap)
         migrated.update { $0.windowsKeyModifier = .option }
         #expect(SettingsStore(defaults: defaults, portableHost: true).settings.windowsKeyModifier == .option)
     }
 
-    @Test func freshMacBookEnablesFnSwapDefaultAndExplicitOffSurvives() throws {
+    @Test func freshMacBookPreservesFnByDefaultAndExplicitOffSurvives() throws {
         let (name, defaults) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: name) }
         let store = SettingsStore(defaults: defaults, portableHost: true)
-        #expect(store.settings.macBookFnControlSwap)
+        #expect(!store.settings.macBookFnControlSwap)
         #expect(store.settings.windowsKeyModifier == .command)
         store.update { $0.macBookFnControlSwap = false }
         #expect(!SettingsStore(defaults: defaults, portableHost: true).settings.macBookFnControlSwap)
@@ -131,11 +148,11 @@ import BridgePlatform
         let legacy = Data(#"{"schemaVersion":1,"enabled":false,"overrides":{"example.remote":"remoteWindows"},"finderEnabled":true,"allowIMEShortcuts":false,"screenshotAutoCopy":false}"#.utf8)
         defaults.set(legacy, forKey: "bridge.settings.v1")
         let store = SettingsStore(defaults: defaults)
-        #expect(store.settings.schemaVersion == 4)
+        #expect(store.settings.schemaVersion == 5)
         #expect(!store.settings.enabled && store.settings.finderEnabled)
         #expect(store.settings.overrides["example.remote"] == .remoteWindows)
         #expect(!store.settings.screenshotAutoCopy && !store.settings.allowIMEShortcuts)
-        #expect(store.settings.windowsKeyModifier == .option)
+        #expect(store.settings.windowsKeyModifier == .command)
         #expect(store.settings.textNavigationEnabled)
         store.update { $0.altF4Enabled = true }
         #expect(SettingsStore(defaults: defaults).settings.altF4Enabled)
@@ -150,7 +167,7 @@ import BridgePlatform
         object.removeValue(forKey: "macBookFnControlSwap")
         defaults.set(try JSONSerialization.data(withJSONObject: object), forKey: "bridge.settings.v1")
         let store = SettingsStore(defaults: defaults)
-        #expect(store.settings.schemaVersion == 4 && !store.settings.macBookFnControlSwap)
+        #expect(store.settings.schemaVersion == 5 && !store.settings.macBookFnControlSwap)
         #expect(!store.settings.screenshotAutoCopy && store.settings.overrides == old.overrides)
         store.update { $0.macBookFnControlSwap = true }
         store.applyRecommendedPreset()
@@ -163,7 +180,7 @@ import BridgePlatform
         let legacy = Data(#"{"schemaVersion":3,"enabled":true,"overrides":{"custom.remote":"remoteWindows"},"screenshotAutoCopy":false,"finderEnabled":true,"altF4Enabled":true,"windowSwitcherEnabled":true,"windowThumbnailsEnabled":true}"#.utf8)
         defaults.set(legacy, forKey: "bridge.settings.v1")
         let store = SettingsStore(defaults: defaults, portableHost: false)
-        #expect(store.settings.schemaVersion == 4)
+        #expect(store.settings.schemaVersion == 5)
         #expect(store.settings.finderEnabled && store.settings.altF4Enabled)
         #expect(!store.settings.screenshotAutoCopy)
         #expect(store.settings.overrides["custom.remote"] == .remoteWindows)

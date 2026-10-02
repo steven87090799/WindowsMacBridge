@@ -14,9 +14,17 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
 
 @MainActor public final class HIDBackendClient: NSObject, HIDControllerProtocol {
     public private(set) var status = HIDStatus()
-    public var actionStatus: String { actions.status() }
     public var onOwnershipChange: (() -> Void)?
     public private(set) var releasePending = false
+    private var verifiedStatusAt: TimeInterval?
+    private var permissionProbeID: UUID?
+    private var permissionConnection: NSXPCConnection?
+    private var permissionTimeout: DispatchWorkItem?
+    private var permissionReply: ((Bool?) -> Void)?
+    public var hasFreshVerifiedStatus: Bool {
+        backendActive && configuration.enabled && connection != nil && !releasePending &&
+            verifiedStatusAt.map { ProcessInfo.processInfo.systemUptime - $0 <= 1 } == true
+    }
     public var hasOwnership: Bool { connection != nil || stoppingConnection != nil }
     private var stoppingConnection: NSXPCConnection?
     private var stopTimeout: DispatchSourceTimer?
@@ -26,11 +34,12 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
     }
     private var stopAcknowledgementTimeout: TimeInterval = 1.5
     public var onScreenshot: ((ScreenshotKind) -> Void)?
-    private nonisolated let incomingActions = BoundedActionInbox()
-    private let actions = ShortcutActionDispatcher(marker: EventRewriter.generatedEventMarker)
     private var connection: NSXPCConnection?
+    private var connectionIdentity: UUID?
     private var configuration = HIDConfiguration()
     private var generation: UInt64 = 0
+    private var hostGeneration: UInt64 = 0
+    private var actionEpoch: UInt64 = 0
     private var backendActive = false
     private var started = false
     private var timer: Timer?
@@ -55,10 +64,12 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
         }
     }
     public func update(_ engine: EngineConfiguration, active: Bool) {
+        let previous = configuration
         let wasActive = backendActive
         let effectiveEnabled = engine.enabled && active
         let changed = configuration.processID != engine.context.processID || configuration.bundleID != engine.context.bundleID ||
-            configuration.generation != engine.generation || configuration.keyboardScope != engine.keyboardScope ||
+            hostGeneration != engine.generation || configuration.keyboardScope != engine.keyboardScope ||
+            configuration.transportOnly != engine.destinationSemantics ||
             configuration.mode != engine.context.mode || configuration.isBrowser != engine.context.isBrowser ||
             configuration.enabled != effectiveEnabled ||
             configuration.layoutSupported != engine.layoutSupported || configuration.finderEnabled != engine.finderEnabled ||
@@ -70,10 +81,15 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
             configuration.winRunEnabled != engine.winRunEnabled ||
             configuration.winSettingsEnabled != engine.winSettingsEnabled ||
             configuration.winTaskViewEnabled != engine.winTaskViewEnabled ||
-            configuration.sessionActive != engine.sessionActive || configuration.restartToken != engine.restartToken || backendActive != active
-        if changed { generation = engine.generation; actions.cancelPending() }
+            configuration.finderBrightnessEnterEnabled != engine.finderBrightnessEnterEnabled ||
+            configuration.screenshotEnabled != engine.screenshotEnabled || configuration.printScreenBehavior != engine.printScreenBehavior ||
+            configuration.sessionActive != engine.sessionActive || configuration.restartToken != engine.restartToken ||
+            configuration.deviceInputs != engine.deviceInputs || backendActive != active
+        if changed { actionEpoch &+= 1; verifiedStatusAt = nil }
+        hostGeneration = engine.generation
         backendActive = active
         configuration.enabled = effectiveEnabled
+        configuration.transportOnly = engine.destinationSemantics
         configuration.sessionActive = engine.sessionActive; configuration.layoutSupported = engine.layoutSupported
         configuration.finderEnabled = engine.finderEnabled; configuration.processID = engine.context.processID
         configuration.finderPermanentDeleteEnabled = engine.finderPermanentDeleteEnabled
@@ -85,17 +101,18 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
         configuration.winSettingsEnabled = engine.winSettingsEnabled
         configuration.winTaskViewEnabled = engine.winTaskViewEnabled
         configuration.keyboardScope = engine.keyboardScope
+        configuration.deviceInputs = engine.deviceInputs
         configuration.finderBrightnessEnterEnabled = engine.finderBrightnessEnterEnabled
         configuration.screenshotEnabled = engine.screenshotEnabled
         configuration.printScreenBehavior = engine.printScreenBehavior
         configuration.diagnostics = engine.diagnostics
         configuration.bundleID = engine.context.bundleID; configuration.mode = engine.context.mode
-        configuration.isBrowser = engine.context.isBrowser; configuration.generation = generation
+        configuration.isBrowser = engine.context.isBrowser; configuration.generation = engine.generation
+        configuration.actionGeneration = actionEpoch
         configuration.restartToken = engine.restartToken
-        _ = actions.update(context: configuration.context, enabled: configuration.enabled && !status.manualPassThrough,
-                           finderEnabled: configuration.finderEnabled,
-                           finderPermanentDeleteEnabled: configuration.finderPermanentDeleteEnabled,
-                           epoch: generation)
+        if configuration.transportOnly && previous.sameCapturePolicy(as: configuration) {
+            configuration.generation = generation
+        } else { generation = engine.generation; configuration.generation = generation }
         if !active || !effectiveEnabled {
             if wasActive || timer != nil || connection != nil {
                 timer?.invalidate(); timer = nil
@@ -106,18 +123,59 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
             tick()
         }
     }
-    public func stop() { started = false; timer?.invalidate(); timer = nil; backendActive = false; disconnect() }
+    public func stop() {
+        if let id = permissionProbeID { finishPermissionProbe(id, grant: nil) }
+        started = false; timer?.invalidate(); timer = nil; backendActive = false; disconnect()
+    }
     public func requestInputAccess() {
-        guard backendActive, let proxy = connection?.remoteObjectProxy as? HIDHelperProtocol else { return }
-        proxy.requestInputAccess { _ in }
+        checkInputAccess(request: true) { _ in }
+    }
+    /// Setup must work before AX/backend activation. A read-only endpoint uses
+    /// no capture configuration and cannot replace the helper's keyboard lease.
+    public func checkInputAccess(request: Bool = false, reply: @escaping (Bool?) -> Void) {
+        guard permissionProbeID == nil else { reply(nil); return }
+        let id = UUID(); permissionProbeID = id; permissionReply = reply
+        let probe = connection ?? connectionFactory()
+        if connection == nil {
+            permissionConnection = probe
+            probe.remoteObjectInterface = NSXPCInterface(with: HIDHelperProtocol.self)
+            probe.invalidationHandler = { @Sendable [weak self] in Task { @MainActor in self?.finishPermissionProbe(id, grant: nil) } }
+            probe.interruptionHandler = probe.invalidationHandler
+            probe.resume()
+        }
+        let timeout = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.finishPermissionProbe(id, grant: nil) }
+        }
+        permissionTimeout = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: timeout)
+        guard let proxy = probe.remoteObjectProxyWithErrorHandler({ @Sendable [weak self] _ in
+            Task { @MainActor in self?.finishPermissionProbe(id, grant: nil) }
+        }) as? HIDHelperProtocol else { finishPermissionProbe(id, grant: nil); return }
+        let check: @MainActor @Sendable () -> Void = { [weak self] in
+            guard self?.permissionProbeID == id else { return }
+            proxy.checkInputAccess { @Sendable grant in
+                Task { @MainActor in self?.finishPermissionProbe(id, grant: grant) }
+            }
+        }
+        if request { proxy.requestInputAccess { @Sendable _ in Task { @MainActor in check() } } }
+        else { check() }
+    }
+    private func finishPermissionProbe(_ id: UUID, grant: Bool?) {
+        guard permissionProbeID == id else { return }
+        permissionProbeID = nil
+        permissionTimeout?.cancel(); permissionTimeout = nil
+        let old = permissionConnection; permissionConnection = nil
+        let reply = permissionReply; permissionReply = nil
+        old?.invalidationHandler = nil; old?.interruptionHandler = nil; old?.invalidate()
+        reply?(grant)
     }
     /// New input ownership is gated until the old helper confirms physical close and virtual teardown.
     public func releaseOwnership() { backendActive = false; configuration.enabled = false; disconnect() }
     private func disconnect() {
-        actions.cancelPending(disable: true)
+        verifiedStatusAt = nil
         timer?.invalidate(); timer = nil
         guard let old = connection else { inFlight = false; return }
-        connection = nil; inFlight = false
+        connection = nil; connectionIdentity = nil; inFlight = false
         guard stoppingConnection == nil else { old.invalidate(); return }
         stoppingConnection = old; releasePending = true
         let id = UUID(); stopID = id
@@ -133,10 +191,10 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
             }
         }
         stopTimeout = timeout; timeout.resume()
-        let proxy = old.remoteObjectProxyWithErrorHandler { _ in } as? HIDHelperProtocol
-        proxy?.stop { [weak self, weak old] in
+        let proxy = old.remoteObjectProxyWithErrorHandler { @Sendable _ in } as? HIDHelperProtocol
+        proxy?.stop { @Sendable [weak self] in
             Task { @MainActor in
-                guard let self, let old, self.stopID == id, self.stoppingConnection === old else { return }
+                guard let self, self.stopID == id, let old = self.stoppingConnection else { return }
                 self.stopTimeout?.cancel(); self.stopTimeout = nil
                 self.stopID = nil; self.stoppingConnection = nil; old.invalidate()
                 self.releasePending = false; self.status = HIDStatus()
@@ -157,47 +215,42 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
             next.remoteObjectInterface = NSXPCInterface(with: HIDHelperProtocol.self)
             next.exportedInterface = NSXPCInterface(with: HIDControllerProtocol.self)
             next.exportedObject = HIDControllerReceiver(self)
-            next.resume(); connection = next
+            connectionIdentity = UUID(); next.resume(); connection = next
         }
-        guard let connection, let data = try? JSONEncoder().encode(configuration) else { return }
+        // Legacy per-device translation cannot authorize source-side AX/Clipboard work.
+        // Preserve the requested UI policy; restrict only the capture worker's capabilities.
+        var captureConfiguration = configuration
+        captureConfiguration.finderEnabled = false; captureConfiguration.finderPermanentDeleteEnabled = false
+        captureConfiguration.altF4Enabled = false; captureConfiguration.finderBrightnessEnterEnabled = false
+        captureConfiguration.screenshotEnabled = false
+        captureConfiguration.winSettingsEnabled = false
+        guard let connection, let connectionIdentity, let data = try? JSONEncoder().encode(captureConfiguration), data.count <= 8192 else { return }
         sentAt = now; inFlight = true
         let sentGeneration = generation
-        let proxy = connection.remoteObjectProxyWithErrorHandler { [weak self, weak connection] _ in
+        let sentActionEpoch = actionEpoch
+        let proxy = connection.remoteObjectProxyWithErrorHandler { @Sendable [weak self] _ in
             Task { @MainActor in
-                guard let self, self.connection === connection else { return }
+                guard let self, self.connectionIdentity == connectionIdentity else { return }
                 self.disconnect(); self.retryAt = ProcessInfo.processInfo.systemUptime + 2
                 self.status.state = "Helper 未安裝、尚未核准或 App 簽章與安裝版本不符"
             }
         } as? HIDHelperProtocol
-        proxy?.configure(data) { [weak self, weak connection] data in
+        proxy?.configure(data) { @Sendable [weak self] data in
             Task { @MainActor in
-                guard let self, self.connection === connection else { return }
+                guard let self, self.connectionIdentity == connectionIdentity else { return }
                 self.inFlight = false
-                guard self.backendActive, sentGeneration == self.generation else { self.tick(); return }
-                guard data.count <= 4096, let status = try? JSONDecoder().decode(HIDStatus.self, from: data),
-                      status.version == HIDService.protocolVersion else { self.disconnect(); return }
+                guard self.backendActive, sentGeneration == self.generation, sentActionEpoch == self.actionEpoch else { self.tick(); return }
+                guard data.count <= 16384, let status = try? JSONDecoder().decode(HIDStatus.self, from: data),
+                      status.version == HIDService.protocolVersion, status.devices.count <= 16,
+                      status.devices.allSatisfy({ $0.identity.utf8.count <= 128 && $0.product.utf8.count <= 256 }) else { self.disconnect(); return }
                 self.status = status
-                _ = self.actions.update(context: self.configuration.context,
-                    enabled: self.configuration.enabled && !status.manualPassThrough && !status.emergencyPaused,
-                    finderEnabled: self.configuration.finderEnabled,
-                    finderPermanentDeleteEnabled: self.configuration.finderPermanentDeleteEnabled,
-                    epoch: self.generation)
+                self.verifiedStatusAt = ProcessInfo.processInfo.systemUptime
                 if sentGeneration != self.generation { self.tick() }
             }
         }
     }
     public nonisolated func performAction(_ id: String, processID: Int32, generation: UInt64) {
-        guard id.utf8.count <= 32, let action = HIDActionCodec.decode(id),
-              incomingActions.offer(.init(action: action, processID: processID, generation: generation)) else { return }
-        Task { @MainActor [weak self] in self?.drainActions() }
-    }
-    private func drainActions() {
-        while let entry = incomingActions.pop() {
-            guard backendActive, configuration.enabled, !releasePending, configuration.layoutSupported,
-                  !status.manualPassThrough, !status.emergencyPaused,
-                  generation == entry.generation, configuration.processID == entry.processID else { continue }
-            if case .screenshot(let kind) = entry.action { onScreenshot?(kind) }
-            else { _ = actions.submit(entry.action, context: configuration.context) }
-        }
+        // A helper action has no local-delivery authority. Reject synchronously without
+        // allocating a Task, enqueuing work, touching AX or modifying Clipboard.
     }
 }

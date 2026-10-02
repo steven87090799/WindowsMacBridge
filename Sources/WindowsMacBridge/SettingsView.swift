@@ -5,8 +5,8 @@ import InputSourceCore
 import BridgePlatform
 
 enum SettingsPage: String, CaseIterable {
-    case permissions = "授權"
-    case general = "一般"
+    case permissions = "權限"
+    case general = "一般設定"
     case inputSources = "唯音與輸入法"
     case profiles = "App 規則"
     case diagnostics = "診斷"
@@ -45,44 +45,89 @@ struct SettingsView: View {
     }
 
     private var permissionList: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let usesHID = controller.settings.inputBackend == .deviceHID
+        let keyboardNeeded = controller.settings.enabled || controller.settings.screenshotAutoCopy || controller.settings.macBookFnControlSwap
+        return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("授權清單").font(.title2.bold())
+                Text("權限設定").font(.title2.bold())
                 Spacer()
                     Button("重新檢查") { controller.refreshPermissions(userInitiated: true) }
             }
-            explanation("綠色勾勾表示已取得；紅色叉叉表示尚未取得。按「前往開啟」即可到對應系統設定。")
+            explanation("程式已準備好需要的元件。依序按各項「開啟設定」，在 macOS 核准後回到此頁；確認通過才會變成綠燈，再繼續下一項。")
             ScrollView {
-                VStack(spacing: 0) {
-                    permissionRow("輔助使用", granted: controller.permissions.accessibility,
-                                  detail: "鍵盤翻譯、截圖及視窗操作") {
-                        controller.openPermissionSettings(.accessibility)
+                VStack(alignment: .leading, spacing: 0) {
+                    permissionRow("1. \(KeyboardPermissionRequest.settingsTitle)",
+                                  verification: controller.permissionChecklist.verification(for: [.accessibility, .posting]),
+                                  required: keyboardNeeded,
+                                  location: "隱私權與安全性 → \(KeyboardPermissionRequest.settingsTitle) → WindowsMacBridge",
+                                  detail: controller.permissions.accessibility && !controller.permissions.posting ?
+                                  "視窗存取已取得，按鍵輸出尚未取得；此項尚未完整通過。" : "允許按鍵輸出及視窗操作；同一系統開關會分別確認這兩項能力。",
+                                  actionLabel: "開啟設定") {
+                        controller.requestAccessibility(); controller.openPermissionSettings(.accessibility)
                     }
-                    permissionRow("事件輸出", granted: controller.permissions.posting,
-                                  detail: "送出翻譯後的按鍵；與輔助使用共用授權頁") {
-                        controller.openPermissionSettings(.posting)
+                    permissionRow("2. 輸入監控：WindowsMacBridge",
+                                  verification: controller.permissionChecklist.verification(for: [.listening]),
+                                  required: controller.settings.enabled || controller.settings.screenshotAutoCopy,
+                                  location: "隱私權與安全性 → 輸入監控 → WindowsMacBridge",
+                                  detail: "主 App 接收按鍵所需；Ctrl 快捷鍵及 Windows 截圖需要。只開啟鍵盤控制並不足夠。",
+                                  actionLabel: "開啟設定") {
+                        controller.requestListening(); controller.openPermissionSettings(.listening)
                     }
-                    permissionRow("輸入監控", granted: controller.permissions.listening,
-                                  detail: "允許此 App 接收鍵盤事件") {
-                        controller.openPermissionSettings(.listening)
-                    }
-                    permissionRow("螢幕錄製", granted: controller.permissions.screenRecording,
-                                  detail: "截圖儲存與剪貼簿功能的選用授權") {
+                    permissionRow("3. 螢幕錄製",
+                                  verification: controller.permissionChecklist.verification(for: [.screenRecording]),
+                                  required: controller.settings.screenshotAutoCopy,
+                                  location: "隱私權與安全性 → 螢幕與系統音訊錄製 → WindowsMacBridge",
+                                  detail: "Windows 框選、視窗及全螢幕截圖需要；macOS 已存檔截圖的自動複製不另擷取螢幕。",
+                                  actionLabel: "開啟設定") {
+                        controller.requestScreenRecording()
                         controller.openPermissionSettings(.screenRecording)
                     }
-                    permissionRow("Finder 擴充功能", granted: controller.permissions.finderExtension,
-                                  detail: "選用：Finder 右鍵路徑選單", enabledLabel: "已啟用", disabledLabel: "未啟用") {
-                        controller.openPermissionSettings(.finderExtension)
-                    }
-                    permissionRow("登入時啟動", granted: controller.permissions.loginItem,
-                                  detail: "重新登入或開機後繼續執行", enabledLabel: "已核准", disabledLabel: "未核准") {
+                    permissionRow("4. 登入時啟動",
+                                  verification: controller.permissionChecklist.verification(for: [.loginItem]),
+                                  required: controller.settings.screenshotAutoCopy || controller.settings.macBookFnControlSwap,
+                                  location: "一般 → 登入項目與延伸功能 → WindowsMacBridge",
+                                  detail: "登入後自動啟動；截圖自動複製或 MacBook Fn／Ctrl 模式開啟時會註冊。",
+                                  enabledLabel: "已核准", disabledLabel: "未核准") {
                         controller.openPermissionSettings(.loginItem)
                     }
-                    if controller.settings.inputBackend == .deviceHID {
-                        permissionRow("HID helper 輸入監控", granted: controller.hidStatus.permissions,
-                                      detail: "進階 HID 後端需要 helper 自己的授權") {
-                            controller.requestHIDListening(); controller.openInputMonitoring()
-                        }
+                    permissionRow("5. Finder 擴充功能",
+                                  verification: controller.permissionChecklist.verification(for: [.finderExtension]), required: controller.settings.finderEnabled,
+                                  location: "一般 → 登入項目與延伸功能 → Finder → WindowsMacBridge Finder",
+                                  detail: "Finder 右鍵路徑選單使用；一般 Ctrl 快捷鍵不需要。",
+                                  enabledLabel: "已啟用", disabledLabel: "未啟用") {
+                        controller.openPermissionSettings(.finderExtension)
+                    }
+                    permissionRow("6. 輸入監控：WindowsMacBridge HID Helper",
+                                  verification: controller.helperInputMonitoringVerification, required: usesHID,
+                                  location: "隱私權與安全性 → 輸入監控 → WindowsMacBridge HID Helper",
+                                  detail: "讀取實體鍵盤。程式會自動提出申請，你只需在系統設定開啟這個名稱的權限。",
+                                  actionLabel: "開啟設定") {
+                        controller.requestHIDListening()
+                    }
+                    if let notice = controller.helperPermissionNotice {
+                        Text(notice).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
+                    }
+                    permissionRow("7. Driver 核准",
+                                  verification: controller.driverVerification, required: usesHID,
+                                  location: "一般 → 登入項目與延伸功能 → 驅動程式延伸功能 → Karabiner‑VirtualHIDDevice",
+                                  detail: "鍵盤驅動已由程式準備。按本列按鈕，開啟 Karabiner‑VirtualHIDDevice；若系統要求重開機，請依提示完成。",
+                                  enabledLabel: "已核准／啟用", disabledLabel: "未核准／未啟用",
+                                  actionLabel: "開啟設定") {
+                        controller.requestDriverActivation()
+                    }
+                    if let notice = controller.driverApprovalNotice {
+                        Text(notice).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
+                    }
+                    permissionRow("8. 截圖資料夾存取",
+                                  verification: controller.screenshotFolderVerification,
+                                  required: controller.settings.screenshotAutoCopy,
+                                  location: "隱私權與安全性 → 檔案與檔案夾 → WindowsMacBridge",
+                                  detail: "讀取剛完成的截圖並自動複製。程式會申請目前的「\((controller.screenshotFolderPath as NSString).lastPathComponent)」資料夾，不需要你選取位置。",
+                                  enabledLabel: "已可存取", actionLabel: "開啟設定") {
+                        controller.openScreenshotFolderSettings()
+                    }
+                    if let notice = controller.screenshotFolderNotice {
+                        Text(notice).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
                     }
                 }
             }
@@ -94,33 +139,41 @@ struct SettingsView: View {
                     Text("最近檢查：\(checkedAt.formatted(date: .omitted, time: .standard))")
                 }
             }.font(.caption).foregroundStyle(.secondary)
-            if !controller.permissions.accessibility {
-                explanation("在系統的「輔助使用」或「裝置控制和資料取用」開啟 WindowsMacBridge。若系統開關已開但這裡仍是紅叉，請重新加入 /Applications 裡的目前版本。")
+            if !controller.permissions.keyboardControlGranted || !controller.permissions.listening {
+                explanation("回到此頁會自動檢查。若 macOS 要求重新開啟 App，請依系統提示完成。")
             }
         }
         .onAppear { controller.refreshPermissions() }
     }
 
-    private func permissionRow(_ title: String, granted: Bool, detail: String,
+    private func permissionRow(_ title: String, verification: PermissionVerification, required: Bool,
+                               location: String, detail: String,
                                enabledLabel: String = "已取得", disabledLabel: String = "未取得",
+                               actionLabel: String = "開啟設定",
+                               grantedActionLabel: String = "開啟設定",
                                action: @escaping () -> Void) -> some View {
-        VStack(spacing: 0) {
+        let granted = verification == .granted
+        let color: Color = granted ? .green : (verification == .denied ? .red : .secondary)
+        let label = granted ? enabledLabel : (verification == .unchecked ? "未檢查" :
+            (verification == .awaitingVerification ? "等待重新檢查" : disabledLabel))
+        return VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Image(systemName: granted ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .font(.title2).foregroundStyle(granted ? Color.green : Color.red)
+                Image(systemName: granted ? "checkmark.circle.fill" : (verification == .denied ? "xmark.circle.fill" : "questionmark.circle"))
+                    .font(.title2).foregroundStyle(color)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(title).fontWeight(.medium)
+                    HStack {
+                        Text(title).fontWeight(.medium)
+                        Text(required ? "必要" : "選用").font(.caption).foregroundStyle(.secondary)
+                    }
                     Text(detail).font(.caption).foregroundStyle(.secondary)
+                    Text("開啟位置：\(location)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 }
                 Spacer()
-                Text(granted ? enabledLabel : disabledLabel)
-                    .font(.callout).foregroundStyle(granted ? Color.green : Color.red)
-                if !granted {
-                    Button("前往開啟", action: action)
+                Text(label).font(.callout).foregroundStyle(color)
+                    Button(granted ? grantedActionLabel : actionLabel, action: action)
                         .buttonStyle(.bordered)
-                        .accessibilityLabel("前往開啟\(title)")
-                }
+                        .accessibilityLabel("開啟設定：\(title)")
             }
             .padding(.vertical, 10)
             Divider()
@@ -143,11 +196,11 @@ struct SettingsView: View {
                     Button("完整操作說明") { controller.openUserGuide() }
                     Button("實機驗收步驟") { controller.openAcceptanceGuide() }
                 }
-                explanation("「套用建議預設」會啟用快捷鍵及中文／唯音相容、選 EventTap／所有鍵盤、將 Codex 設為 Default macOS，並關閉 Finder 檔案加強。保留其他 App 規則、輸入法及登入設定；下方仍可逐項調整。")
+                explanation("「套用建議預設」會啟用快捷鍵及中文／唯音相容、選裝置 HID／所有鍵盤、將 Codex 設為 Default macOS，並關閉 Finder 檔案加強。保留其他 App 規則、各來源偏好、輸入法及登入設定。HID 需要安裝包內的 helper 與 Driver。")
                 if let notice = controller.presetNotice { Text(notice).foregroundStyle(.secondary) }
             }
             Section("Windows 快捷鍵") {
-                Toggle("啟用 Windows 快捷鍵", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
+                Toggle("Windows Experience", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
                 explanation("預設開啟。包含複製、貼上、復原、儲存、尋找、分頁與 Ctrl 文字導覽；關閉後停止 Windows 按鍵翻譯，輸入法守護由自己的開關控制。")
                 Picker("這臺 Mac 收到的 Windows 鍵", selection: Binding(
                     get: { controller.settings.windowsKeyModifier },
@@ -155,13 +208,13 @@ struct SettingsView: View {
                     Text("Option (⌥)：這把鍵盤的 Win 送出 Option").tag(WindowsKeyModifier.option)
                     Text("Command (⌘)：這把鍵盤的 Win 送出 Command").tag(WindowsKeyModifier.command)
                 }
-                explanation("Mac mini 預設 Option，MacBook 預設 Command；舊設定缺少此欄時依本機機型選擇。這項選擇讓 Win 專用操作和 Alt+F4／瀏覽器上一頁、下一頁依實際輸入判斷，不交換整把鍵盤；Alt+Tab 交由 macOS 原生按鍵決定。Ctrl 文字操作不受影響。通用控制換用不同來源鍵盤時，EventTap 無法辨識來源，必要時在接收端切換。")
+                explanation("新安裝的實體鍵盤預設 Command：標準 Windows／Apple 鍵位皆使用實體 Control 執行 Ctrl 快捷鍵，Alt／Option 用於原生 App 切換。舊版手動鍵位選擇保留。此進階鍵位只影響實體輸入；遠端依自己的來源偏好處理。")
                 explanation("本機自動翻譯；Terminal、IDE、Remote／VM／Game 依 App 規則保留原按鍵。")
                 DisclosureGroup("進階：輸入方式與指定鍵盤") {
                     Picker("輸入方式", selection: Binding(get: { controller.settings.inputBackend }, set: { controller.setInputBackend($0) })) {
                         ForEach(InputBackend.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
-                    explanation("EventTap 是預設：授權後即可使用快捷鍵。下方 MacBook Fn／Ctrl 交換可用原生 API，不需 Driver。HID 是進階測試方式：只接管指定鍵盤；依 Win 鍵選擇處理 Option／Command，內建鍵盤依下方開關處理 Fn／Ctrl，另支援亮度鍵。需安裝並核准 Driver。")
+                    explanation("裝置 HID 是新安裝預設，先在按鍵來源端正規化；需安裝並核准 Driver。EventTap 是相容備援，無法辨識個別實體鍵盤或保證通用控制接收端不重複翻譯。現有 EventTap 設定保留，不會自動安裝或切換 Driver。")
                     Picker("鍵盤範圍", selection: Binding(get: { controller.settings.keyboardScope }, set: { controller.setKeyboardScope($0) })) {
                         ForEach(KeyboardScope.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
@@ -170,17 +223,22 @@ struct SettingsView: View {
                     if controller.settings.inputBackend == .deviceHID {
                         LabeledContent("Helper 狀態", value: controller.hidStatus.state)
                         LabeledContent("Driver／接管鍵盤數", value: "\(controller.hidStatus.driverReady ? "Ready" : "Not ready")／\(controller.hidStatus.capturedDevices)")
-                        explanation("需先執行下載包的 Install.command 並依 macOS 提示核准官方 VirtualHID。Ready 且接管數大於 0 才表示此後端有鍵盤可用；不支援的鍵盤維持原樣。此路徑仍待實體裝置驗收。")
-                        Button("在 Finder 顯示 helper") { controller.openHelperLocation() }
-                        explanation("手動加入輸入監控時，用此按鈕找到 BridgeHIDHelper.app，再到系統設定的輸入監控清單加入。尚未安裝 helper 時，請先執行 Install.command。")
-                        Button("要求 helper 輸入監控權限") { controller.requestHIDListening() }
-                        explanation("要求 macOS 允許已安裝的 helper 接收鍵盤；需由你在系統設定核准，按鈕不會自動授權。")
+                        ForEach(controller.hidStatus.devices) { device in
+                            Picker("\(device.product.isEmpty ? "鍵盤" : device.product)\(device.builtIn ? "（內建）" : "")", selection: Binding(
+                                get: { controller.settings.deviceInputs.first { $0.identity == device.identity }?.experience ?? .windows },
+                                set: { controller.setDeviceExperience($0, identity: device.identity) })) {
+                                Text("Windows Experience").tag(DeviceExperience.windows)
+                                Text("Native Mac").tag(DeviceExperience.nativeMac)
+                            }
+                            Text(device.captured ? "此鍵盤已接管" : "此鍵盤維持原生輸入／等待就緒").font(.caption).foregroundStyle(.secondary)
+                        }
+                        explanation("背景元件安裝、Driver 核准及 helper 輸入監控的操作統一放在「授權」頁。Ready 且接管數大於 0 才表示此後端有鍵盤可用；不支援的鍵盤維持原樣。")
                     }
-                    explanation("一般 DMG 包含原生 MacBook Fn／Ctrl 交換；Option／Command 與亮度鍵等進階交換仍需另用 HID 整合包。")
+                    explanation("Fn／Globe、Touch ID、音量及亮度預設保留原本功能；Fn／Ctrl 交換是另外的明確選項。")
                 }
                 Toggle("MacBook 內建鍵盤：交換 Fn／地球鍵與左 Ctrl", isOn: Binding(
                     get: { controller.settings.macBookFnControlSwap }, set: { controller.setMacBookFnControlSwap($0) }))
-                explanation("MacBook 新安裝預設開啟，Mac mini 預設關閉；舊設定中明確關閉會保留。Fn 變成 Ctrl、原左 Ctrl 變成 Fn；右 Ctrl 及外接鍵盤保持原樣。EventTap 使用內建鍵盤的原生 HID 服務；進階 HID 後端只在其接管的內建鍵盤服務上套用相同交換，不會疊加。退出 App 或關閉時還原；請先放開按鍵再切換。")
+                explanation("所有新安裝預設關閉，保留實體 Control 與 Fn／Globe；舊版明確的交換設定保留。啟用後 Fn 變成 Ctrl、原左 Ctrl 變成 Fn；右 Ctrl 及外接鍵盤保持原樣。退出 App 或關閉時還原；請先放開按鍵再切換。")
                 explanation("通用控制：在鍵盤實際所在的 MacBook 開啟。接收端不交換虛擬鍵盤，避免交換兩次；Mac mini 的外接鍵盤操作 MacBook 時仍保持外接排列。兩臺 Mac 的跨機修飾鍵結果需實測。EventTap 的 Fn／Ctrl 原生交換作用於本機內建鍵盤；HID 的 Remote／VM／Game Profile 會釋放鍵盤，維持原生穿透。")
                 LabeledContent("MacBook 鍵盤模式", value: controller.macBookKeyboardStatus.summary)
                 Button("重新檢查鍵盤模式") { controller.refreshMacBookKeyboard() }
@@ -188,9 +246,11 @@ struct SettingsView: View {
                 Toggle("Finder 檔案快捷鍵加強", isOn: Binding(get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
                 explanation("預設關閉。開啟後，確認焦點在檔案列表才提供開啟、改名及 Ctrl+X → Ctrl+V 移動；文字框仍使用文字操作。剪下標記保留跨資料夾及路徑導覽；剪貼簿更新、Finder 重新啟動或 5 分鐘後失效；程式無法確認 Finder 是否真的移動成功。")
                 explanation("右鍵路徑選單由 App 內的 Finder Sync 擴充功能提供。首次安裝後請在「一般 → 登入項目與擴充功能 → Finder」啟用 WindowsMacBridge Finder；此開關關閉時選單不顯示。")
-                Toggle("Finder 亮度增加鍵作為 Enter（HID，預設關閉）", isOn: Binding(get: { controller.settings.finderBrightnessEnterEnabled }, set: { controller.setFinderBrightnessEnterEnabled($0) }))
-                    .disabled(!controller.settings.finderEnabled || controller.settings.inputBackend != .deviceHID)
-                explanation("僅在 Finder 檔案模式及 HID 接管鍵盤生效；其他 App 保留原 consumer 亮度鍵。")
+                LabeledContent("Finder 亮度鍵作為 Enter", value: "暫停支援；保留亮度調整")
+                if controller.settings.finderBrightnessEnterEnabled {
+                    Button("清除舊版亮度鍵轉換設定") { controller.setFinderBrightnessEnterEnabled(false) }
+                }
+                explanation("通用控制尚無可靠方式確認亮度鍵的接收 App。目前亮度鍵維持原本功能。")
                 Toggle("Finder Shift+Delete 永久刪除", isOn: Binding(get: { controller.settings.finderPermanentDeleteEnabled }, set: { controller.setFinderPermanentDeleteEnabled($0) }))
                     .disabled(!controller.settings.finderEnabled)
                 explanation("預設關閉；每次執行前另行確認。")
@@ -205,8 +265,36 @@ struct SettingsView: View {
                 explanation("這三項預設關閉，各自選用；僅在 Default macOS Profile 生效。Win+R 使用 macOS ⌘Space，Win+Tab 使用 ⌃↑；若你已改過系統快捷鍵，結果會跟隨 macOS 設定。")
                 explanation("Alt+F4、Finder、文字及截圖功能共用安全政策；切換後端或暫停會取消尚未完成的操作。")
             }
+            Section("Universal Control") {
+                LabeledContent("模式", value: controller.settings.inputBackend == .deviceHID ? "來源端保留按鍵，目的端判斷 App" : "目的端語意；裝置辨識需 HID")
+                explanation("兩台 Mac 均需安裝新版 Bridge，使用所有鍵盤的 Windows Experience。來源端保留原始 Ctrl；實際收到事件的 Mac 依自己的 App 處理。未確認本機接收者時不執行 Finder 或關閉視窗。混合 Native Mac 裝置及跨機特殊鍵仍待驗收。")
+            }
+            Section("Remote Input") {
+                LabeledContent("模式", value: "自動偵測；各來源獨立")
+                explanation("已辨識的 Google host 會將原始 Ctrl 快捷鍵轉成 Mac 操作，已是 Command 的快捷鍵保持原樣。未知合成輸入保留原樣，可在此頁校準一次；不影響本機鍵盤。")
+                DisclosureGroup("遠端進階與實際來源狀態") {
+                    if controller.remoteSources.isEmpty { Text("目前沒有可辨識的來源；尚未完成遠端實機驗收。") }
+                    ForEach(controller.remoteSources) { source in
+                        VStack(alignment: .leading) {
+                            Text(source.transport == .generic ? source.displayName : source.transport.title).font(.headline)
+                            Text("\(source.confidence.rawValue) · \(source.support.rawValue) · \(source.observedInput ? "已觀察來源事件" : "僅偵測程序身份")\(source.learned ? " · 已校準" : "")").font(.caption)
+                            Picker("輸入語意", selection: Binding(get: { source.semantics }, set: { controller.setRemoteSemantics($0, source: source) })) {
+                                ForEach(RemoteSemantics.allCases, id: \.self) { Text($0.title).tag($0) }
+                            }
+                            if source.confidence != .known {
+                                Picker("手動關聯軟體（不代表已驗證）", selection: Binding(get: { source.transport }, set: { controller.setRemoteTransport($0, source: source) })) {
+                                    ForEach(RemoteTransport.allCases, id: \.self) { Text($0.title).tag($0) }
+                                }
+                            }
+                            Button("校準這個來源一次") { controller.calibrateRemote(source) }.disabled(!source.observedInput)
+                        }
+                    }
+                    if let notice = controller.calibrationNotice { Text(notice).foregroundStyle(.secondary) }
+                    explanation("Detected 只代表辨識到程序，Verified 必須有實機驗收紀錄。PID／來源資訊被傳輸軟體隱藏時，無法可靠把事件歸到來源；未知事件保持原樣。")
+                }
+            }
             Section("截圖") {
-                Toggle("截圖自動複製（Shift+Win+S）", isOn: Binding(
+                Toggle("截圖自動複製（⌘⇧3／⌘⇧4／Win+Shift+S）", isOn: Binding(
                     get: { controller.settings.screenshotAutoCopy },
                     set: { controller.setScreenshotAutoCopy($0) }))
                 Picker("PrintScreen", selection: Binding(get: { controller.settings.printScreenBehavior }, set: { controller.setPrintScreenBehavior($0) })) {
@@ -214,17 +302,17 @@ struct SettingsView: View {
                 }
                 explanation("Win+Shift+S 框選；Alt+PrintScreen 複製目前視窗；Win+PrintScreen 儲存全螢幕並複製；PrintScreen 依上方設定。HID 使用已接管的實體按鍵；EventTap 的 PrintScreen 對應 F13。")
                 explanation("使用上方所選的 Windows 鍵位置。若實體 Alt+Shift+S 觸發截圖，代表此處選錯了映射。")
-                explanation("框選完成後存檔並複製 PNG 圖片供 ⌘V 貼上。Ctrl+Shift+S 不會觸發截圖。原本的 ⇧⌘4 交由 macOS 處理；Esc 取消時不改剪貼簿。")
+                explanation("⌘⇧3／⌘⇧4 保留 macOS 全螢幕、框選及空白鍵選視窗；圖片存檔後自動複製，可直接 ⌘V，不必點開縮圖。浮動縮圖消失前可能尚未存檔。Win+Shift+S 完成框選後直接儲存並複製；Ctrl+Shift+S 不會觸發截圖，Esc 取消不改剪貼簿。")
                 LabeledContent("截圖狀態", value: controller.screenshotStatus.lastResult)
                 if let issue = controller.screenshotStatus.issue { Text(issue).foregroundStyle(.orange) }
-                explanation("啟用時立即檢查，之後每 30 天檢查與修復。此功能需要輔助使用與登入啟動；macOS 若要求核准登入項目或權限，請在系統設定完成。")
+                explanation("啟用時立即檢查，之後每 30 天檢查與修復。需要的鍵盤控制、輸入監控、螢幕錄製、登入啟動及截圖資料夾存取統一列在「授權」頁。")
             }
             Section("登入時啟動") {
                 Toggle("登入時啟動 WindowsMacBridge", isOn: Binding(get: { controller.sourceStatus.loginRegistered }, set: { controller.inputSources.setLoginEnabled($0) }))
                     .disabled(controller.settings.screenshotAutoCopy || controller.settings.macBookFnControlSwap)
                 explanation("截圖自動複製或 MacBook Fn／Ctrl 模式開啟時，會註冊登入啟動。兩者都關閉才移除由這些功能新增的註冊；原先手動開啟的登入項目保留。")
                 LabeledContent("系統登入項目狀態", value: controller.sourceStatus.loginStatus)
-                Button("開啟登入項目設定") { controller.inputSources.openLoginSettings() }
+                Button("前往授權清單") { controller.settingsPage = .permissions }
                 explanation("若顯示待核准或啟動失敗，到系統設定檢查 WindowsMacBridge 是否被允許啟動。")
                 if let issue = controller.sourceStatus.loginIssue { Text(issue).foregroundStyle(.orange) }
             }
@@ -340,10 +428,6 @@ struct SettingsView: View {
     private var profiles: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("App 規則").font(.title2)
-            Picker("遠端／通用控制輸入角色", selection: Binding(get: { controller.settings.remoteInputProfile }, set: { controller.setRemoteInputProfile($0) })) {
-                ForEach(RemoteInputProfile.allCases, id: \.self) { Text($0.title).tag($0) }
-            }
-            explanation("在接收端明確選擇來源角色。來源端已有 Bridge 時，接收端選原樣通過；Windows 軟體注入到 Mac 請在接收端選 EventTap。傳輸未保留來源資訊時，無法自動可靠辨識或協調兩端。")
             explanation("規則依 App 的 bundle ID 套用到整個 App。Codex 新安裝預設 Default macOS，適合聊天與文字輸入；若使用內建終端機，改成 IDE 或移除規則，避免 Ctrl+C 被當成複製。")
             if let app = controller.targetApp {
                 HStack {

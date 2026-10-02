@@ -53,8 +53,13 @@ public enum MacBookFnControlMapping {
     public static func restoring(_ current: [NativeKeyMapping], original: [NativeKeyMapping]) -> [NativeKeyMapping] {
         var result = current
         for owned in swap where result.contains(owned) {
-            result.removeAll { $0.source == owned.source }
-            result += original.filter { $0.source == owned.source }
+            // Another tool can add a different destination for the same source.
+            // Remove only our exact pair; never replace its newer mapping with
+            // the saved original while that tool still owns the source.
+            result.removeAll { $0 == owned }
+            if !result.contains(where: { $0.source == owned.source }) {
+                result += original.filter { $0.source == owned.source }
+            }
         }
         return result
     }

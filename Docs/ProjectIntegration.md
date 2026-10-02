@@ -56,7 +56,7 @@ WindowsMacBridge executable (Swift 6 / MainActor)
 
 ## 設定、遷移與登入項目
 
-- Windows 設定保留原 `bridge.settings.v1` key，schema v3 可移轉 v1／v2，新增獨立的 MacBook Fn／Ctrl 選項；輸入法偏好及計數使用 `inputSource.*`。
+- Windows 設定保留原 `bridge.settings.v1` key，schema v5 可移轉 v1–v4。逐裝置偏好、逐遠端 producer 語意分開保存；舊全域遠端角色忽略並在下次保存移除。Fn／Globe 新／缺欄預設保留，明確舊選項保留；輸入法偏好及計數使用 `inputSource.*`。
 - 初次使用：Windows Mode 與截圖自動複製預設開啟；唯音守護、全域切換快捷鍵預設關閉。截圖功能註冊登入項目；授權清單顯示原生檢查結果。
 - 唯音功能不需要 Accessibility。Windows 快捷鍵才需原有權限流程。
 - 本版本直接使用自己的輸入法偏好；舊版助手程序偵測、避讓、結束與偏好匯入已移除。正式使用時把 App 放到固定 Applications 路徑，再設定一個登入項目。

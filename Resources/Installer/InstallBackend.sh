@@ -2,11 +2,19 @@
 set -euo pipefail
 umask 077
 [[ "$EUID" -eq 0 && "$#" -eq 1 ]] || { echo 'Needs administrator installation context.' >&2; exit 77; }
+if /usr/bin/pgrep -x WindowsMacBridge >/dev/null; then
+    echo 'Quit WindowsMacBridge before replacing its App/helper/Driver.' >&2; exit 1
+else
+    bridge_process_query=$?
+    [[ "$bridge_process_query" == 1 ]] || exit "$bridge_process_query"
+fi
 bridge_source="$1"
 bridge_root='/Library/Application Support/WindowsMacBridge'
 bridge_daemon='/Library/LaunchDaemons/local.WindowsMacBridge.HIDHelper.plist'
 bridge_driver_daemon='/Library/LaunchDaemons/local.WindowsMacBridge.VirtualHIDService.plist'
 bridge_app='/Applications/WindowsMacBridge.app'
+bridge_shared_driver='/Library/Application Support/org.pqrs/Karabiner-DriverKit-VirtualHIDDevice'
+bridge_driver_manager='/Applications/.Karabiner-VirtualHIDDevice-Manager.app'
 bridge_recovery="$bridge_root/.install-recovery"
 bridge_stage="$(/usr/bin/mktemp -d /private/var/tmp/WindowsMacBridge-install.XXXXXX)"
 bridge_switched=0
@@ -18,11 +26,16 @@ bridge_driver_running=0
 bridge_root_existed=0
 bridge_preserve_stage=0
 bridge_journal_tmp=''
+bridge_driver_changed=0
 [[ ! -d "$bridge_root" ]] || bridge_root_existed=1
 bridge_rollback() {
     local bridge_failed=0 bridge_name bridge_destination
     /bin/launchctl bootout system "$bridge_daemon" 2>/dev/null || true
-    /bin/launchctl bootout system "$bridge_driver_daemon" 2>/dev/null || true
+    # A compatible shared daemon can serve other clients even though we own its
+    # launchd label. Keep it running through App/helper updates and their rollback.
+    if [[ "$bridge_driver_kind" != reuse || "$bridge_driver_running" == 0 ]]; then
+        /bin/launchctl bootout system "$bridge_driver_daemon" 2>/dev/null || true
+    fi
     if [[ "$bridge_app_changed" == 1 ]]; then
         /bin/rm -rf "$bridge_app" || bridge_failed=1
         if [[ "$bridge_app_saved" == 1 ]]; then
@@ -43,8 +56,14 @@ bridge_rollback() {
             /bin/cp -p "$bridge_stage/previous/$bridge_name" "$bridge_destination" || bridge_failed=1
         fi
     done
-    if [[ "$bridge_helper_running" == 1 ]]; then /bin/launchctl bootstrap system "$bridge_daemon" || bridge_failed=1; fi
-    if [[ "$bridge_driver_running" == 1 ]]; then /bin/launchctl bootstrap system "$bridge_driver_daemon" || bridge_failed=1; fi
+    if [[ "$bridge_driver_changed" == 1 ]]; then bridge_driver_rollback || bridge_failed=1; fi
+    # An incomplete Driver recovery must not restart either service against it.
+    if [[ "$bridge_failed" == 0 ]]; then
+        if [[ "$bridge_helper_running" == 1 ]]; then /bin/launchctl bootstrap system "$bridge_daemon" || bridge_failed=1; fi
+        if [[ "$bridge_driver_running" == 1 ]] && ! /bin/launchctl print system/local.WindowsMacBridge.VirtualHIDService >/dev/null 2>&1; then
+            /bin/launchctl bootstrap system "$bridge_driver_daemon" || bridge_failed=1
+        fi
+    fi
     if [[ "$bridge_root_existed" == 0 ]]; then /bin/rmdir "$bridge_root" 2>/dev/null || true; fi
     return "$bridge_failed"
 }
@@ -60,7 +79,7 @@ bridge_finish() {
             echo "Rollback incomplete. Protected recovery snapshot retained at $bridge_stage" >&2
             exit 1
         fi
-        echo 'Installation failed; previous App, helper, pin and service state restored.' >&2
+        echo 'Installation failed; previous App, helper, pin, Driver and service state restored.' >&2
     fi
     if [[ "$bridge_switched" == 1 ]]; then
         if ! /bin/rm -f "$bridge_recovery"; then
@@ -80,6 +99,7 @@ bridge_recover_interrupted() {
        "$(/usr/bin/stat -f '%u' "$bridge_recovery")" == 0 ]] || { echo 'Untrusted recovery journal.' >&2; return 1; }
     local bridge_mode bridge_header bridge_saved_stage bridge_saved_pid bridge_saved_boot
     local bridge_saved_root bridge_saved_app bridge_saved_helper bridge_saved_driver bridge_new_stage
+    local bridge_saved_driver_kind=reuse bridge_saved_driver_version='' bridge_saved_driver_active=0 bridge_saved_phase
     bridge_mode="$(/usr/bin/stat -f '%Lp' "$bridge_recovery")"
     [[ "$((8#$bridge_mode & 077))" == 0 && "$(/usr/bin/wc -c < "$bridge_recovery")" -le 1024 ]] || return 1
     {
@@ -91,12 +111,22 @@ bridge_recover_interrupted() {
         IFS= read -r bridge_saved_app
         IFS= read -r bridge_saved_helper
         IFS= read -r bridge_saved_driver
+        if [[ "$bridge_header" == WMB-INSTALL-2 ]]; then
+            IFS= read -r bridge_saved_driver_kind
+            IFS= read -r bridge_saved_driver_version
+            IFS= read -r bridge_saved_driver_active
+        fi
     } < "$bridge_recovery"
-    [[ "$bridge_header" == WMB-INSTALL-1 && "$bridge_saved_stage" == /private/var/tmp/WindowsMacBridge-install.* &&
+    [[ ( "$bridge_header" == WMB-INSTALL-1 || "$bridge_header" == WMB-INSTALL-2 ) && "$bridge_saved_stage" == /private/var/tmp/WindowsMacBridge-install.* &&
        "$bridge_saved_pid" =~ ^[0-9]+$ && "$bridge_saved_boot" =~ ^[[:xdigit:]-]{36}$ &&
        "$bridge_saved_root$bridge_saved_app$bridge_saved_helper$bridge_saved_driver" =~ ^[01]{4}$ &&
        -d "$bridge_saved_stage/previous" && ! -L "$bridge_saved_stage" &&
        "$(/usr/bin/stat -f '%u' "$bridge_saved_stage")" == 0 ]] || { echo 'Invalid recovery snapshot.' >&2; return 1; }
+    [[ "$bridge_saved_driver_active" =~ ^[01]$ ]] || return 1
+    case "$bridge_saved_driver_kind:$bridge_saved_driver_version" in
+        reuse:*|fresh:|upgrade:7.3.0) ;;
+        *) echo 'Invalid Driver recovery policy.' >&2; return 1 ;;
+    esac
     bridge_mode="$(/usr/bin/stat -f '%Lp' "$bridge_saved_stage")"
     [[ "$((8#$bridge_mode & 077))" == 0 && -z "$(/usr/bin/find "$bridge_saved_stage" -type l -print -quit)" ]] || return 1
     if [[ "$bridge_saved_boot" == "$(/usr/sbin/sysctl -n kern.bootsessionuuid)" ]] && kill -0 "$bridge_saved_pid" 2>/dev/null; then
@@ -106,10 +136,18 @@ bridge_recover_interrupted() {
         [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bridge_saved_stage/previous/WindowsMacBridge.app/Contents/Info.plist")" == local.WindowsMacBridge ]] || return 1
         /usr/bin/codesign --verify --strict "$bridge_saved_stage/previous/WindowsMacBridge.app"
     fi
+    bridge_preserve_stage=1
     bridge_new_stage="$bridge_stage"; bridge_stage="$bridge_saved_stage"
     bridge_root_existed="$bridge_saved_root"; bridge_app_saved="$bridge_saved_app"; bridge_app_changed=1
     bridge_helper_running="$bridge_saved_helper"; bridge_driver_running="$bridge_saved_driver"
-    bridge_preserve_stage=1
+    bridge_driver_kind="$bridge_saved_driver_kind"; bridge_driver_old_version="$bridge_saved_driver_version"
+    bridge_driver_old_active="$bridge_saved_driver_active"; bridge_driver_changed=0
+    if [[ "$bridge_header" == WMB-INSTALL-2 ]]; then
+        [[ -f "$bridge_stage/driver.phase" && ! -L "$bridge_stage/driver.phase" &&
+           "$(/usr/bin/wc -c < "$bridge_stage/driver.phase")" -le 16 ]] || return 1
+        bridge_saved_phase="$(/bin/cat "$bridge_stage/driver.phase")"
+        case "$bridge_saved_phase" in prepared|restored) ;; changed) bridge_driver_changed=1 ;; *) return 1 ;; esac
+    fi
     bridge_rollback || return 1
     /bin/rm -f "$bridge_recovery"
     /bin/sync
@@ -117,6 +155,7 @@ bridge_recover_interrupted() {
     if [[ "$bridge_root_existed" == 0 ]]; then /bin/rmdir "$bridge_root" 2>/dev/null || true; fi
     bridge_stage="$bridge_new_stage"; bridge_preserve_stage=0
     bridge_app_saved=0; bridge_app_changed=0; bridge_helper_running=0; bridge_driver_running=0
+    bridge_driver_kind=reuse; bridge_driver_changed=0; bridge_driver_old_active=0; bridge_driver_old_version=''
     echo 'Recovered an interrupted App/helper/service update before proceeding.'
 }
 # Copy into a private root-owned snapshot before verifying or running payload files.
@@ -124,7 +163,9 @@ bridge_recover_interrupted() {
 bridge_payload="$bridge_stage/payload"
 [[ -z "$(/usr/bin/find "$bridge_payload" -type l -print -quit)" ]] || { echo 'Symlink payload rejected.' >&2; exit 1; }
 cd "$bridge_payload"
-/usr/bin/shasum -a 256 -c PAYLOAD-SHA256SUMS
+/usr/bin/shasum -a 256 -c PAYLOAD-SHA256SUMS >/dev/null
+# Functions must be loaded before interrupted-transaction recovery can use them.
+source "$bridge_payload/DriverTransaction.sh"
 /usr/bin/codesign --verify --strict WindowsMacBridge.app
 /usr/bin/codesign --verify --strict BridgeHIDHelper.app
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' WindowsMacBridge.app/Contents/Info.plist)" == 'local.WindowsMacBridge' ]]
@@ -140,8 +181,36 @@ if [[ -d "$bridge_root" ]]; then
     [[ "$((8#$bridge_permissions & 022))" == 0 ]] || { echo 'Writable helper directory rejected.' >&2; exit 1; }
     [[ -z "$(/usr/bin/find "$bridge_root" -type l -print -quit)" ]] || { echo 'Symlink in helper directory rejected.' >&2; exit 1; }
 fi
+bridge_verify_shared_driver() {
+    local bridge_daemon_app bridge_extension bridge_path bridge_mode bridge_abi
+    # Verified official version.json for these exact tags: driver 1.8.0, client
+    # protocol 7. A newer or unknown package is not inferred compatible.
+    # https://github.com/pqrs-org/Karabiner-DriverKit-VirtualHIDDevice/blob/v8.5.0/version.json
+    case "$bridge_driver_installed" in
+        8.0.0|8.1.0|8.2.0|8.3.0|8.4.0|8.5.0|8.6.0) bridge_abi=1.8.0 ;;
+        7.3.0) bridge_abi=1.8.0 ;;
+        *) echo "Shared VirtualHID $bridge_driver_installed has no verified ABI; no shared files were changed." >&2; return 1 ;;
+    esac
+    bridge_daemon_app="$bridge_shared_driver/Applications/Karabiner-VirtualHIDDevice-Daemon.app"
+    bridge_extension="$bridge_driver_manager/Contents/Library/SystemExtensions/org.pqrs.Karabiner-DriverKit-VirtualHIDDevice.dext"
+    for bridge_path in "$bridge_shared_driver" "$bridge_driver_manager"; do
+        [[ -d "$bridge_path" && ! -L "$bridge_path" && "$(/usr/bin/stat -f '%u' "$bridge_path")" == 0 ]] || return 1
+        bridge_mode="$(/usr/bin/stat -f '%Lp' "$bridge_path")"
+        [[ "$((8#$bridge_mode & 022))" == 0 && -z "$(/usr/bin/find "$bridge_path" -type l -print -quit)" ]] || return 1
+    done
+    /usr/bin/codesign --verify --strict -R '=anchor apple generic and certificate leaf[subject.OU] = "G43BCU2T37" and identifier "org.pqrs.Karabiner-VirtualHIDDevice-Daemon"' "$bridge_daemon_app" || return 1
+    /usr/bin/codesign --verify --strict -R '=anchor apple generic and certificate leaf[subject.OU] = "G43BCU2T37" and identifier "org.pqrs.Karabiner-DriverKit-VirtualHIDDevice"' "$bridge_extension" || return 1
+    /usr/bin/codesign --verify --strict -R '=anchor apple generic and certificate leaf[subject.OU] = "G43BCU2T37" and identifier "org.pqrs.Karabiner-VirtualHIDDevice-Manager"' "$bridge_driver_manager" || return 1
+    [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$bridge_daemon_app/Contents/Info.plist")" == "$bridge_driver_installed" &&
+       "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$bridge_driver_manager/Contents/Info.plist")" == "$bridge_driver_installed" &&
+       "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$bridge_extension/Info.plist")" == "$bridge_abi" ]] || {
+        echo 'Shared driver receipt and signed binary versions disagree; unchanged.' >&2; return 1;
+    }
+}
+
 bridge_recover_interrupted
-# The driver package is the pinned, notarized official binary. Never install a different shared version silently.
+# The driver package is the pinned, notarized official binary. Package version,
+# DriverKit version and daemon protocol are separate; never downgrade a shared driver.
 [[ "$(/usr/bin/shasum -a 256 Driver/Karabiner-DriverKit-VirtualHIDDevice-8.6.0.pkg | /usr/bin/cut -d ' ' -f 1)" == ff8c7fdc5e25387c7805fc7509a0fa9cf98f69ba582704f717fddcae47424387 ]] || exit 1
 /usr/sbin/pkgutil --check-signature Driver/Karabiner-DriverKit-VirtualHIDDevice-8.6.0.pkg
 bridge_driver_installed=''
@@ -152,9 +221,8 @@ if /usr/bin/grep -Fxq org.pqrs.Karabiner-DriverKit-VirtualHIDDevice <<< "$bridge
     bridge_driver_installed="$(/usr/bin/sed -n 's/^version: //p' <<< "$bridge_info")"
     [[ -n "$bridge_driver_installed" ]] || { echo 'Existing driver receipt has no version.' >&2; exit 1; }
 fi
-if [[ -n "$bridge_driver_installed" && "$bridge_driver_installed" != 8.6.0 ]]; then
-    echo "Existing shared VirtualHID version is $bridge_driver_installed; left unchanged. Resolve driver compatibility first." >&2; exit 1
-fi
+
+if [[ -n "$bridge_driver_installed" ]]; then bridge_verify_shared_driver; fi
 # Stage every owned component and verify its identity before any service or App is switched.
 /bin/mkdir -p "$bridge_stage/next" "$bridge_stage/previous"
 /usr/bin/ditto WindowsMacBridge.app "$bridge_stage/next/WindowsMacBridge.app"
@@ -188,16 +256,15 @@ if [[ -d "$bridge_app" ]]; then
     /usr/bin/ditto "$bridge_app" "$bridge_stage/previous/WindowsMacBridge.app"
     bridge_app_saved=1
 fi
-if [[ -z "$bridge_driver_installed" ]]; then
-    /usr/sbin/installer -pkg Driver/Karabiner-DriverKit-VirtualHIDDevice-8.6.0.pkg -target /
-fi
+bridge_driver_prepare
 /bin/mkdir -p "$bridge_root"
 /usr/sbin/chown root:wheel "$bridge_root"
 /bin/chmod 755 "$bridge_root"
 bridge_journal_tmp="$(/usr/bin/mktemp "$bridge_root/.install-recovery.XXXXXX")"
-printf 'WMB-INSTALL-1\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' "$bridge_stage" "$$" \
+printf 'WMB-INSTALL-2\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' "$bridge_stage" "$$" \
     "$(/usr/sbin/sysctl -n kern.bootsessionuuid)" "$bridge_root_existed" "$bridge_app_saved" \
-    "$bridge_helper_running" "$bridge_driver_running" > "$bridge_journal_tmp"
+    "$bridge_helper_running" "$bridge_driver_running" "$bridge_driver_kind" "$bridge_driver_old_version" \
+    "$bridge_driver_old_active" > "$bridge_journal_tmp"
 /bin/sync
 # Atomic no-clobber publication: concurrent installers cannot overwrite a live recovery owner.
 /bin/ln "$bridge_journal_tmp" "$bridge_recovery"
@@ -206,7 +273,9 @@ bridge_journal_tmp=''
 /bin/sync
 bridge_switched=1
 if [[ "$bridge_helper_running" == 1 ]]; then /bin/launchctl bootout system "$bridge_daemon"; fi
-if [[ "$bridge_driver_running" == 1 ]]; then /bin/launchctl bootout system "$bridge_driver_daemon"; fi
+bridge_driver_check_foreign_clients
+if [[ "$bridge_driver_running" == 1 && "$bridge_driver_kind" != reuse ]]; then /bin/launchctl bootout system "$bridge_driver_daemon"; fi
+bridge_driver_switch
 /bin/mkdir -p "$bridge_root"
 /usr/sbin/chown root:wheel "$bridge_root"
 /bin/chmod 755 "$bridge_root"
@@ -216,20 +285,26 @@ fi
 bridge_app_changed=1
 /bin/mv "$bridge_stage/next/WindowsMacBridge.app" "$bridge_app"
 /usr/sbin/chown -R root:wheel "$bridge_app"
-/bin/chmod -R go-w "$bridge_app"
+# App resources (including the embedded rollback package) are public software.
+# A source file downloaded with mode 600 must not become root-only after copy.
+/bin/chmod -R a+rX,go-w "$bridge_app"
 for bridge_name in BridgeHIDHelper.app Licenses; do
     /bin/rm -rf "$bridge_root/$bridge_name"
     /bin/mv "$bridge_stage/next/$bridge_name" "$bridge_root/$bridge_name"
 done
 /usr/sbin/chown -R root:wheel "$bridge_root/BridgeHIDHelper.app"
-/bin/chmod -R go-w "$bridge_root/BridgeHIDHelper.app"
+/bin/chmod -R a+rX,go-w "$bridge_root/BridgeHIDHelper.app"
 /usr/bin/install -o root -g wheel -m 644 local.WindowsMacBridge.HIDHelper.plist "$bridge_daemon"
 /usr/bin/codesign --verify --strict "$bridge_app"
 /bin/mv "$bridge_stage/next/controller.plist" "$bridge_root/controller.plist"
 /usr/sbin/chown root:wheel "$bridge_root/controller.plist"
 /bin/chmod 644 "$bridge_root/controller.plist"
 /bin/launchctl bootstrap system "$bridge_daemon"
-if [[ "$bridge_driver_running" == 1 ]] || ! /usr/bin/pgrep -x Karabiner-VirtualHIDDevice-Daemon >/dev/null; then
+if [[ "$bridge_driver_kind" == reuse && "$bridge_driver_running" == 1 ]]; then
+    if ! /bin/launchctl print system/local.WindowsMacBridge.VirtualHIDService >/dev/null 2>&1; then
+        /bin/launchctl bootstrap system "$bridge_driver_daemon"
+    fi
+elif [[ "$bridge_driver_running" == 1 ]] || ! /usr/bin/pgrep -x Karabiner-VirtualHIDDevice-Daemon >/dev/null; then
     /usr/bin/install -o root -g wheel -m 644 local.WindowsMacBridge.VirtualHIDService.plist "$bridge_driver_daemon"
     /bin/launchctl bootstrap system "$bridge_driver_daemon"
 fi

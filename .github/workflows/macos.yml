@@ -31,8 +31,12 @@ jobs:
       - name: Swift version
         run: swift --version
       - name: Unit and in-process AppKit tests
+        env:
+          SWIFT_BACKTRACE: enable=yes,interactive=no
         run: bash scripts/test.sh
       - name: Full optimized regressions
+        env:
+          SWIFT_BACKTRACE: enable=yes,interactive=no
         run: bash scripts/test.sh -c release
       - name: Installer, rollback and ZIP version regressions
         run: python3 -m unittest discover -s Tests/InstallerTests -v
@@ -47,6 +51,16 @@ jobs:
           bash "$bridge_zip_source/scripts/build-app.sh"
       - name: Package app
         run: bash scripts/package-app-dmg.sh
+      - name: Test process crash diagnostics
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          reports = (Path.home() / 'Library/Logs/DiagnosticReports').glob('WindowsMacBridgePackageTests*')
+          for report in sorted(reports, key=lambda p: p.stat().st_mtime, reverse=True)[:2]:
+              print(report.name)
+              print(report.read_text(errors='replace')[:100000])
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: WindowsMacBridge-development

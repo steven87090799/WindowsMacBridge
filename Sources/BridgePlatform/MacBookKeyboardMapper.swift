@@ -33,7 +33,7 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
 
 /// Native service properties, outside Event Tap callbacks. No key capture or periodic timer.
 @MainActor public final class MacBookKeyboardMapper {
-    private struct Journal: Codable {
+    private struct Journal: Codable, Equatable {
         var bootID: String
         var originals: [String: [NativeKeyMapping]] = [:]
     }
@@ -42,6 +42,7 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
     private let journalKey = "macbook.fnControl.journal.v1"
     private let journalURL: URL
     private var journal: Journal
+    private var persistedJournal: Journal?
     private var enabled = false
     private var permitted = true
     private var observing = false
@@ -185,15 +186,20 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
         } else { next.issue = "鍵盤交換尚未還原；請按重新檢查，或重新開機清除暫存映射。" }
     }
     private func saveJournal() -> Bool {
-        guard let data = try? JSONEncoder().encode(journal) else { return false }
+        // Compare values, not JSON byte order. Only cache a successful durable
+        // save; changed ownership must still be persisted before HID mutation.
+        guard persistedJournal != journal else { return true }
         if journal.originals.isEmpty {
             guard PrivateMappingJournal.remove(journalURL) else { return false }
             if defaults.object(forKey: journalKey) != nil { defaults.removeObject(forKey: journalKey) }
+            persistedJournal = journal
             return true
         }
+        guard let data = try? JSONEncoder().encode(journal) else { return false }
         guard PrivateMappingJournal.write(data, to: journalURL) else { return false }
         // Retain a legacy mirror for migration only; the durable file is authoritative.
         defaults.set(data, forKey: journalKey)
+        persistedJournal = journal
         return true
     }
 }

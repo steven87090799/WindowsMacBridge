@@ -46,11 +46,8 @@ final class HelperService: NSObject, NSXPCListenerDelegate {
             }
         }
         candidate.interruptionHandler = candidate.invalidationHandler
-        // Only one pinned controller. A new connection may replace a disconnected lease.
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            capture.stop(); connection?.invalidate(); connection = candidate
-        }
+        // Permission-only connections never take keyboard ownership. The
+        // authenticated configure request acquires the single capture lease.
         candidate.resume(); return true
     }
     private func authenticated(_ connection: NSXPCConnection) -> Bool {
@@ -73,13 +70,15 @@ final class HelperService: NSObject, NSXPCListenerDelegate {
         weak var connection: NSXPCConnection?
         init(service: HelperService, connection: NSXPCConnection) { self.service = service; self.connection = connection }
         func configure(_ data: Data, withReply reply: @escaping (Data) -> Void) {
-            guard data.count <= 4096, let config = try? JSONDecoder().decode(HIDConfiguration.self, from: data), config.valid else {
+            guard data.count <= 8192, let config = try? JSONDecoder().decode(HIDConfiguration.self, from: data), config.valid else {
                 connection?.invalidate(); reply(Data()); return
             }
             DispatchQueue.main.async { [weak self] in
                 guard let self, let service, let connection,
-                      service.connection === connection,
                       connection.effectiveUserIdentifier == DeviceCapture.consoleUID() else { reply(Data()); return }
+                if service.connection !== connection {
+                    service.capture.stop(); service.connection?.invalidate(); service.connection = connection
+                }
                 service.capture.configure(config, uid: connection.effectiveUserIdentifier)
                 reply((try? JSONEncoder().encode(service.capture.status)) ?? Data())
             }
@@ -92,9 +91,18 @@ final class HelperService: NSObject, NSXPCListenerDelegate {
         }
         func requestInputAccess(withReply reply: @escaping (Bool) -> Void) {
             DispatchQueue.main.async { [weak self] in
-                guard let self, let service, let connection, service.connection === connection,
+                guard let self, service != nil, let connection,
                       connection.effectiveUserIdentifier == DeviceCapture.consoleUID() else { reply(false); return }
-                reply(IOHIDRequestAccess(kIOHIDRequestTypeListenEvent))
+                // Root daemons cannot present a login-session permission UI.
+                // The installed App launches our non-capturing GUI request mode.
+                reply(IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted)
+            }
+        }
+        func checkInputAccess(withReply reply: @escaping (Bool) -> Void) {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, service != nil, let connection,
+                      connection.effectiveUserIdentifier == DeviceCapture.consoleUID() else { reply(false); return }
+                reply(IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted)
             }
         }
     }

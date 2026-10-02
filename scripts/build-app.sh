@@ -23,6 +23,8 @@ for brand_asset in AppIcon.icns MenuBarIcon.png MenuBarPausedIcon.png; do
 done
 cp "$task_root/Resources/UserGuide.md" "$app_directory/Contents/Resources/UserGuide.md"
 cp "$task_root/Resources/AcceptanceGuide.md" "$app_directory/Contents/Resources/AcceptanceGuide.md"
+cp "$task_root/Resources/TwoMacAcceptance.md" "$app_directory/Contents/Resources/TwoMacAcceptance.md"
+cp "$task_root/Resources/Installer/LaunchEmbeddedInstall.sh" "$app_directory/Contents/Resources/LaunchEmbeddedInstall.sh"
 /usr/bin/ditto "$task_root/Resources/Licenses" "$app_directory/Contents/Resources/Licenses"
 # The App adapter explicitly loads from Contents/Resources; no build-path fallback.
 resource_bundle="$binary_directory/WindowsMacBridge_BridgePlatform.bundle"

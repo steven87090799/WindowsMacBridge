@@ -71,9 +71,171 @@ private final class CaptureJobFixture: ScreenshotCaptureJob, @unchecked Sendable
             manager.stop()
         }
     }
+    @Test func sourcePolicyReplacementCancelsActualCaptureAndPreventsLateClipboardWrite() async throws {
+        let driver = CaptureDriverFixture()
+        let board = NSPasteboard(name: .init("BridgeRemoteCapture-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.setString("untouched", forType: .string); let before = board.changeCount
+        let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true }, captureDirectory: FileManager.default.temporaryDirectory)
+        var input = RuntimePolicyInput(); input.backend = .deviceHID
+        input.shortcutEnabled = true; input.screenshotEnabled = true
+        input.foreground = .init(processID: .max, bundleID: "test", mode: .macOS)
+        var policy = RuntimePolicyCoordinator()
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+        let origin = SourceWorkGate(), frame = SourceWorkGate()
+        manager.requestCapture(.fullScreen, source: .init(origin: origin, frame: frame))
+        #expect(driver.launches == 1)
+        origin.invalidate(); manager.applyInputRouting(.init())
+        #expect(driver.job.cancellations.contains(.policyCancelled))
+        driver.completion?(0,nil)
+        for _ in 0..<10 { await Task.yield() }
+        #expect(board.changeCount == before)
+        manager.stop()
+    }
+    @Test func physicalPreferenceChangeCancelsLocalJobButPreservesRemoteJob() {
+        for remote in [false,true] {
+            let driver = CaptureDriverFixture()
+            let board = NSPasteboard(name: .init("BridgeDeviceCapture-\(UUID().uuidString)"))
+            defer { board.releaseGlobally() }
+            let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true }, captureDirectory: FileManager.default.temporaryDirectory)
+            var input = RuntimePolicyInput(); input.backend = .deviceHID; input.shortcutEnabled = true; input.screenshotEnabled = true
+            input.foreground = .init(processID: .max, bundleID: "test", mode: .macOS)
+            var policy = RuntimePolicyCoordinator()
+            manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+            let token = SourceWorkToken(origin: .init(), frame: .init())
+            manager.requestCapture(.region, source: remote ? token : nil)
+            manager.applyPhysicalPreferences([.init(identity: "a", experience: .nativeMac)])
+            #expect(driver.job.cancellations.contains(.policyCancelled) == !remote)
+            manager.stop()
+        }
+    }
 }
 
 @MainActor struct ScreenshotProcessingRegressionTests {
+    @Test func completedCaptureProducesPasteableImageWithoutOpeningTheFile() async throws {
+        let driver = CaptureDriverFixture()
+        let board = NSPasteboard(name: .init("BridgeAutomaticCopy-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true }, captureDirectory: FileManager.default.temporaryDirectory)
+        defer { manager.stop() }
+        var input = RuntimePolicyInput(); input.backend = .deviceHID
+        input.shortcutEnabled = true; input.screenshotEnabled = true
+        input.foreground = .init(processID: .max, bundleID: "fixture", mode: .macOS)
+        var policy = RuntimePolicyCoordinator()
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
+        manager.requestCapture(.region)
+        let path = try #require(driver.url)
+        defer { try? FileManager.default.removeItem(at: path) }
+        let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 8, pixelsHigh: 8,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: path)
+        driver.completion?(0, nil)
+        for _ in 0..<500 where board.data(forType: .init("public.png")) == nil {
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        #expect(board.data(forType: .init("public.png")) == png)
+        #expect(NSImage(pasteboard: board) != nil)
+        #expect(manager.status.lastResult.contains("可直接按"))
+    }
+
+    @Test(arguments: [false, true]) func pauseAndResumeDuringDecodeKeepsSingleFlightAndRejectsOldClipboardWrite(native: Bool) async throws {
+        let gate = DelayedImagePreparation()
+        defer { gate.finish.signal() }
+        let driver = CaptureDriverFixture()
+        let board = NSPasteboard(name: .init("BridgeDelayedDecode-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.setString("preserved", forType: .string)
+        let before = board.changeCount
+        let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true },
+            prepareImage: { gate.prepare($0) }, captureDirectory: FileManager.default.temporaryDirectory)
+        defer { manager.stop() }
+        var input = RuntimePolicyInput(); input.backend = .deviceHID
+        input.shortcutEnabled = true; input.screenshotEnabled = true
+        input.foreground = .init(processID: .max, bundleID: "fixture", mode: .macOS)
+        var policy = RuntimePolicyCoordinator()
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
+        if !native { manager.requestCapture(.region) }
+        let path = native ? FileManager.default.temporaryDirectory.appendingPathComponent("NativeDelayed-\(UUID().uuidString).png") : try #require(driver.url)
+        defer { try? FileManager.default.removeItem(at: path) }
+        try Data([1]).write(to: path)
+        if native { manager.acceptNativeScreenshot(path) } else { driver.completion?(0, nil) }
+        for _ in 0..<500 where !gate.started { try await Task.sleep(for: .milliseconds(2)) }
+        #expect(gate.started)
+        input.paused = true
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
+        input.paused = false; input.session &+= 1
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
+        manager.requestCapture(.region)
+        let originalLaunches = native ? 0 : 1
+        #expect(driver.launches == originalLaunches)
+        gate.finish.signal()
+        for _ in 0..<500 where driver.launches == originalLaunches {
+            try await Task.sleep(for: .milliseconds(2))
+            manager.requestCapture(.region)
+        }
+        #expect(driver.launches == originalLaunches + 1)
+        #expect(board.changeCount == before && board.string(forType: .string) == "preserved")
+        driver.completion?(1, .userCancelled)
+    }
+
+    @Test func nativeScreenshotSurvivesOrdinaryAppSwitchToThePasteDestination() async throws {
+        let gate = DelayedImagePreparation(); defer { gate.finish.signal() }
+        let board = NSPasteboard(name: .init("BridgeNativeAppChange-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        let manager = ScreenshotManager(clipboard: board, authorization: { true }, prepareImage: { gate.prepare($0) },
+            captureDirectory: FileManager.default.temporaryDirectory)
+        defer { manager.stop() }
+        var input = RuntimePolicyInput(); input.backend = .deviceHID
+        input.shortcutEnabled = true; input.screenshotEnabled = true
+        input.foreground = .init(processID: 1, bundleID: "fixture.A", mode: .macOS)
+        var policy = RuntimePolicyCoordinator()
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("NativeAppSwitch-\(UUID().uuidString).png")
+        defer { try? FileManager.default.removeItem(at: path) }
+        try Data([1]).write(to: path)
+        manager.acceptNativeScreenshot(path)
+        for _ in 0..<500 where !gate.started { try await Task.sleep(for: .milliseconds(2)) }
+        #expect(gate.started)
+        input.foreground = .init(processID: 2, bundleID: "fixture.B", mode: .terminal)
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
+        gate.finish.signal()
+        for _ in 0..<500 where board.data(forType: .init("public.png")) == nil { try await Task.sleep(for: .milliseconds(2)) }
+        #expect(board.data(forType: .init("public.png")) == Data([137, 80, 78, 71]))
+    }
+    @Test func selectionFinishedAfterPauseAndResumeCannotStartNewClipboardWork() async throws {
+        let gate = DelayedImagePreparation(); defer { gate.finish.signal() }
+        let board = NSPasteboard(name: .init("BridgeLateNative-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        board.setString("preserved", forType: .string)
+        let before = board.changeCount
+        let manager = ScreenshotManager(clipboard: board, authorization: { true }, prepareImage: { gate.prepare($0) },
+            captureDirectory: FileManager.default.temporaryDirectory)
+        defer { manager.stop() }
+        var input = RuntimePolicyInput(); input.backend = .deviceHID
+        input.shortcutEnabled = true; input.screenshotEnabled = true
+        input.foreground = .init(processID: 1, bundleID: "fixture.A", mode: .macOS)
+        var policy = RuntimePolicyCoordinator()
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+        manager.noteNativeScreenshotShortcut()
+        input.paused = true
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+        input.paused = false
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("LateNative-\(UUID().uuidString).png")
+        defer { try? FileManager.default.removeItem(at: path) }
+        try Data([1]).write(to: path)
+        manager.acceptNativeScreenshot(path)
+        #expect(!gate.started && board.changeCount == before)
+        manager.noteNativeScreenshotShortcut()
+        manager.acceptNativeScreenshot(path)
+        for _ in 0..<500 where !gate.started { try await Task.sleep(for: .milliseconds(2)) }
+        #expect(gate.started)
+        gate.finish.signal()
+        for _ in 0..<500 where board.data(forType: .init("public.png")) == nil { try await Task.sleep(for: .milliseconds(2)) }
+        #expect(board.data(forType: .init("public.png")) != nil)
+    }
     @Test func permissionAndProcessingFailuresAreReportedWithoutClipboardChanges() async throws {
         let board = NSPasteboard(name: .init("BridgeProcessing-\(UUID().uuidString)"))
         defer { board.releaseGlobally() }
@@ -121,5 +283,20 @@ private final class CaptureJobFixture: ScreenshotCaptureJob, @unchecked Sendable
         for _ in 0..<10 { await Task.yield() }
         #expect(manager.status.lastResult == "timedOut" && board.changeCount == before)
         manager.stop()
+    }
+}
+
+private final class DelayedImagePreparation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var didStart = false
+    let finish = DispatchSemaphore(value: 0)
+    var started: Bool { lock.lock(); defer { lock.unlock() }; return didStart }
+    func prepare(_ url: URL) -> Result<ScreenshotImagePayload, ScreenshotFailure> {
+        lock.lock(); didStart = true; lock.unlock()
+        // Parallel model tests can occupy CI's executor for longer than five
+        // seconds. Keep the decoder held until the test releases it; retain a
+        // bounded fallback for a broken test, not a capture timeout simulation.
+        guard finish.wait(timeout: .now() + 60) == .success else { return .failure(.timedOut) }
+        return .success(.init(png: Data([137, 80, 78, 71])))
     }
 }

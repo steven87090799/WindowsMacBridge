@@ -3,21 +3,6 @@ public enum InputBackend: String, Codable, CaseIterable, Sendable {
     public var title: String { self == .deviceHID ? "裝置 HID 後端（需要 helper）" : "CGEventTap 快捷鍵" }
 }
 
-/// Foreground application classification describes a client, not the origin of incoming input.
-/// Choose the receiving role manually when the transport does not preserve provenance.
-public enum RemoteInputProfile: String, Codable, CaseIterable, Sendable {
-    case automatic, windowsReceiver, macReceiver, alreadyTranslated, sourcePassThrough
-    public var translates: Bool { self == .automatic || self == .windowsReceiver }
-    public var title: String {
-        switch self {
-        case .automatic: "本機／依 App 規則"
-        case .windowsReceiver: "接收原始 Windows 按鍵（此端轉譯）"
-        case .macReceiver: "接收原生 Mac 按鍵（原樣通過）"
-        case .alreadyTranslated: "來源已有 Bridge（此端原樣通過）"
-        case .sourcePassThrough: "傳送／通用控制來源（原樣通過）"
-        }
-    }
-}
 public enum KeyboardOwnership {
     public enum Owner: Sendable { case hid, eventTap, native }
     /// There is no reliable device ID in a public session EventTap. Never run a blind hybrid.
@@ -29,7 +14,6 @@ public struct RuntimePolicyInput: Equatable, Sendable {
     public var backend: InputBackend = .eventTap
     public var deviceScope: KeyboardScope = .allKeyboards
     public var foreground = ApplicationContext()
-    public var remoteProfile: RemoteInputProfile = .automatic
     public var paused = false, secureInput = false, sessionActive = true, manualPassThrough = false
     public var session: UInt64 = 0
     public var screenshotEnabled = false, shortcutEnabled = false
@@ -45,6 +29,9 @@ public struct RuntimePolicyInput: Equatable, Sendable {
 public struct RuntimePolicySnapshot: Equatable, Sendable {
     public let input: RuntimePolicyInput
     public let generation: UInt64
+    /// Changes at lifecycle/settings/ownership gaps, even when the input mailbox
+    /// coalesces several transitions into one delivered configuration.
+    public let modifierEpoch: UInt64
     /// TIS publishes its own layout change during a selection. Its work epoch follows
     /// host lifecycle/settings, without cancelling itself on that acknowledgement.
     public var sourceWorkPolicy: RuntimePolicyInput {
@@ -55,25 +42,45 @@ public struct RuntimePolicySnapshot: Equatable, Sendable {
         permitsInput && !input.manualPassThrough
     }
     public var permitsPhysicalNormalization: Bool {
-        input.shortcutEnabled && !input.hidReleasePending && !input.paused && !input.secureInput && input.sessionActive &&
-            (input.remoteProfile.translates || input.remoteProfile == .sourcePassThrough) && input.accessibility && input.posting
+        input.shortcutEnabled && !input.manualPassThrough && !input.hidReleasePending && !input.paused && !input.secureInput && input.sessionActive &&
+            input.accessibility && input.posting
     }
     public var permitsInput: Bool {
         input.shortcutEnabled && !input.hidReleasePending && !input.paused && !input.secureInput && input.sessionActive &&
-            input.remoteProfile.translates && input.accessibility && input.posting
+            input.accessibility && input.posting
     }
     public var permitsScreenshots: Bool {
-        permitsShortcuts && input.screenshotEnabled && input.foreground.mode == .macOS
+        permitsShortcuts && input.screenshotEnabled &&
+            (input.foreground.mode == .macOS || input.foreground.mode == .terminal || input.foreground.mode == .ide ||
+             (input.foreground.mode == .disabled && input.foreground.bundleID == "local.WindowsMacBridge"))
+    }
+    /// Several foreground changes may coalesce; a pause/session/security gap is
+    /// retained in modifierEpoch and must still force a neutral handoff.
+    public func preservesModifiers(from previous: Self) -> Bool {
+        guard generation != previous.generation, modifierEpoch == previous.modifierEpoch,
+              permitsShortcuts, previous.permitsShortcuts,
+              input.layoutSupported, !input.nativeRestorePending,
+              input.foreground.processID > 0, previous.input.foreground.processID > 0,
+              Self.hasContinuousKeyboardOwnership(input.foreground.mode),
+              Self.hasContinuousKeyboardOwnership(previous.input.foreground.mode) else { return false }
+        var normalized = input; normalized.foreground = previous.input.foreground
+        return normalized == previous.input
+    }
+    private static func hasContinuousKeyboardOwnership(_ mode: ApplicationMode) -> Bool {
+        mode == .macOS || mode == .terminal || mode == .ide
     }
 }
 public struct RuntimePolicyCoordinator: Sendable {
     public private(set) var current: RuntimePolicySnapshot?
     private var generation: UInt64 = 0
+    private var modifierEpoch: UInt64 = 0
     public init() {}
     public mutating func transition(_ input: RuntimePolicyInput) -> RuntimePolicySnapshot {
         if let current, current.input == input { return current }
         generation &+= 1
-        let next = RuntimePolicySnapshot(input: input, generation: generation)
+        let candidate = RuntimePolicySnapshot(input: input, generation: generation, modifierEpoch: modifierEpoch)
+        if current.map({ candidate.preservesModifiers(from: $0) }) != true { modifierEpoch &+= 1 }
+        let next = RuntimePolicySnapshot(input: input, generation: generation, modifierEpoch: modifierEpoch)
         current = next
         return next
     }
@@ -85,7 +92,7 @@ public enum RuntimeWakePlan: Equatable, Sendable {
     case stopped, periodic, deadline(Double)
     public static func make(input: RuntimePolicyInput, awaitingMappingNeutral: Bool,
                             deadline: Double?) -> Self {
-        if awaitingMappingNeutral || (input.shortcutEnabled && !input.paused && input.sessionActive && input.remoteProfile.translates) {
+        if awaitingMappingNeutral || (input.shortcutEnabled && !input.paused && input.sessionActive) {
             return .periodic
         }
         return deadline.map(Self.deadline) ?? .stopped

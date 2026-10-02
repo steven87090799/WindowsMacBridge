@@ -70,6 +70,24 @@ struct HIDTranslationTests {
         let external = output(&e)
         #expect(external.modifiers == 1 && !external.fn)
     }
+    @Test func manualPassThroughRestoresPhysicalFnAndControlInRawAndLegacyModes() {
+        for raw in [false, true] {
+            var e = engine(windowsKeyModifier: .command, builtIn: true, fnSwap: true)
+            e.configure(context: .init(processID: 10, bundleID: "test", mode: .macOS),
+                layoutSupported: true, finderEnabled: true, windowsKeyModifier: .command,
+                macBookFnControlSwap: true, transportOnly: raw)
+            _ = e.observe(device: 1, page: 7, usage: 0xe6, down: true)
+            _ = e.observe(device: 1, page: 7, usage: 0x13, down: true)
+            _ = e.observe(device: 1, page: 7, usage: 0x13, down: false)
+            _ = e.observe(device: 1, page: 7, usage: 0xe6, down: false)
+            #expect(e.manualPassThrough)
+            _ = e.observe(device: 1, page: 0xff, usage: 3, down: true)
+            let fn = output(&e); #expect(fn.fn && fn.modifiers == 0)
+            _ = e.observe(device: 1, page: 0xff, usage: 3, down: false)
+            _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)
+            let control = output(&e); #expect(!control.fn && control.modifiers == 1)
+        }
+    }
     @Test func releasingShortcutModifierCannotLeaveOrResurrectPlainKey() {
         var e = engine()
         _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)

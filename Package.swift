@@ -10,7 +10,8 @@ let package = Package(
         .executable(name: "WindowsMacBridge", targets: ["WindowsMacBridge"])
     ],
     targets: [
-        .target(name: "BridgeCore"),
+        .target(name: "BridgeWorkGate"),
+        .target(name: "BridgeCore", dependencies: ["BridgeWorkGate"]),
         .target(name: "HIDProtocol", dependencies: ["BridgeCore"]),
         .target(name: "InputSourceCore"),
         // The imported Carbon/TIS adapter is main-queue confined; keep its Swift 5
@@ -20,6 +21,8 @@ let package = Package(
         .target(name: "BridgePlatform", dependencies: ["BridgeCore", "HIDProtocol"],
                 resources: [.process("Resources")]),
         .executableTarget(name: "WindowsMacBridge", dependencies: ["BridgeCore", "BridgePlatform", "InputSourceCore", "InputSourceSupport"]),
+        // Offline codec measurement only; explicitly excluded from App packaging.
+        .executableTarget(name: "BridgeImageBenchmark", dependencies: ["BridgeCore", "BridgePlatform"], path: "Tools/ImageBenchmark"),
         .testTarget(name: "BridgeCoreTests", dependencies: ["BridgeCore"], resources: [.copy("Fixtures")]),
         .testTarget(name: "InputSourceCoreTests", dependencies: ["InputSourceCore", "BridgeCore"]),
         .testTarget(name: "BridgePlatformTests", dependencies: ["BridgeCore", "BridgePlatform", "HIDProtocol"])

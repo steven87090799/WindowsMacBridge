@@ -48,6 +48,13 @@ report::generic_desktop_input desktop(const WMBHIDState& state) {
     for (size_t i = 0; i < state.desktop_count; ++i) result.keys.insert(state.desktop_keys[i]);
     return result;
 }
+report::pointing_input pointing(const WMBPointingState& state) {
+    report::pointing_input result;
+    for (unsigned i = 0; i < 32; ++i) if (state.buttons & (1u << i)) result.buttons.insert(i + 1);
+    result.x = static_cast<uint8_t>(state.x); result.y = static_cast<uint8_t>(state.y);
+    result.vertical_wheel = static_cast<uint8_t>(state.wheel); result.horizontal_wheel = static_cast<uint8_t>(state.pan);
+    return result;
+}
 template <class Report> size_t encode(const Report& value, uint8_t* output, size_t capacity) {
     if (!output || capacity < sizeof(value)) return 0;
     std::memcpy(output, &value, sizeof(value));
@@ -64,7 +71,22 @@ struct WMBVirtualHID {
     // Caller owns serialization; the official service callbacks only touch status.
     WMBHIDState last{};
     bool has_last = false;
+    std::atomic<bool> pointing_enabled{false};
 };
+
+extern "C" size_t wmb_plan_pointing_motion(uint32_t buttons, int16_t x, int16_t y, int16_t wheel, int16_t pan,
+                                           WMBPointingState* reports, size_t capacity) {
+    const int maximum = std::max({std::abs(int(x)), std::abs(int(y)), std::abs(int(wheel)), std::abs(int(pan))});
+    const size_t count = std::max(1, (maximum + 126) / 127);
+    if (!reports || maximum > 1023 || capacity < count) return 0;
+    auto take = [](int16_t& remaining) { const int part = std::clamp(int(remaining), -127, 127); remaining -= part; return int16_t(part); };
+    for (size_t i = 0; i < count; ++i) reports[i] = {buttons, take(x), take(y), take(wheel), take(pan)};
+    return count;
+}
+extern "C" size_t wmb_encode_pointing(const WMBPointingState* state, uint8_t* buffer, size_t capacity) {
+    if (!state || std::max({std::abs(int(state->x)), std::abs(int(state->y)), std::abs(int(state->wheel)), std::abs(int(state->pan))}) > 127) return 0;
+    return encode(pointing(*state), buffer, capacity);
+}
 
 extern "C" uint64_t wmb_driver_version() {
     return type_safe::get(pqrs::karabiner::driverkit::driver_version::embedded_driver_version);
@@ -149,10 +171,11 @@ extern "C" WMBVirtualHID* wmb_virtual_hid_create() {
             service::virtual_hid_keyboard_parameters parameters;
             parameters.set_country_code(pqrs::hid::country_code::us);
             state->client->async_virtual_hid_keyboard_initialize(parameters);
+            if (state->pointing_enabled) state->client->async_virtual_hid_pointing_initialize();
         });
         state->client->driver_connected.connect([state](bool ready) {
             if (ready) state->status.fetch_or(WMB_DRIVER_CONNECTED);
-            else state->status.fetch_and(~(WMB_DRIVER_CONNECTED | WMB_KEYBOARD_READY));
+            else state->status.fetch_and(~(WMB_DRIVER_CONNECTED | WMB_KEYBOARD_READY | WMB_POINTING_READY));
         });
         state->client->virtual_hid_keyboard_ready.connect([state](bool ready) {
             if (ready) state->status.fetch_or(WMB_KEYBOARD_READY);
@@ -164,6 +187,10 @@ extern "C" WMBVirtualHID* wmb_virtual_hid_create() {
         state->client->driver_version_mismatched.connect([state](bool mismatch) {
             if (mismatch) state->status.fetch_or(WMB_DRIVER_MISMATCH);
             else state->status.fetch_and(~WMB_DRIVER_MISMATCH);
+        });
+        state->client->virtual_hid_pointing_ready.connect([state](bool ready) {
+            if (ready) state->status.fetch_or(WMB_POINTING_READY);
+            else state->status.fetch_and(~WMB_POINTING_READY);
         });
         auto fault = [state] {
             state->status.store(WMB_CONNECTION_FAULT);
@@ -187,6 +214,26 @@ extern "C" uint32_t wmb_virtual_hid_status(const WMBVirtualHID* client) {
     // Never keep a physical keyboard seized while output service replies are stalled.
     if (client->outstanding.load() > 0 && now_ns() - client->progress.load() > 500000000) return WMB_CONNECTION_FAULT;
     return client->status.load();
+}
+extern "C" void wmb_virtual_hid_enable_pointing(WMBVirtualHID* client) {
+    if (!client || client->pointing_enabled.exchange(true)) return;
+    try { client->client->async_virtual_hid_pointing_initialize(); }
+    catch (...) { client->status.store(WMB_CONNECTION_FAULT); }
+}
+extern "C" bool wmb_virtual_hid_post_pointing(WMBVirtualHID* client, uint32_t buttons, int16_t x, int16_t y, int16_t wheel, int16_t pan) {
+    if (!client) return false;
+    const auto status = wmb_virtual_hid_status(client);
+    if (!(status & WMB_POINTING_READY) || (status & (WMB_DRIVER_MISMATCH | WMB_CONNECTION_FAULT))) return false;
+    WMBPointingState sequence[9];
+    const auto count = wmb_plan_pointing_motion(buttons, x, y, wheel, pan, sequence, 9);
+    if (!count || client->outstanding.load() + count > 256) return false;
+    try {
+        for (size_t i = 0; i < count; ++i) {
+            if (client->outstanding.fetch_add(1) == 0) client->progress.store(now_ns());
+            client->client->async_post_report(pointing(sequence[i]));
+        }
+        return true;
+    } catch (...) { client->status.store(WMB_CONNECTION_FAULT); return false; }
 }
 extern "C" bool wmb_virtual_hid_post(WMBVirtualHID* client, const WMBHIDState* state) {
     if (!client || !wmb_validate_state(state)) return false;
@@ -219,6 +266,7 @@ extern "C" void wmb_virtual_hid_reset(WMBVirtualHID* client) {
     if (!client) return;
     try {
         client->client->async_virtual_hid_keyboard_reset();
+        if (client->pointing_enabled) client->client->async_virtual_hid_pointing_reset();
         client->has_last = false;
     } catch (...) { client->status.store(WMB_CONNECTION_FAULT); }
 }

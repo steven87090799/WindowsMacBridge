@@ -33,8 +33,9 @@ public struct BackendCapabilities: Sendable {
     public var consumerEvents: Bool
     public static let eventTap = Self(deviceIdentity: false, selectiveCapture: false,
                                      modifierRemapping: false, fnRemapping: false, consumerEvents: false)
-    public func supports(_ scope: KeyboardScope) -> Bool {
-        scope == .allKeyboards || (deviceIdentity && selectiveCapture)
+    public func supports(_ scope: KeyboardScope, preferences: [DeviceInputPreference] = []) -> Bool {
+        (scope == .allKeyboards || (deviceIdentity && selectiveCapture)) &&
+        (!preferences.prefix(16).contains(where: { $0.experience == .nativeMac }) || (deviceIdentity && selectiveCapture))
     }
     public var canReplaceRequestedProfile: Bool {
         deviceIdentity && selectiveCapture && modifierRemapping && fnRemapping && consumerEvents
@@ -42,7 +43,7 @@ public struct BackendCapabilities: Sendable {
 }
 
 public enum HIDCapturePolicy {
-    public static func requiresNativePassThrough(mode: ApplicationMode, layoutSupported: Bool) -> Bool {
-        mode == .remoteWindows || mode == .virtualMachine || mode == .game || mode == .disabled || !layoutSupported
+    public static func requiresNativePassThrough(mode: ApplicationMode, layoutSupported: Bool, transportOnly: Bool = false) -> Bool {
+        mode == .remoteWindows || mode == .virtualMachine || mode == .game || mode == .disabled || (!transportOnly && !layoutSupported)
     }
 }
