@@ -1,52 +1,319 @@
-# WindowsMacBridge 0.5.14（build 26）修復候選版
+# WindowsMacBridge
 
-Windows 快捷鍵與唯音／ABC 輸入法輔助整合在一個 macOS Menu Bar App。適用 Apple Silicon、macOS 14+。這次修復的根因、完整測試與未完成驗收見 [2026-09-30 修復報告](Docs/PreReleaseRepair-2026-09-30.md)。實體 HID、Universal Control、Remote、macOS 授權與安裝復原仍須驗收，**目前不宣稱可正式上線**。
+將 Windows 快捷鍵、MacBook 鍵位輔助、截圖與唯音／ABC 輸入法管理整合在同一個 macOS 選單列 App，以 Swift、AppKit、SwiftUI 與 macOS 原生 API 實作。
 
-## 使用與權限
+**系統需求：Apple Silicon、macOS 14 以上。** 目前 `main` 原始碼版本為 **0.5.14（build 26）修復候選版**；下載包版本以 [GitHub Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 為準。合併原始碼不代表已發布新版安裝包；實體 HID、Universal Control、遠端、TCC 授權與安裝復原仍需實機驗收，目前不宣稱已可正式上線或完整取代 Karabiner。
 
-一般 EventTap 模式將 App 放進 Applications 即可，不需 helper／Driver。新安裝開啟 Windows 快捷鍵、所有鍵盤、截圖自動複製與底層 ABC／U.S. 的中文快捷鍵；Finder 增強、亮度鍵開啟檔案、Alt+F4、永久刪除與 Win+R/I/Tab 預設關閉。既有設定保留。MacBook 預設交換本機內建 Fn／Ctrl，桌上型 Mac 預設關閉。
+本文介紹 `main` 已實作的功能與預設值，其他開發分支及未提交修正不列為本版功能。驗證紀錄見 [修復報告](Docs/PreReleaseRepair-2026-09-30.md)。
 
-授權清單由目前 App 的原生 API 查驗。前往設定按鈕只開啟 macOS 設定；綠勾需系統確認權限。App/helper 使用 ad-hoc 簽章，沒有 Apple 公證；若系統阻擋，使用系統提供的「仍要打開」。不要關閉 Gatekeeper／SIP。完整操作、唯音守護、登入與移除方式見 [UserGuide](Resources/UserGuide.md)。
+## 功能總覽
 
-## 快捷鍵與後端
+| 功能 | 可以做什麼 | 新安裝預設 |
+| --- | --- | --- |
+| Windows 一般快捷鍵 | Ctrl 複製、剪下、貼上、全選、復原、儲存、尋找、列印等 | 開啟 |
+| 瀏覽器快捷鍵 | 分頁、網址列、重新整理、書籤、上一頁／下一頁與分頁編號 | 隨 Windows 快捷鍵開啟 |
+| Windows 文字游標 | 單字移動／刪除、行首行尾、文件邊界與 Shift 選取 | 開啟 |
+| Finder 增強 | Enter 開啟、F2 改名、剪下移動、刪除、上一層與資料夾操作 | 關閉 |
+| Finder 右鍵路徑 | 顯示 POSIX 路徑、複製資料夾或選取項目完整路徑 | 需開啟 Finder 增強並核准擴充功能 |
+| Windows 系統操作 | Win+E 開 Finder、Win+L 鎖定、Ctrl+Shift+Esc 開活動監視器 | 隨 Windows 快捷鍵開啟 |
+| 額外 Win 操作 | Win+R 開 Spotlight、Win+I 開系統設定、Win+Tab 開 Mission Control | 三項各自關閉 |
+| Alt+F4 | 關閉目前視窗，保留 App 的未儲存內容提示 | 關閉 |
+| 截圖自動複製 | 框選、目前視窗、全螢幕擷取，存檔並複製 PNG | 開啟 |
+| MacBook Fn／Ctrl 交換 | 只交換本機內建鍵盤的 Fn／Globe 與左 Ctrl | MacBook 開啟；桌上型 Mac 關閉 |
+| App Profiles | 依 App 決定翻譯或穿透，保護 Terminal、IDE、遠端、VM 與遊戲 | 內建判定；Codex 聊天另有預設 |
+| 遠端／通用控制角色 | 手動指定在哪一端翻譯，避免重複轉換 | 本機／依 App 規則 |
+| 中文／唯音快捷鍵 | 在底層 ABC／U.S. 配置的輸入法，依實體鍵位翻譯快捷鍵 | 開啟 |
+| 唯音／ABC 守護與切換 | 保留使用者來源、明確切換、有界重試與暫停偵測 | 守護與切換熱鍵各自關閉 |
+| 裝置 HID 後端 | 接管支援的實體鍵盤，依裝置處理修飾鍵、Fn 與 consumer 鍵 | 選用；預設 EventTap |
+| 授權與登入啟動 | 權限狀態、設定入口、原生登入項目 | 截圖功能會註冊登入項目，可能需核准 |
+| 暫停、恢復與診斷 | 全域暫停、緊急穿透、計數、版本資訊與短期規則診斷 | 診斷關閉 |
 
-- Ctrl 快捷鍵、瀏覽器分頁與 Windows 文字導覽保留原有規則。Terminal／IDE 保護原生 Ctrl 語意，Remote／VM／Game 原樣通過。Codex 預設針對聊天文字；若使用內建 Terminal，改成 IDE 或移除該規則。
-- 自製 Alt+Tab 已移除。Tab 不被翻譯成自製切換器；原生 `⌘Tab` 與 `⌘\`` 由 macOS 處理。HID 的 Option／Command 裝置配置仍依實體 Win 鍵設定套用。
-- Finder Ctrl+X 以原生 Copy 建立 5 分鐘待移動狀態，開資料夾、上一層與切換路徑不取消；Ctrl+V 由 Finder 移動。剪貼簿改變、切 App、暫停或失效會取消。Delete 僅在確認檔案選取時轉為移到垃圾桶，文字／未知焦點保持前刪。永久刪除另有開關與逐次確認。
-- Alt+F4 只使用 Accessibility 按目前視窗的關閉按鈕，保留 App 的未儲存提示。無可用關閉按鈕時回報，沒有 Command+W／Q fallback。
-- HID 的亮度增加 consumer key 預設保持原樣。只有開啟獨立選項、Finder 增強已開且前景為本機 Finder，才轉成 Enter。
-- EventTap 沒有可靠的公開來源 device ID。HID 模式只由 helper 處理接管裝置，不啟動盲目的第二套 EventTap 翻譯。所有支援的簡單 keyboard descriptor 可接管，另保留內建／Apple 834 範圍；複合或無法安全接管的裝置維持原生，仍有覆蓋限制。
-- 後端交接等 helper 停止擷取回覆後才啟動新後端。逾時會保持新後端停用並顯示原因；放開所有按鍵再恢復。
+既有使用者的明確設定會保留，不會因更新全部重設。
 
-## 截圖與遠端
+## 安裝與開始使用
 
-兩個後端均支援 Win+Shift+S 框選、Alt+PrintScreen 目前視窗、Win+PrintScreen 全螢幕存檔，以及 PrintScreen。PrintScreen 可選框選或傳統全螢幕複製；完成後自動複製 PNG。EventTap 的 PrintScreen 使用鍵盤實際送出的 F13 位置，須實測鍵帽配置。
+1. 從 [Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 選擇下載包，先從選單列結束舊版。使用 DMG 時，將 `WindowsMacBridge.app` 拖到 `Applications`，再從「應用程式」開啟。
+2. 設定先顯示「授權」。依功能核准目前 App 的輔助使用、事件輸出及輸入監控；截圖相關授權也可在此檢查。系統要求重新開啟 App 時，依提示完成。
+3. 一般快捷鍵及原生 MacBook Fn／Ctrl 交換不需 helper／Driver。只有要使用裝置 HID 時，才使用整合 ZIP 的 `Install.command`。
+4. 先用 ABC 與可丟棄的文字文件試 `Ctrl+A/C/X/V/Z`，確認選單列顯示目前 App、Profile 與引擎狀態，再開啟需要的選用功能。
 
-暫停、停用、後端／session／generation／Secure Input 改變立即取消舊工作；逾時、權限、程序、磁碟、解碼與編碼失敗各有狀態。單一 capture slot 在工作真正結束前不接受新工作。圖片先檢查檔案、像素、尺寸、解碼記憶體預算；PNG 沿用原始編碼，不同時生成 TIFF。已完成的存檔保留。系統 `⇧⌘4` 保持原樣。
+App/helper 使用 ad-hoc 簽章，未經 Apple 公證。若 macOS 阻擋，使用系統提供的「仍要打開」流程；不要關閉 Gatekeeper／SIP。更新後簽章識別可能改變，需要重新核准目前 App。
 
-「遠端輸入角色」提供本機自動、接收原始 Windows、接收原生 Mac、來源已有 Bridge，以及傳送／Universal Control 來源。這是手動指定輸入語意，不猜來源。兩端都裝 Bridge 時，先決定哪端翻譯，另一端選穿透。Client 全螢幕、剪貼簿與快捷鍵轉送仍由 Client 控制；瀏覽器遠端分頁可使用專用瀏覽器並指定 Remote App 規則。
+「套用建議預設」會開啟 Windows／中文快捷鍵、選 EventTap／所有鍵盤、指定 Codex 為 Default macOS，並關閉 Finder 增強；保留其他 App 規則、Fn／Ctrl、截圖與其他選用功能的選擇，以及輸入法與登入設定。詳細操作見 [使用指南](Resources/UserGuide.md)。
 
-## 可靠性與資源
+## Windows 一般與文字快捷鍵
 
-統一 immutable runtime policy 綁定 backend、device scope、前景、remote role、pause、Secure Input、session、設定與 generation。輸入 callback 只處理有界 state／查表；AX、檔案、圖片、UI 與 native process 啟動在 callback 外。按鍵16裝置／256 press slots、動作16筆、log128筆／64 KiB，事件風暴只排一個 drain。保留 Secure Input、neutral recovery、session validation、heartbeat lease 與失聯釋放。
+以下需 Windows 快捷鍵開啟、輸入來源配置受支援及目前 App 使用 **Default macOS**。實際操作由接收 App 決定，例如 App 沒有列印或另存新檔選單時，映射不會替它新增功能。規則使用實體 ANSI 鍵位與精確修飾鍵，不會把所有 Ctrl 組合一律換成 Command。
 
-Fn／UserKeyMapping 在寫入前同步保存私人還原 journal；按鍵未放開時延後修改。正常關閉還原；force quit 後下次啟動恢復，不能宣稱 SIGKILL 後即時還原。更新 helper 使用 staging → verify → switch，正常失敗還原 App/helper/pin/服務狀態，SIGKILL 中止後下次執行安裝器先由私人 journal 復原；共用 Driver 版本不同時停止，舊 App 備份最多兩份。
+符號：`⌃`＝Control、`⌥`＝Option、`⌘`＝Command、`⇧`＝Shift。`Win` 表示設定中選擇的 Option 或 Command，`Alt` 使用另一個修飾鍵。MacBook 預設 Win=Command，桌上型 Mac 預設 Win=Option，仍須依實際鍵盤輸出調整。
+
+### 一般操作
+
+| Windows 按鍵 | macOS 輸出 | 常見用途 |
+| --- | --- | --- |
+| Ctrl+C／X／V | ⌘C／X／V | 複製／剪下／貼上 |
+| Ctrl+A | ⌘A | 全選 |
+| Ctrl+Z | ⌘Z | 復原 |
+| Ctrl+Y | ⇧⌘Z | 重做 |
+| Ctrl+S | ⌘S | 儲存 |
+| Ctrl+Shift+S | ⇧⌘S | 另存新檔或 App 對應操作 |
+| Ctrl+F | ⌘F | 尋找 |
+| Ctrl+P | ⌘P | 列印 |
+| Ctrl+O／N | ⌘O／N | 開啟／新增 |
+| Ctrl+W／Shift+W | ⌘W／⇧⌘W | 關閉分頁／視窗或 App 對應操作 |
+| Ctrl+, | ⌘, | App 設定 |
+| Ctrl+=／Shift+= | ⌘=／⇧⌘= | 放大或 App 對應操作 |
+| Ctrl+-／0 | ⌘-／0 | 縮小／重設縮放 |
+
+### 文字導覽與選取
+
+| Windows 按鍵 | macOS 輸出 | 用途 |
+| --- | --- | --- |
+| Ctrl+←／→ | ⌥←／→ | 按單字移動 |
+| Ctrl+Shift+←／→ | ⇧⌥←／→ | 按單字選取 |
+| Home／End | ⌘←／→ | 行首／行尾 |
+| Shift+Home／End | ⇧⌘←／→ | 選取至行首／行尾 |
+| Ctrl+Home／End | ⌘↑／↓ | 文件開頭／結尾 |
+| Ctrl+Shift+Home／End | ⇧⌘↑／↓ | 選取至文件開頭／結尾 |
+| Ctrl+Backspace／Delete | ⌥Backspace／Delete | 刪除前／後一個單字 |
+
+「Windows 文字游標」控制這組導覽規則，關閉後保留原鍵。一般表加上 Ctrl 文字導覽共 29 組既有規則，另有 4 組 Home／End 擴充。
+
+### 瀏覽器
+
+在辨識為瀏覽器的 Default macOS App，另套用 19 組規則：
+
+| Windows 按鍵 | macOS 輸出 | 常見用途 |
+| --- | --- | --- |
+| Ctrl+T／Shift+T | ⌘T／⇧⌘T | 新增／重開已關閉分頁 |
+| Ctrl+L | ⌘L | 網址列 |
+| Ctrl+R／Shift+R | ⌘R／⇧⌘R | 重新整理／強制重新整理 |
+| Ctrl+D | ⌘D | 加入書籤 |
+| Ctrl+Shift+B | ⇧⌘B | 書籤列或瀏覽器對應操作 |
+| Ctrl+Shift+N | ⇧⌘N | 私密視窗或瀏覽器對應操作 |
+| Alt+←／→ | ⌘[／] | 上一頁／下一頁 |
+| Ctrl+1–9 | ⌘1–9 | 選擇分頁，9 通常為最後分頁 |
+
+範圍由 [瀏覽器與相容性模式表](Sources/BridgePlatform/Resources/compatibility-applications.json) 判定。Safari／YouTube 的無修飾鍵 `F`、`Escape`、滑鼠與原生 `⌃⌘F` 不套用這些規則。快捷鍵原始表見 [WindowsCompatibilityRules.swift](Sources/BridgeCore/WindowsCompatibilityRules.swift)。
+
+## Finder 增強與右鍵路徑
+
+先開啟「Finder 加強」。檔案操作檢查前景、session 與焦點，文字欄位或未知焦點採保守處理；Finder 增強關閉時，`Ctrl+X` 不套用一般剪下翻譯。
+
+| Windows 按鍵 | Finder 行為 |
+| --- | --- |
+| Enter | 開啟選取項目（⌘O） |
+| F2 | 改名（Return） |
+| Ctrl+C／A／Z／Y | 複製／全選／復原／重做 |
+| Ctrl+X | 先執行原生 Copy，記住待移動狀態 |
+| Ctrl+V | 有有效待移動狀態時使用 Finder Move，否則一般貼上 |
+| Delete 或 Fn+Backspace | 確認檔案選取時移到垃圾桶；文字／未知焦點保持前刪 |
+| Shift+Delete | 永久刪除，需另開獨立開關且每次確認 |
+| Backspace | 確認檔案焦點時前往上一層（⌘↑） |
+| Alt+←／→ | 上一頁／下一頁 |
+| Ctrl+N／W | 新視窗／關閉視窗 |
+| Ctrl+Shift+N | 新增資料夾 |
+| Ctrl+L | 前往資料夾（⇧⌘G） |
+
+剪下狀態最多保留 **5 分鐘**；開啟資料夾、上一層或更換路徑仍可保留，剪貼簿變更、切換 App、暫停或狀態失效會取消。程式只記住剪貼簿版本／類型，搬移由 Finder 執行，不能以送出快捷鍵推定搬移成功。
+
+內附 **Finder Sync 擴充功能**提供「複製目前資料夾路徑」、「複製選取項目完整路徑」及「顯示目前資料夾路徑 → 複製此路徑」。顯示子選單優先使用選取項目的完整 POSIX 路徑；只有點擊複製才寫入剪貼簿。需 App 正在執行、Finder 增強開啟且 macOS 已核准擴充功能。
+
+HID 的「Finder 亮度增加鍵 → Enter」是獨立選項，預設關閉；只有同時開啟此選項、Finder 增強且前景為本機 Finder，才將支援的 consumer 亮度增加鍵轉成 Enter。
+
+## 系統與視窗操作
+
+| 按鍵 | 行為 | 開啟條件 |
+| --- | --- | --- |
+| Win+E | 開啟／啟用 Finder | Windows 快捷鍵、本機 Default macOS |
+| Win+L | ⌃⌘Q 鎖定螢幕 | Windows 快捷鍵、本機 Default macOS |
+| Ctrl+Shift+Esc | 開啟活動監視器 | Windows 快捷鍵、本機 Default macOS |
+| Win+R | ⌘Space 開 Spotlight | 另開 Win+R |
+| Win+I | 開啟系統設定 | 另開 Win+I |
+| Win+Tab | ⌃↑ 開 Mission Control | 另開 Win+Tab |
+| Alt+F4 | 按目前視窗的 Accessibility 關閉按鈕 | 另開 Alt+F4 |
+
+Win+E/L/R/I/Tab 系統規則使用左側 Win，右側同組修飾鍵同時按住時不套用。Spotlight／Mission Control 使用系統預設快捷鍵，若改過系統設定，需自行確認。
+
+Alt+F4 保留接收 App 的未儲存內容提示；找不到可用關閉按鈕會顯示原因，沒有 Command+W／Q fallback。自製 Alt+Tab 切換器已移除，使用 macOS 原生 `⌘Tab` 切 App、Command＋反引號（``⌘` ``）切同一 App 的視窗。HID 的 Option／Command 配置讓接管裝置的實體 Alt+Tab 使用原生切換器，仍須核對實際鍵位。
+
+## 截圖與自動複製
+
+「截圖自動複製」預設開啟。EventTap 與 HID 均有對應入口；HID 由 helper 傳送動作，不再啟動第二套 EventTap 截圖攔截。
+
+| Windows 按鍵 | 截圖方式 |
+| --- | --- |
+| Win+Shift+S | 框選區域 |
+| Alt+PrintScreen | 目前視窗 |
+| Win+PrintScreen | 全螢幕存檔並複製 |
+| PrintScreen | 預設框選，可改為傳統全螢幕複製 |
+
+完成後存成 PNG 並複製至剪貼簿，可用 `⌘V` 貼上。存檔位置採 macOS 截圖設定，未設定或該目錄不可寫時回到桌面。EventTap 的 PrintScreen 對應 F13 位置，需核對鍵盤實際輸出。
+
+`Escape` 取消不改剪貼簿。`Ctrl+Shift+S` 仍依 App 規則處理，原生 `⇧⌘4` 保持系統行為。關閉功能會移除截圖攔截。
+
+每次只接受一輪截圖，最多 120 秒；停用、暫停、後端／session／設定世代或 Secure Input 改變會取消舊工作，已完成存檔保留。圖片先檢查檔案、尺寸、像素與記憶體預算，再複製 PNG。權限、程序、磁碟、解碼與編碼失敗各有結果；反覆 Event Tap 停用會停止自動重試，可放開按鍵後重開功能重新檢查。
+
+## MacBook 內建 Fn／Ctrl 交換
+
+以原生 HID 鍵盤服務，只交換**本機實體內建鍵盤**的 Fn／Globe 與左 Ctrl，排除外接鍵盤及通用控制虛擬服務。MacBook 新安裝預設開啟，桌上型 Mac 預設關閉；舊設定有明確選擇時保留。
+
+此功能不需 helper／Driver。設定顯示已交換、等待鍵盤或衝突，並可「重新檢查鍵盤模式」。按鍵仍按住時延後變更或還原；其他工具占用 Fn／Ctrl 時保守停止，不覆蓋其映射。
+
+關閉、全域暫停或正常退出會還原本程式的映射。寫入前保存私人還原 journal，強制結束後可於下次啟動復原，不能宣稱 SIGKILL 後立即還原。選 HID 時先還原原生交換，再由 helper 處理接管的內建鍵盤。Universal Control 兩個方向的實體 Ctrl／Fn、中文組字及睡眠恢復仍需實測。
+
+## App Profiles 與遠端／通用控制
+
+依前景 App 的 Bundle ID、可執行檔路徑及內建模式表判定。可從最近使用 App 指定 Profile，或選擇其他 `.app` 加入；變更立即儲存，移除自訂規則後回到內建判定。
+
+| Profile | 用途 |
+| --- | --- |
+| Default macOS | 本機 Windows 快捷鍵翻譯，手動指定會覆寫內建保護 |
+| Terminal | 保護 Ctrl+C／D／Z 等 shell 按鍵 |
+| IDE | 保護編輯器、除錯器與內嵌終端機的原生 Ctrl |
+| Remote Session | 遠端 Client 原樣通過，停止本機動作與輸入法切換 |
+| Virtual Machine | VM 原樣通過，輸入捕捉由 VM 決定 |
+| Game | 遊戲原樣通過，停止本機動作與輸入法切換 |
+| Disabled | 不套用本機翻譯或輸入法守護 |
+
+內建判定涵蓋 Terminal、iTerm2、Warp、Ghostty、Windows App／Microsoft Remote Desktop、Jump Desktop、Parsec、AnyDesk、RustDesk、VMware、Parallels、UTM、VS Code、Xcode、JetBrains 與 Steam 等，見 [App 清單](Sources/BridgePlatform/Resources/applications.json) 與 [相容性模式表](Sources/BridgePlatform/Resources/compatibility-applications.json)。清單存在表示有保護規則，不代表每個 Client 已完成驗收。
+
+**Codex 新安裝預設 Default macOS，適用聊天與文字框。** 使用內建 Terminal 時改成 IDE 或移除 Codex 規則，保留 Ctrl+C 的 shell 意義。重啟不會重新加入已移除的規則，重新套用建議預設才會加入。
+
+本版另有全域「遠端／通用控制輸入角色」：
+
+| 角色 | 此端處理方式 |
+| --- | --- |
+| 本機／依 App 規則 | 使用上述本機判定 |
+| 接收原始 Windows | 由此端翻譯收到的 Windows 按鍵 |
+| 接收原生 Mac | 穿透已符合 Mac 語意的按鍵 |
+| 來源已有 Bridge | 穿透，避免再次翻譯 |
+| 傳送／Universal Control 來源 | 穿透，將翻譯交給另一端 |
+
+這是**手動指定輸入語意**，不能自動辨識每筆事件的實體／遠端來源。兩端都安裝時需選一端翻譯；本版沒有逐遠端來源的自動路由。瀏覽器遠端分頁可用專用瀏覽器並指定 Remote Profile。Alt+Tab、Ctrl+Alt+Delete、全螢幕與剪貼簿轉送仍由遠端 Client 控制。
+
+## 唯音與輸入法管理
+
+唯音本體需另行安裝，Windows 快捷鍵與輸入法守護各自有開關。中文快捷鍵選項允許底層 ABC／U.S. 的輸入來源按實體鍵位翻譯，不讀組字內容，也不能可靠判斷選字狀態；有衝突時可關閉，只在 ABC／U.S. 使用翻譯。
+
+| 功能 | 行為 |
+| --- | --- |
+| 輸入法守護 | 監聽來源通知，保留使用者從系統切換的來源，對程式自己的明確切換做有界重試 |
+| 唯音繁體／ABC 按鈕 | 明確選擇來源，受暫停、session、受保護 App 與 Secure Input 約束 |
+| 切換快捷鍵 | 獨立開關，啟用後切換唯音／ABC；註冊衝突時顯示狀態並嘗試保留原組合 |
+| 暫停自動偵測 | 5／15／30 分鐘、1 小時或直到手動恢復，只暫停守護，Windows 快捷鍵照常 |
+| 重新偵測／來源診斷 | 重新尋找來源，顯示來源 ID、切換結果與不可用原因 |
+| 修正延遲 | 200–1200 ms，預設 400 ms，調整守護重試，不增加快捷鍵翻譯延遲 |
+| 啟動等待 | 0–5000 ms，預設 1500 ms，等待登入時輸入法服務就緒 |
+| 持久統計 | 自動修正、切回唯音、保留外部切換、失敗、Secure Input 等待、成功及恢復時間 |
+| 記憶體診斷 | 開啟該頁或手動重新整理時量測 Resident／Physical footprint |
+
+切換熱鍵有 `⌃⌥⌘Space`（預設）、`⌃⌥⇧Space`、`⌃⌘Space`、`⌥⌘Space` 四種組合。守護與熱鍵新安裝皆關閉。
+
+重新啟用、恢復偵測、重新偵測、喚醒及重啟採用當前來源，不強制切回唯音。偵測暫停保存絕對截止時間，重啟、更新或睡眠不重新倒數。首次使用會一次性匯入舊唯音助手的六個統計欄位，不匯入舊設定或啟動舊 App；近期恢復紀錄最多 20 筆。
+
+## 輸入後端與選用 HID 安裝
+
+| 項目 | EventTap（預設） | 裝置 HID（選用） |
+| --- | --- | --- |
+| 一般／瀏覽器／Finder／截圖入口 | 有 | 有，由 helper 與主 App 分工 |
+| 可靠逐實體裝置識別與接管 | 無，使用所有鍵盤 | 依範圍與安全 descriptor 擷取 |
+| Option／Command 裝置配置 | 不更改全域修飾鍵 | 對接管裝置依 Win 配置處理 |
+| MacBook Fn／Ctrl | 獨立原生鍵盤映射 | helper 處理接管的內建鍵盤 |
+| consumer 亮度增加 → Enter | 無 | Finder 的獨立選用功能 |
+| 安裝 helper／Driver | 不需要 | 需要管理員安裝及 macOS 核准 |
+
+HID 可選「所有支援的鍵盤」或「內建／Apple VID 1452、PID 834」。本版支援安全的簡單 keyboard descriptor，排除虛擬、滑鼠、multitouch、複合或未知／不完整描述，最多 16 個服務。EventTap 選內建限定範圍時會停止翻譯，因其不能可靠辨識來源裝置。
+
+使用整合 ZIP 的 `Install.command` 安裝 App、root helper 與官方 VirtualHID 8.6.0，依 macOS 提示核准 Driver，並給 helper 自己的輸入監控權限。App 內 Helper／Driver Ready 與接管數表示執行狀態，仍不等於實體鍵盤已驗收。已有不同版本共用 Driver 時停止，不自動升降版。
+
+後端交接先等 helper 停止擷取回覆，逾時保留新後端停用。受保護情境、Secure Input、session 不可用、失聯或 Driver 停滯會停止／釋放擷取，回到本機等待實體按鍵放開再接管；HID 不對同一按鍵再啟動一套 EventTap 翻譯。
+
+更新以 staging、checksum／簽章／版本／controller pin 驗證後切換；一般失敗嘗試回復 App/helper/pin/服務，最多保留兩份 App 備份。中止時保留私人復原 journal，下次執行安裝器先復原；共用 Driver 與 DriverKit activation 的副作用仍需實測。
+
+停止可用選單列暫停／結束，App 無回應時使用 `Stop.command`。`Uninstall.command` 移除本工具 helper 與 launchd 註冊，保留 App、使用者設定、備份與共用官方 Driver；Driver 移除依原廠流程處理。見 [HID 安裝指南](Resources/Installer/READ-ME-FIRST.md) 與 [HID 架構](Docs/HIDIntegration.md)。
+
+## 授權、登入、暫停與恢復
+
+授權頁以目前 App 的原生 API 顯示輔助使用、事件輸出、App 輸入監控、螢幕錄製、Finder 擴充與登入項目，HID 另列 helper 輸入監控。啟動、開啟設定、返回前景及手動「重新檢查」時更新；「前往開啟」只開系統設定，必須由 macOS 確認取得後才顯示綠勾。
+
+登入啟動使用原生登入項目，可能需系統核准。截圖功能會註冊登入項目，關閉時只移除由此功能新增的註冊，建議先將 App 放在 `/Applications`。
+
+- **全域暫停**：選單列提供 5／15 分鐘、1 小時或直到 App 重啟，停止快捷鍵、截圖、Finder、Fn／Ctrl 與輸入法工作。
+- **恢復／重啟引擎**：取消暫停與手動穿透，重新檢查並嘗試啟動。
+- **緊急穿透**：右 Option+P 切換；Control+Option+Command+P 緊急暫停。HID 在 Remote／VM／Game 原生鍵流不攔截這些熱鍵，請用選單列暫停／結束。
+- **安全恢復**：Secure Input、鎖屏、睡眠、session 變動或未知修飾鍵狀態期間保守停止，恢復時等待所有按鍵放開，不嘗試繞過安全輸入。
+- **狀態圖示**：雙向箭頭表示 Windows Mode 啟用，雙直線表示暫停／停用；實際翻譯狀態看目前 App、Profile 與後端。
+
+## 診斷與隱私
+
+診斷頁提供版本／Build、UTC 編譯時間、Git revision、原始碼狀態與 Bundle ID，並可複製版本資訊；也顯示目前 App/Profile、後端、Secure Input、Finder、Fn／Ctrl、截圖結果、事件計數與最近規則。
+
+「5 分鐘診斷」預設關閉，最多 128 筆規則 ID、App 與處理時間只存在記憶體，關閉時清除。HID 提供計數與最近命中規則；最大時間僅量測引擎 callback，不能當作完整 OS／App／遠端延遲或長期效能保證。
+
+內建命令列診斷入口：
+
+```sh
+/Applications/WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge --version
+/Applications/WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge --self-check
+/Applications/WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge --diagnose-permissions
+/Applications/WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge --diagnose-input-sources
+/Applications/WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge --diagnose-backend
+```
+
+`--self-check` 檢查內附模式表與 Finder 擴充版本，不啟動 Event Tap 或擷取。CLI 權限檢查可能使用啟動 Terminal 的 TCC 身分，執行中 App 的授權頁才是該 App 的判定依據。
+
+`scripts/monitor-runtime.py` 是另行執行的唯讀量測工具，記錄 App 存活、PID、版本、累積 CPU、同 PID 區間 CPU、RSS 與定期 Physical footprint，可另選 Finder 擴充或系統總量，不自動啟動、停止或更新 App。範例（10 分鐘）：
+
+```sh
+python3 scripts/monitor-runtime.py --duration-seconds 600 --interval-seconds 60 \
+  --footprint-every 5 --phase idle --output /tmp/WindowsMacBridge-runtime.csv
+```
+
+鍵盤事件留在本機，不網路上傳，不保存普通打字、密碼或 OTP，不讀既有剪貼簿 payload。Finder 只用剪貼簿版本／類型，以及有界 AX role／parent 與檔案 URL metadata 確認焦點，沒有文件文字或路徑歷史。右鍵複製由使用者明確觸發，截圖僅處理本次新產生的圖片。日誌在 `~/Library/Logs/WindowsMacBridge/`，守護日誌最多兩個約 512 KiB 檔案。
 
 ## 建置與測試
 
-需要 Swift 6 工具鏈。主 App 無第三方 Swift 套件；helper 使用固定 checksum 的官方 VirtualHID SDK。腳本從 Git clone 或沒有 `.git` 的 ZIP 均能建置；ZIP 記錄 `archive` source state，可用合法十六進位 `SOURCE_REVISION` 指定來源。建置輸出在 `~/Library/Caches/WindowsMacBridge`，指標在 `build/`。
+需要 macOS 與 Swift 6 工具鏈。主 App 無第三方 Swift 套件；HID helper 使用固定 checksum 的官方 VirtualHID SDK。腳本可從 Git clone 或無 `.git` 的來源 ZIP 建置；ZIP 記錄 `archive` source state，可用合法十六進位 `SOURCE_REVISION` 指定來源版本。
 
 ```sh
+# 核心與平台測試
 bash scripts/test.sh
 bash scripts/test.sh -c release
 python3 -m unittest discover -s Tests/InstallerTests -v
 python3 -m unittest discover -s Tests/MonitoringTests -v
+
+# 建置 App 與一般 DMG
 bash scripts/build-app.sh
-bash scripts/build-hid-helper.sh
 bash scripts/package-app-dmg.sh
+
+# 建置 helper、離線測試與 HID 整合 ZIP
+bash scripts/build-hid-helper.sh
 bash scripts/package-hid-release.sh
 ```
 
-App 使用明確 resource bundle allowlist，Finder extension Release 預設 `-O`，可用 `FINDER_RELEASE_OPTIMIZATION=-Osize` 比較。helper build 與 self-check 不安裝或啟動 Driver。HID 安裝與授權見 [READ-ME-FIRST](Resources/Installer/READ-ME-FIRST.md)，架構見 [HIDIntegration](Docs/HIDIntegration.md)，實機步驟見 [AcceptanceGuide](Resources/AcceptanceGuide.md)。
+建置輸出在 `~/Library/Caches/WindowsMacBridge`，`build/` 保留輸出指標，下載包在 `build/download/`。App 只打包 allowlist 的 resource bundle；Finder extension Release 預設 `-O`，可用 `FINDER_RELEASE_OPTIMIZATION=-Osize` 比較。helper build／self-check 不安裝或啟動 Driver。
 
-鍵盤事件不網路上傳，不保存密碼／OTP／普通打字，不讀既有 Clipboard payload。Finder focus 使用有界 AX role/parent 與一筆 file URL metadata 確認選取，沒有保存 URL 歷史；路徑選單只有使用者點擊複製才寫 Clipboard。截圖僅處理這次新產生的圖片。保留 [VChewingGuard MIT](Resources/Licenses/VChewingGuard.txt)、官方 SDK／Driver 與 vendor 授權聲明。
+GitHub Actions 對 PR 與 `main` 執行 macOS 測試、Release 回歸、安裝器及量測工具測試，並建置 App、DMG 與 HID 整合包。CI 通過表示該次自動檢查成功，不代表 Release 已發布或實機相容性完成。
+
+## 架構、限制與相關文件
+
+`BridgeCore` 負責純規則、修飾鍵與按鍵帳本、Finder／截圖／輸入法 policy；`BridgePlatform` 負責 macOS API、EventTap、HID client、設定、截圖與動作；`InputSourceCore`／`InputSourceSupport` 負責輸入來源；主 App 負責選單列與設定，Finder Sync 負責右鍵路徑。
+
+輸入 callback 只處理有界狀態及查表，AX、圖片、檔案、程序啟動與 UI 工作在 callback 外。HID 帳本最多 16 裝置／256 press slots、動作 inbox 16 筆、診斷 log 128 筆／64 KiB，保留 neutral recovery、session validation、heartbeat lease 與失聯釋放。
+
+EventTap 沒有可靠逐裝置識別，HID 有 descriptor 覆蓋限制。ANSI／ISO／JIS、Bluetooth、consumer 服務、Caps Lock／LED、中文組字、跨機與遠端、撤權、強制結束、睡眠恢復、端到端延遲及長期資源使用仍須依情境驗收。離線測試、綠色 CI 與 Ready 狀態不等於實體輸入路徑已確認。
+
+| 文件 | 內容 |
+| --- | --- |
+| [使用指南](Resources/UserGuide.md) | 完整操作、預設值、權限與移除 |
+| [實機驗收](Resources/AcceptanceGuide.md) | 鍵盤、Finder、截圖、輸入法、遠端與恢復 |
+| [修復報告](Docs/PreReleaseRepair-2026-09-30.md) | 本版變更、測試證據與未完成驗收 |
+| [架構](Docs/Architecture.md) | 輸入層次與安全邊界 |
+| [HID 整合](Docs/HIDIntegration.md) | helper、XPC、Driver、擷取與安裝 |
+| [HID 安裝指南](Resources/Installer/READ-ME-FIRST.md) | 核准、停止、復原與移除 |
+| [專案整合](Docs/ProjectIntegration.md) | 唯音助手與快捷鍵整合 |
+| [Karabiner 對照](Docs/KarabinerReplacement.md) | 規則遷移與後端限制 |
+| [驗證說明](Docs/Validation.md) | 自動測試與人工驗收分界 |
+
+沿用部分唯音助手實作並保留 [VChewingGuard MIT 授權](Resources/Licenses/VChewingGuard.txt)。VirtualHID SDK／Driver 與相依授權保留於 [第三方授權目錄](Resources/Licenses/VirtualHID) 及 [來源清單](Resources/Licenses/VirtualHID/sources.json)。
