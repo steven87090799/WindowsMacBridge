@@ -28,6 +28,25 @@ bridge_preserve_stage=0
 bridge_journal_tmp=''
 bridge_driver_changed=0
 [[ ! -d "$bridge_root" ]] || bridge_root_existed=1
+bridge_restore_application() {
+    local bridge_restore="$bridge_stage/retired-application.app" bridge_rejected
+    if [[ "$bridge_app_saved" == 1 ]]; then
+        if [[ ! -d "$bridge_restore" ]]; then
+            # Older interrupted transactions may only have the verified backup.
+            # Reconstruct outside /Applications before publishing a complete App.
+            bridge_restore="$(/usr/bin/mktemp -d "$bridge_stage/restore.XXXXXX")/WindowsMacBridge.app"
+            /usr/bin/ditto "$bridge_stage/previous/WindowsMacBridge.app" "$bridge_restore" || return 1
+        fi
+        /usr/bin/codesign --verify --strict "$bridge_restore" || return 1
+    fi
+    if [[ -e "$bridge_app" ]]; then
+        bridge_rejected="$(/usr/bin/mktemp -d "$bridge_stage/rejected.XXXXXX")"
+        /bin/mv "$bridge_app" "$bridge_rejected/WindowsMacBridge.app" || return 1
+    fi
+    if [[ "$bridge_app_saved" == 1 ]]; then
+        /bin/mv "$bridge_restore" "$bridge_app" || return 1
+    fi
+}
 bridge_rollback() {
     local bridge_failed=0 bridge_name bridge_destination
     /bin/launchctl bootout system "$bridge_daemon" 2>/dev/null || true
@@ -37,10 +56,7 @@ bridge_rollback() {
         /bin/launchctl bootout system "$bridge_driver_daemon" 2>/dev/null || true
     fi
     if [[ "$bridge_app_changed" == 1 ]]; then
-        /bin/rm -rf "$bridge_app" || bridge_failed=1
-        if [[ "$bridge_app_saved" == 1 ]]; then
-            /usr/bin/ditto "$bridge_stage/previous/WindowsMacBridge.app" "$bridge_app" || bridge_failed=1
-        fi
+        bridge_restore_application || bridge_failed=1
     fi
     for bridge_name in BridgeHIDHelper.app Licenses controller.plist; do
         bridge_destination="$bridge_root/$bridge_name"
@@ -172,9 +188,6 @@ source "$bridge_payload/DriverTransaction.sh"
 for bridge_path in "$bridge_root" "$bridge_app" "$bridge_daemon" "$bridge_driver_daemon"; do
     [[ ! -L "$bridge_path" ]] || { echo "Symlink install destination rejected: $bridge_path" >&2; exit 1; }
 done
-if [[ -e "$bridge_app" ]]; then
-    [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bridge_app/Contents/Info.plist")" == 'local.WindowsMacBridge' ]] || exit 1
-fi
 if [[ -d "$bridge_root" ]]; then
     [[ "$(/usr/bin/stat -f '%u' "$bridge_root")" == 0 ]] || { echo 'Untrusted helper directory owner.' >&2; exit 1; }
     bridge_permissions="$(/usr/bin/stat -f '%Lp' "$bridge_root")"
@@ -209,6 +222,10 @@ bridge_verify_shared_driver() {
 }
 
 bridge_recover_interrupted
+# Recovery must precede this check: a failed old copy may have no Info.plist.
+if [[ -e "$bridge_app" ]]; then
+    [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bridge_app/Contents/Info.plist")" == 'local.WindowsMacBridge' ]] || exit 1
+fi
 # The driver package is the pinned, notarized official binary. Package version,
 # DriverKit version and daemon protocol are separate; never downgrade a shared driver.
 [[ "$(/usr/bin/shasum -a 256 Driver/Karabiner-DriverKit-VirtualHIDDevice-8.6.0.pkg | /usr/bin/cut -d ' ' -f 1)" == ff8c7fdc5e25387c7805fc7509a0fa9cf98f69ba582704f717fddcae47424387 ]] || exit 1
@@ -237,7 +254,9 @@ done
 "$bridge_stage/next/BridgeHIDHelper.app/Contents/MacOS/BridgeHIDHelper" --controller-pin \
     "$bridge_stage/next/WindowsMacBridge.app" > "$bridge_stage/next/controller.plist"
 /usr/sbin/chown -R root:wheel "$bridge_stage/next"
-/bin/chmod -R go-w "$bridge_stage/next"
+# Finish ownership and public-software permissions in the private staging area.
+# macOS App Management may reject even root chmod/chown after App publication.
+/bin/chmod -R a+rX,go-w "$bridge_stage/next"
 /usr/bin/codesign --verify --strict "$bridge_stage/next/WindowsMacBridge.app"
 /usr/bin/codesign --verify --strict "$bridge_stage/next/BridgeHIDHelper.app"
 for bridge_name in BridgeHIDHelper.app Licenses controller.plist; do
@@ -284,16 +303,10 @@ if [[ -d "$bridge_app" ]]; then
 fi
 bridge_app_changed=1
 /bin/mv "$bridge_stage/next/WindowsMacBridge.app" "$bridge_app"
-/usr/sbin/chown -R root:wheel "$bridge_app"
-# App resources (including the embedded rollback package) are public software.
-# A source file downloaded with mode 600 must not become root-only after copy.
-/bin/chmod -R a+rX,go-w "$bridge_app"
 for bridge_name in BridgeHIDHelper.app Licenses; do
     /bin/rm -rf "$bridge_root/$bridge_name"
     /bin/mv "$bridge_stage/next/$bridge_name" "$bridge_root/$bridge_name"
 done
-/usr/sbin/chown -R root:wheel "$bridge_root/BridgeHIDHelper.app"
-/bin/chmod -R a+rX,go-w "$bridge_root/BridgeHIDHelper.app"
 /usr/bin/install -o root -g wheel -m 644 local.WindowsMacBridge.HIDHelper.plist "$bridge_daemon"
 /usr/bin/codesign --verify --strict "$bridge_app"
 /bin/mv "$bridge_stage/next/controller.plist" "$bridge_root/controller.plist"

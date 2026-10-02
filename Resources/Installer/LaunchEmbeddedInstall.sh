@@ -15,7 +15,7 @@ bridge_finish_setup() {
     if [[ "$bridge_result" != 0 ]]; then
         /usr/bin/osascript - "$bridge_log" <<'APPLESCRIPT' || true
 on run arguments
-    display alert "背景元件安裝尚未完成" message ("可能需要核准 Driver、重新啟動或處理安裝錯誤。請勿將此狀態當作已安裝。記錄：" & item 1 of arguments) as critical
+    display alert "背景元件安裝尚未完成" message ("背景元件準備失敗。請保留這份安裝記錄以確認原因：" & item 1 of arguments) as critical
 end run
 APPLESCRIPT
         # Auto-install must not reopen after Cancel and repeat authentication.

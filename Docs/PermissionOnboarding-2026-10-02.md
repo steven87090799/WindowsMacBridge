@@ -24,3 +24,9 @@ production code 另有兩個造成多個授權提示的問題：第一列在一�
 截圖資料夾可讀之前不啟動截圖工作，避免剛開啟第一、二項時順便讀取 Desktop。第八列讀取成功後僅保存「目前 App code hash＋資料夾」的重新檢查範圍，不保存綠燈；下次啟動同一簽章才再做一次原生讀取，新版簽章或新位置不沿用。讀取失敗保持未取得並清除舊範圍。
 
 另加入 App 返回前景的一次性通知檢查（正常 stop 會移除 observer），保留既有五分頁及八列。完整單一 App 現在包成 DMG，內有 App 與 Applications 捷徑；不再提供缺少背景元件的同名 App-only DMG。從磁碟映像直接執行時只提醒先拖入 Applications，不送出背景安裝要求。拖入後首次開啟才處理內含元件。
+
+## 2026-10-03 安裝中断修正
+
+實際安裝 0.5.18 (37) 時，App 已移入 /Applications 後的 chmod 收到 Operation not permitted；TCC 記錄同時顯示 SystemPolicyAppBundles 請求失敗。回復直接 ditto 到受保護的 App 路徑也失敗，留下不完整的 App 與受保護回復快照。這不是鍵盤／Driver 權限未申請造成的提示。
+
+0.5.19 (38) 在 root 暫存區完成 ownership 與 a+rX,go-w，再移動完整 App；回復優先移回完整舊 App，舊交易僅有備份時也先在暫存區重建。恢復流程先核對受保護快照，再檢查目的 App 的 Info.plist，避免不完整目的端阻止回復。新增 App 內容修改遭拒與不完整目的 App 的 regression fixtures；依使用者要求不在本機執行測試套件。

@@ -5,8 +5,8 @@
     <key>CFBundleName</key><string>WindowsMacBridge HID Helper</string>
     <key>CFBundleExecutable</key><string>BridgeHIDHelper</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.5.18</string>
-  <key>CFBundleVersion</key><string>37</string>
+  <key>CFBundleShortVersionString</key><string>0.5.19</string>
+  <key>CFBundleVersion</key><string>38</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
 </dict></plist>
