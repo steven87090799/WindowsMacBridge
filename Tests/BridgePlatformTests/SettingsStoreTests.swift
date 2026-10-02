@@ -78,6 +78,23 @@ import BridgePlatform
         #expect(SettingsStore(defaults: defaults).settings == store.settings)
     }
 
+    @Test(arguments: [true, false]) func oneClickSetupEnablesFeaturesAndPreservesPerAppChoices(_ builtIn: Bool) {
+        let (name, defaults) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = SettingsStore(defaults: defaults)
+        store.update {
+            $0.enabled = false; $0.inputBackend = .eventTap; $0.screenshotAutoCopy = false
+            $0.windowsKeyModifier = .option; $0.overrides["custom.remote"] = .remoteWindows
+        }
+        store.prepareOneClickSetup(hasBuiltInAppleKeyboard: builtIn)
+        #expect(store.settings.enabled && store.settings.inputBackend == .deviceHID)
+        #expect(store.settings.screenshotAutoCopy && store.settings.finderEnabled)
+        #expect(store.settings.winRunEnabled && store.settings.winSettingsEnabled && store.settings.winTaskViewEnabled)
+        #expect(!store.settings.finderBrightnessEnterEnabled && store.settings.macBookFnControlSwap == builtIn)
+        #expect(store.settings.windowsKeyModifier == .option && store.settings.overrides["custom.remote"] == .remoteWindows)
+        #expect(SettingsStore(defaults: defaults).settings == store.settings)
+    }
+
     @Test func screenshotChoicePersistsAndPresetDoesNotResetIt() {
         let (name, defaults) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: name) }

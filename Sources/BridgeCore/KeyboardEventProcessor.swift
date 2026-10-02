@@ -50,7 +50,8 @@ public struct KeyboardEventProcessor: Sendable {
                                    winTaskViewEnabled: Bool = false,
                                    nativeAppSwitchEnabled: Bool = false,
                                    screenshotEnabled: Bool = false,
-                                   printScreen: PrintScreenBehavior = .snipping) {
+                                   printScreen: PrintScreenBehavior = .snipping,
+                                   preservingModifiersOnAppChange: Bool = false) {
         let changedContext = context.processID != newContext.processID ||
             context.bundleID != newContext.bundleID || context.mode != newContext.mode ||
             context.isBrowser != newContext.isBrowser
@@ -58,14 +59,19 @@ public struct KeyboardEventProcessor: Sendable {
             // Once a focus transaction ends, returning to the same PID must not revive it.
             for i in presses.indices where presses[i]?.rule != nil { presses[i]?.suppress = true }
         }
-        if changedContext || self.enabled != enabled || self.layoutSupported != layoutSupported ||
+        let changedPolicy = self.enabled != enabled || self.layoutSupported != layoutSupported ||
+            self.controlsEnabled != controlsEnabled ||
             self.finderEnabled != finderEnabled ||
             self.finderPermanentDeleteEnabled != finderPermanentDeleteEnabled ||
             self.textNavigationEnabled != textNavigationEnabled || self.altF4Enabled != altF4Enabled ||
             self.windowsKeyModifier != windowsKeyModifier ||
             self.winRunEnabled != winRunEnabled || self.winSettingsEnabled != winSettingsEnabled ||
             self.winTaskViewEnabled != winTaskViewEnabled || self.nativeAppSwitchEnabled != nativeAppSwitchEnabled ||
-            self.screenshotEnabled != screenshotEnabled || self.printScreen != printScreen {
+            self.screenshotEnabled != screenshotEnabled || self.printScreen != printScreen
+        let continuousContext = preservingModifiersOnAppChange && enabled && layoutSupported &&
+            modifiers.synchronized && !awaitingNeutral && context.processID > 0 && newContext.processID > 0 &&
+            [.macOS, .terminal, .ide].contains(context.mode) && [.macOS, .terminal, .ide].contains(newContext.mode)
+        if changedPolicy || (changedContext && !continuousContext) {
             awaitingNeutral = true
         }
         context = newContext; self.enabled = enabled; self.layoutSupported = layoutSupported

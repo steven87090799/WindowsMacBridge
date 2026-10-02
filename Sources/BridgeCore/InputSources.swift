@@ -119,6 +119,10 @@ public struct InputRoutingSnapshot: Equatable, Sendable {
     public func classify(_ evidence: InputOriginEvidence, physicalBackend: InputBackend) -> InputSourceClass {
         if evidence.ownEvent { return .bridgeOutput }
         if let index = producers.firstIndex(where: { $0.processID == evidence.processID }) {
+            // Registry revocation happens before the callback receives its next
+            // immutable snapshot. In particular, UC bypasses the remote router's
+            // second gate, so classification itself must reject a retired source.
+            guard producers[index].work.isCurrentWithoutWaiting else { return .unknown }
             switch producers[index].kind {
             case .remote: return .remote(index)
             case .universalControl: return .universalControl

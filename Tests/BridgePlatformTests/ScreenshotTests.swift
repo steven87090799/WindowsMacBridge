@@ -260,6 +260,63 @@ struct ScreenshotShortcutTests {
 }
 
 @MainActor struct ScreenshotImageBudgetTests {
+    @Test func inheritedPDFResourcesCannotBypassRasterBudget() throws {
+        for width in [1, 40000] {
+            let text = "%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 /Resources << /XObject << /Im 5 0 R >> >> >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 8 8] /Contents 4 0 R >> endobj\n4 0 obj << /Length 6 >> stream\n/Im Do\nendstream endobj\n5 0 obj << /Type /XObject /Subtype /Image /Width \(width) /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 3 >> stream\nabc\nendstream endobj\ntrailer << /Root 1 0 R >>\n%%EOF"
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("BridgeInheritedPDF-\(UUID().uuidString).pdf")
+            defer { try? FileManager.default.removeItem(at: url) }
+            try Data(text.utf8).write(to: url)
+            let document = try #require(CGPDFDocument(url as CFURL))
+            let page = try #require(document.page(at: 1))
+            // Inspect metadata only: a failing guard must not try to render the oversized fixture.
+            #expect(PDFImageBudget().allows(page) == (width == 1))
+        }
+    }
+    @Test func ordinaryRasterPDFAndInlineScreenshotStaySupported() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("BridgeRasterPDF-\(UUID().uuidString).pdf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let imageContext = try #require(CGContext(data: nil, width: 8, height: 8, bitsPerComponent: 8,
+            bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        imageContext.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        imageContext.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        let image = try #require(imageContext.makeImage())
+        var bounds = CGRect(x: 0, y: 0, width: 8, height: 8)
+        let pdf = try #require(CGContext(url as CFURL, mediaBox: &bounds, nil))
+        pdf.beginPDFPage(nil); pdf.draw(image, in: bounds); pdf.endPDFPage(); pdf.closePDF()
+        #expect(ScreenshotImagePreparation.prepare(at: url) != nil)
+        // Tiny inline RGB image, containing no XObject resource dictionary.
+        let text = "%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 8 8] /Resources << >> /Contents 4 0 R >> endobj\n"
+        for width in [1, 40000] {
+            let command = "BI /W \(width) /H 1 /CS /RGB /BPC 8 ID abc EI"
+            try Data((text + "4 0 obj << /Length \(command.utf8.count) >> stream\n\(command)\nendstream endobj\ntrailer << /Root 1 0 R >>\n%%EOF").utf8).write(to: url)
+            #expect((ScreenshotImagePreparation.prepare(at: url) != nil) == (width == 1))
+        }
+    }
+    @Test func smallPDFPageCannotHideAnOversizedRasterOrNestedImage() throws {
+        for nested in [false, true] {
+            let resources = nested ? "<< /XObject << /F 6 0 R >> >>" : "<< /XObject << /Im 5 0 R >> >>"
+            let command = nested ? "/F Do" : "/Im Do"
+            let objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 8 8] /Resources \(resources) /Contents 4 0 R >>",
+                "<< /Length \(command.utf8.count) >>\nstream\n\(command)\nendstream",
+                "<< /Type /XObject /Subtype /Image /Width 40000 /Height 40000 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 3 >>\nstream\nabc\nendstream",
+                "<< /Type /XObject /Subtype /Form /BBox [0 0 8 8] /Resources << /XObject << /Im 5 0 R >> >> /Length 6 >>\nstream\n/Im Do\nendstream"]
+            var data = Data("%PDF-1.4\n".utf8); var offsets = [0]
+            for (index, object) in objects.enumerated() {
+                offsets.append(data.count); data.append(Data("\(index + 1) 0 obj\n\(object)\nendobj\n".utf8))
+            }
+            let start = data.count
+            let rows = offsets.dropFirst().map { String(format: "%010d 00000 n \n", $0) }.joined()
+            data.append(Data("xref\n0 7\n0000000000 65535 f \n\(rows)trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n\(start)\n%%EOF\n".utf8))
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("BridgePDFBudget-\(UUID().uuidString).pdf")
+            defer { try? FileManager.default.removeItem(at: url) }
+            try data.write(to: url)
+            #expect(CGPDFDocument(url as CFURL)?.page(at: 1) != nil)
+            if case .failure(let error) = ScreenshotImagePreparation.prepareResult(at: url) {
+                #expect(error == .decodeFailure)
+            } else { Issue.record("PDF page dimensions bypassed the embedded raster budget") }
+        }
+    }
     @Test func oversizedPNGMetadataIsRejectedBeforeBitmapCreation() throws {
         let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2,
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,

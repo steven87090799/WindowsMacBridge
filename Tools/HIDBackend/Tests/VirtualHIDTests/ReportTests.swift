@@ -1,4 +1,29 @@
 import Testing
+// Relative reports are split without clipping; this test never creates a driver client.
+struct CompositePointingReportTests {
+    @Test func largeRelativeMotionRetainsEveryDeltaAndAllButtons() {
+        var reports = [WMBPointingState](repeating: .init(), count: 9)
+        let count = reports.withUnsafeMutableBufferPointer {
+            wmb_plan_pointing_motion(UInt32.max, 1023, -1023, 254, -1, $0.baseAddress, $0.count)
+        }
+        #expect(count == 9)
+        #expect(reports.reduce(0) { $0 + Int($1.x) } == 1023)
+        #expect(reports.reduce(0) { $0 + Int($1.y) } == -1023)
+        #expect(reports.reduce(0) { $0 + Int($1.wheel) } == 254)
+        #expect(reports.reduce(0) { $0 + Int($1.pan) } == -1)
+        #expect(reports.allSatisfy { $0.buttons == UInt32.max && (-127...127).contains(Int($0.x)) })
+    }
+    @Test func pointerOutputRejectsOverflowAndEncodesButtonRelease() {
+        var report = WMBPointingState()
+        #expect(wmb_plan_pointing_motion(0, 1024, 0, 0, 0, &report, 1) == 0)
+        #expect(wmb_plan_pointing_motion(0, 128, 0, 0, 0, &report, 1) == 0)
+        #expect(wmb_plan_pointing_motion(0, 0, 0, 0, 0, &report, 1) == 1)
+        #expect(report.buttons == 0)
+        var bytes = [UInt8](repeating: 0, count: 8)
+        #expect(bytes.withUnsafeMutableBufferPointer { wmb_encode_pointing(&report, $0.baseAddress, $0.count) } == 8)
+        #expect(bytes.allSatisfy { $0 == 0 })
+    }
+}
 import Darwin
 import VirtualHID
 

@@ -113,11 +113,15 @@ struct RemoteSemanticRegressionTests {
     }
     @Test func rightAltAppSwitchLossReleasesItsCommandSideAndRevokesWork() {
         var r = router()
+        #expect(!r.hasNativeAppSwitchSession(evidence))
         edge(&r, side: .rightOption, key: 61, flags: .option, down: true)
         let work = r.process(.init(.down, keyCode: 48, modifiers: .option), evidence: evidence)
+        #expect(r.hasNativeAppSwitchSession(evidence))
+        #expect(!r.hasNativeAppSwitchSession(.init(processID: 43, stateID: 0)))
         _ = r.process(.init(.up, keyCode: 48, modifiers: .option), evidence: evidence)
         var releases = [UInt16]()
         r.invalidate { key, _, _ in releases.append(key) }
+        #expect(!r.hasNativeAppSwitchSession(evidence))
         #expect(releases == [54] && work.validity?.isCurrent == false)
     }
     @Test func hostTransitionsRevokeRemoteJobsAndNeverReviveHeldShortcut() {

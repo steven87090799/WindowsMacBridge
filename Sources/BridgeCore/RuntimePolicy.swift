@@ -29,6 +29,9 @@ public struct RuntimePolicyInput: Equatable, Sendable {
 public struct RuntimePolicySnapshot: Equatable, Sendable {
     public let input: RuntimePolicyInput
     public let generation: UInt64
+    /// Changes at lifecycle/settings/ownership gaps, even when the input mailbox
+    /// coalesces several transitions into one delivered configuration.
+    public let modifierEpoch: UInt64
     /// TIS publishes its own layout change during a selection. Its work epoch follows
     /// host lifecycle/settings, without cancelling itself on that acknowledgement.
     public var sourceWorkPolicy: RuntimePolicyInput {
@@ -39,7 +42,7 @@ public struct RuntimePolicySnapshot: Equatable, Sendable {
         permitsInput && !input.manualPassThrough
     }
     public var permitsPhysicalNormalization: Bool {
-        input.shortcutEnabled && !input.hidReleasePending && !input.paused && !input.secureInput && input.sessionActive &&
+        input.shortcutEnabled && !input.manualPassThrough && !input.hidReleasePending && !input.paused && !input.secureInput && input.sessionActive &&
             input.accessibility && input.posting
     }
     public var permitsInput: Bool {
@@ -47,17 +50,37 @@ public struct RuntimePolicySnapshot: Equatable, Sendable {
             input.accessibility && input.posting
     }
     public var permitsScreenshots: Bool {
-        permitsShortcuts && input.screenshotEnabled && input.foreground.mode == .macOS
+        permitsShortcuts && input.screenshotEnabled &&
+            (input.foreground.mode == .macOS || input.foreground.mode == .terminal || input.foreground.mode == .ide ||
+             (input.foreground.mode == .disabled && input.foreground.bundleID == "local.WindowsMacBridge"))
+    }
+    /// Several foreground changes may coalesce; a pause/session/security gap is
+    /// retained in modifierEpoch and must still force a neutral handoff.
+    public func preservesModifiers(from previous: Self) -> Bool {
+        guard generation != previous.generation, modifierEpoch == previous.modifierEpoch,
+              permitsShortcuts, previous.permitsShortcuts,
+              input.layoutSupported, !input.nativeRestorePending,
+              input.foreground.processID > 0, previous.input.foreground.processID > 0,
+              Self.hasContinuousKeyboardOwnership(input.foreground.mode),
+              Self.hasContinuousKeyboardOwnership(previous.input.foreground.mode) else { return false }
+        var normalized = input; normalized.foreground = previous.input.foreground
+        return normalized == previous.input
+    }
+    private static func hasContinuousKeyboardOwnership(_ mode: ApplicationMode) -> Bool {
+        mode == .macOS || mode == .terminal || mode == .ide
     }
 }
 public struct RuntimePolicyCoordinator: Sendable {
     public private(set) var current: RuntimePolicySnapshot?
     private var generation: UInt64 = 0
+    private var modifierEpoch: UInt64 = 0
     public init() {}
     public mutating func transition(_ input: RuntimePolicyInput) -> RuntimePolicySnapshot {
         if let current, current.input == input { return current }
         generation &+= 1
-        let next = RuntimePolicySnapshot(input: input, generation: generation)
+        let candidate = RuntimePolicySnapshot(input: input, generation: generation, modifierEpoch: modifierEpoch)
+        if current.map({ candidate.preservesModifiers(from: $0) }) != true { modifierEpoch &+= 1 }
+        let next = RuntimePolicySnapshot(input: input, generation: generation, modifierEpoch: modifierEpoch)
         current = next
         return next
     }

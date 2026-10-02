@@ -22,6 +22,10 @@ struct ReleasePolicyRegressionTests {
         let first = coordinator.transition(input)
         #expect(first.permitsScreenshots)
         #expect(coordinator.transition(input).generation == first.generation)
+        input.manualPassThrough = true
+        let manual = coordinator.transition(input)
+        #expect(manual.permitsInput && !manual.permitsShortcuts && !manual.permitsPhysicalNormalization)
+        input.manualPassThrough = false
         for mutation in 0..<5 {
             switch mutation {
             case 0: input.paused.toggle()

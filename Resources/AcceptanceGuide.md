@@ -6,7 +6,7 @@
 
 ## 準備（約兩分鐘）
 
-0.5.15（build 27）：新安裝使用裝置 HID／Command Win 鍵位、保留 Control 與 Fn／Globe。兩台 Mac 完成 helper／Driver 授權後開啟 Windows Experience；UC 不選 Sender／Receiver。既有 EventTap／鍵位／Fn 交換設定保留，先記錄再對照。截圖／modifier／Remote 都必須實際操作，純核心測試不替代它。
+0.5.16（build 28）：新安裝使用裝置 HID／Command Win 鍵位、保留 Control 與 Fn／Globe。兩台 Mac 完成 helper／Driver 授權後開啟 Windows Experience；UC 不選 Sender／Receiver。既有 EventTap／鍵位／Fn 交換設定保留，先記錄再對照。截圖／modifier／Remote 都必須實際操作，純核心測試不替代它。
 
 1. 從 Applications 啟動 App；HID 應 Ready 且接管數大於零；EventTap 備援則確認 tap Active。不要為了驗收關閉真正的 Secure Input。
 2. 記下 App 版本、macOS 版本、鍵盤型號、輸入來源。先關掉 Karabiner 中重複的規則。
@@ -79,7 +79,7 @@ Chrome Remote Desktop 等瀏覽器分頁無法單靠 App ID 自動辨識；使�
 | Case | 路徑 | 通過條件 | 實機 |
 |---|---|---|---|
 | A | Mac 外接 → Mac | Control 規則、原生 App switch、Fn／media 保留 | 未驗收 |
-| B | Mac 外接 → UC → MacBook | 與 A 相同、接收端不再翻譯 | 未驗收 |
+| B | Mac 外接 → UC → MacBook | 與 A 相同、接收端依自己的 App 翻譯原始 Ctrl，來源端不得執行 AX／Finder 動作 | 未驗收 |
 | C | MacBook 內建 → MacBook | 真正 Control+C 複製、Fn／Globe 保留 | 未驗收 |
 | D | MacBook 內建 → UC → Mac | 與 C 相同、不殘留 Ctrl／Shift／Alt | 未驗收 |
 | E | Windows → Chrome Remote Desktop → Mac | raw Ctrl 正規化、已是 Command 通過 | 未驗收 |
@@ -89,7 +89,7 @@ E/F 先暫停接收端 Bridge 記錄基準，再啟用。Remote Advanced 必須�
 
 本機與遠端同時按不同 Ctrl／Shift、同時有 UC、修改一個遠端的偏好，其他來源與本機持鍵應保持獨立。測 host 關閉、連線中斷、focus loss、PID／session 變動，以及 60 秒靜止遠端持鍵失效；不能清掉本機真正按住的修飾鍵。Client／來源 OS 若先吃掉 Alt+Tab／Win+Shift+S，使用 Client 的傳送按鍵功能再測。
 
-UC 必須另外測來源 Terminal／目的端文字 App，以及來源 Finder／目的端其他 App。來源端沒有目的端 App context，context-specific／AX action 不能由本機結果推定跨機正確；未解決此限制前，不列為所有情境通過。
+UC 必須另外測來源 Terminal／目的端文字 App，以及來源 Finder／目的端其他 App。來源端 helper 已禁止執行 App-sensitive action。必須確認 WindowServer 在接收端提供正確 recipient，來源 Mac 沒有改動 Finder、Clipboard 或關閉視窗；不能用純模型測試推定 UC 路由正確。加入 Win+Tab／Win+L／Win+R 與 native Cmd+Tab 的 WindowServer 順序驗收，未知 recipient 必須保留輸入。
 
 ## 暫停、恢復與裝置
 
@@ -137,3 +137,5 @@ UC 必須另外測來源 Terminal／目的端文字 App，以及來源 Finder／
 - 管理員專用測試：全新 Driver、相同版 Driver、不同版 fail-closed、helper／driver bootstrap failure、更新中止與備份復原；force quit 後重新啟動 Fn journal recovery、重開機與讀回失敗。
 
 離線通過不代表以上實機項目通過。本次來源架構、實際結果與限制見原始碼的 Docs/UnifiedInput-2026-10-01.md；前批修復另見 Docs/PreReleaseRepair-2026-09-30.md。
+
+本版授權回歸：從 Finder 開啟 /Applications 的同一份 App，記錄鍵盤控制狀態，按「要求／修復授權」，完成系統提示後回到 App 重新檢查。不得用 Terminal 啟動 CLI 的 TCC 結果替代目前 GUI process；測 app/helper 更新、撤權、重新加入與重新登入。授權頁合併一列，helper 輸入監控仍獨立。

@@ -181,17 +181,14 @@ public struct RemoteSourceStatus: Equatable, Identifiable, Sendable {
     private var pending = [Int32]()
     private var active = false, resolving = false
     private var epoch: UInt64 = 0, revision: UInt64 = 0
-    private var hostGeneration: UInt64 = 0
     private var discoveryRequested = false
     public private(set) var snapshot = InputRoutingSnapshot()
     public private(set) var statuses: [RemoteSourceStatus] = []
     public var onChange: (() -> Void)?
     public init() {}
-    public func configure(active: Bool, preferences: [RemoteSourcePreference], generation: UInt64 = 0) {
-        if hostGeneration != generation {
-            epoch &+= 1; hostGeneration = generation
-            if active { discoveryRequested = true }
-        }
+    public func configure(active: Bool, preferences: [RemoteSourcePreference]) {
+        // Foreground changes invalidate action frames in RemoteSourceRouter;
+        // they do not change process identity or require another process scan.
         if self.active != active {
             epoch &+= 1; self.active = active
             for entry in entries { entry.producer.work.invalidate() }

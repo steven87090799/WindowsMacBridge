@@ -2,6 +2,19 @@ import Testing
 @testable import BridgeCore
 
 struct PermissionChecklistTests {
+    @Test func grantsAreNeverInferredFromUncheckedOrPendingState() {
+        var state = PermissionChecklistState()
+        #expect(state.verification(for: [.listening]) == .unchecked)
+        state.verify(.init(accessibility: true, posting: true, listening: false))
+        #expect(state.verification(for: [.accessibility, .posting]) == .granted)
+        #expect(state.verification(for: [.listening]) == .denied)
+        state.beginNavigation(to: .posting)
+        #expect(state.verification(for: [.accessibility, .posting]) == .awaitingVerification)
+        state.verify(.init(accessibility: true, posting: false))
+        #expect(state.verification(for: [.accessibility, .posting]) == .denied)
+        #expect(PermissionVerification(verifiedGrant: nil) == .unchecked)
+        #expect(PermissionVerification(verifiedGrant: false) == .denied)
+    }
     @Test func openingEverySettingsPageNeverGrantsMissingAccess() {
         for kind in PermissionKind.allCases {
             var state = PermissionChecklistState()

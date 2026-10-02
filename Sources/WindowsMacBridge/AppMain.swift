@@ -17,6 +17,17 @@ import InputSourceCore
         NSApp.setActivationPolicy(.accessory)
         installMainMenu()
         controller = BridgeController()
+        if controller.bundledInstallerAvailable && (controller.backgroundInstallationNeeded || controller.installationRecoveryPending) {
+            do { try BundledBackendInstaller.launch() }
+            catch {
+                let alert = NSAlert()
+                alert.messageText = "安裝尚未完成"
+                alert.informativeText = "請完成系統的管理員驗證，再重新開啟 WindowsMacBridge。\n\(error.localizedDescription)"
+                alert.runModal()
+                NSApp.terminate(nil)
+            }
+            return
+        }
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.title = ""
         item.button?.image = BrandAssets.active
@@ -27,7 +38,9 @@ import InputSourceCore
             updateStatusItem()
         }
         controller.start()
-        if !AXIsProcessTrusted() || !controller.settings.enabled { showSettings() }
+        if !controller.permissions.keyboardControlGranted || !controller.permissions.listening ||
+            (controller.settings.screenshotAutoCopy && (!controller.permissions.screenRecording || !controller.permissions.loginItem)) ||
+            !controller.settings.enabled || controller.backgroundInstallationNeeded || controller.preparedSetupThisLaunch { showSettings() }
     }
     private func updateStatusItem() {
         let tooltip = controller.summary + " · " + controller.sourceStatus.summary

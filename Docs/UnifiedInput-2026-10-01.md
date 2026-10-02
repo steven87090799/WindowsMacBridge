@@ -1,5 +1,7 @@
 # Unified Windows Keyboard Experience：架構與驗證
 
+> 歷史報告：後續修復、授權調查與接收端語意改動見 [0.5.16 修復報告](ConsistencyRepair-2026-10-02.md)。本文件的測試數量、架構和限制只對應當時版本。
+
 日期：2026-10-01。基準：main f39d70b / 0.5.14 build 26；候選版：0.5.15 build 27，分支 `codex/unified-windows-input-layer`。
 
 **結論：已實際重構、修復並執行完整自動測試／建置；尚未達成六個實機路徑全部驗收，不能宣稱可正式上線。** 本報告把程式證據與實體驗收分開。沒有自行安裝／啟動 App、helper、Driver，沒有改 TCC、鍵盤映射或連線到其他電腦，也沒有讀取一般按鍵、文件或 Clipboard 內容。

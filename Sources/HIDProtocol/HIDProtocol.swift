@@ -4,7 +4,7 @@ import BridgeCore
 public enum HIDService {
     public static let name = "local.WindowsMacBridge.HIDHelper"
     public static let root = "/Library/Application Support/WindowsMacBridge"
-    public static let protocolVersion = 4
+    public static let protocolVersion = 6
 }
 
 /// Only bounded policy/status messages cross IPC. Never a stream of typed characters.
@@ -12,6 +12,7 @@ public enum HIDService {
     func configure(_ data: Data, withReply reply: @escaping (Data) -> Void)
     func stop(withReply reply: @escaping () -> Void)
     func requestInputAccess(withReply reply: @escaping (Bool) -> Void)
+    func checkInputAccess(withReply reply: @escaping (Bool) -> Void)
 }
 @objc public protocol HIDControllerProtocol {
     func performAction(_ id: String, processID: Int32, generation: UInt64)
@@ -20,6 +21,7 @@ public enum HIDService {
 public struct HIDConfiguration: Codable, Sendable {
     public var version = HIDService.protocolVersion
     public var enabled = false
+    public var transportOnly = false
     public var sessionActive = false
     public var layoutSupported = false
     public var finderEnabled = false
@@ -46,6 +48,20 @@ public struct HIDConfiguration: Codable, Sendable {
     public var restartToken: UInt64 = 0
     public var deviceInputs: [DeviceInputPreference] = []
     public init() {}
+    /// In raw transport mode, source focus/layout cannot describe the receiving Mac.
+    /// Pause/session/physical mapping still form a capture epoch and require release.
+    public func sameCapturePolicy(as next: HIDConfiguration) -> Bool {
+        guard transportOnly && next.transportOnly else {
+            return transportOnly == next.transportOnly && generation == next.generation
+        }
+        return enabled == next.enabled && sessionActive == next.sessionActive &&
+            keyboardScope == next.keyboardScope && windowsKeyModifier == next.windowsKeyModifier &&
+            macBookFnControlSwap == next.macBookFnControlSwap && restartToken == next.restartToken &&
+            winRunEnabled == next.winRunEnabled && winTaskViewEnabled == next.winTaskViewEnabled &&
+            (mode == .macOS || mode == .terminal) == (next.mode == .macOS || next.mode == .terminal) &&
+            HIDCapturePolicy.requiresNativePassThrough(mode: mode, layoutSupported: layoutSupported, transportOnly: true) ==
+            HIDCapturePolicy.requiresNativePassThrough(mode: next.mode, layoutSupported: next.layoutSupported, transportOnly: true)
+    }
     public var valid: Bool {
         version == HIDService.protocolVersion && bundleID.utf8.count <= 256 && processID >= 0 &&
             deviceInputs.count <= 16 && deviceInputs.allSatisfy { !$0.identity.isEmpty && $0.identity.utf8.count <= 128 } &&

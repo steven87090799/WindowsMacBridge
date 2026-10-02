@@ -56,6 +56,6 @@ struct HIDProtocolTests {
         var status = HIDStatus()
         status.devices = [.init(identity: "a", product: "Apple Internal Keyboard", builtIn: true, captured: true)]
         let result = try JSONDecoder().decode(HIDStatus.self, from: JSONEncoder().encode(status))
-        #expect(result.devices == status.devices && result.version == 4)
+        #expect(result.devices == status.devices && result.version == HIDService.protocolVersion)
     }
 }

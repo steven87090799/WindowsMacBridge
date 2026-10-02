@@ -4,8 +4,9 @@ import VirtualHID
 import Security
 
 @main enum BridgeHIDHelperMain {
-    static func main() {
+    @MainActor static func main() {
         let arguments = Array(CommandLine.arguments.dropFirst())
+        if arguments == ["--request-input-access"] { InputPermissionAgent.run(); return }
         if arguments.count == 2 && arguments[0] == "--controller-pin" {
             var code: SecStaticCode?, info: CFDictionary?
             guard SecStaticCodeCreateWithPath(URL(fileURLWithPath: arguments[1]) as CFURL, [], &code) == errSecSuccess, let code,

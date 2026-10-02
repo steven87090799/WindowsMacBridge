@@ -43,7 +43,7 @@ public struct BackendCapabilities: Sendable {
 }
 
 public enum HIDCapturePolicy {
-    public static func requiresNativePassThrough(mode: ApplicationMode, layoutSupported: Bool) -> Bool {
-        mode == .remoteWindows || mode == .virtualMachine || mode == .game || mode == .disabled || !layoutSupported
+    public static func requiresNativePassThrough(mode: ApplicationMode, layoutSupported: Bool, transportOnly: Bool = false) -> Bool {
+        mode == .remoteWindows || mode == .virtualMachine || mode == .game || mode == .disabled || (!transportOnly && !layoutSupported)
     }
 }

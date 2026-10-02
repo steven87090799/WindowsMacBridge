@@ -1,8 +1,12 @@
-# WindowsMacBridge 0.5.15（build 27）統一輸入候選版
+# WindowsMacBridge 0.5.17（build 29）統一輸入候選版
+
+本輪 0.5.17 加入 macOS ⌘⇧3／⌘⇧4 存檔後自動複製，並補強來源撤銷、Driver 待重開機回復與 PDF 繼承資源限制。詳見 [四方向修復報告](Docs/FourAreaRepair-2026-10-02.md)；雙機安裝與操作見 [兩台 Mac 驗收](Resources/TwoMacAcceptance.md)。
 
 Windows 快捷鍵與唯音／ABC 輸入法輔助整合在一個 macOS Menu Bar App。適用 Apple Silicon、macOS 14+。本次來源分流、逐裝置／遠端偏好、完整測試與限制見 [統一輸入報告](Docs/UnifiedInput-2026-10-01.md)，前批修復見 [2026-09-30 報告](Docs/PreReleaseRepair-2026-09-30.md)。六個跨機情境、TCC、實體 HID、Remote 與 Driver 仍未驗收，**目前不宣稱可正式上線**。
 
 ## 使用與權限
+
+本版修復授權要求流程；完整修復、測試與限制見 [修復報告](Docs/ConsistencyRepair-2026-10-02.md)。仍是待實機驗收的候選版。
 
 新安裝使用裝置 HID，需要整合 ZIP 的 Install.command 安裝 helper／Driver並取得 macOS 核准；Windows Experience、所有支援鍵盤、截圖自動複製與中文快捷鍵開啟。Control 與 Fn／Globe 預設保留；Finder 增強、亮度鍵開啟檔案、Alt+F4、永久刪除與 Win+R/I/Tab 關閉。舊版明確的 EventTap／鍵位／Fn 選項保留，不自行安裝 Driver。EventTap 備援不需 helper，但無可靠逐實體裝置與 UC ownership。
 
@@ -15,7 +19,7 @@ Windows 快捷鍵與唯音／ABC 輸入法輔助整合在一個 macOS Menu Bar A
 - Finder Ctrl+X 以原生 Copy 建立 5 分鐘待移動狀態，開資料夾、上一層與切換路徑不取消；Ctrl+V 由 Finder 移動。剪貼簿改變、切 App、暫停或失效會取消。Delete 僅在確認檔案選取時轉為移到垃圾桶，文字／未知焦點保持前刪。永久刪除另有開關與逐次確認。
 - Alt+F4 只使用 Accessibility 按目前視窗的關閉按鈕，保留 App 的未儲存提示。無可用關閉按鈕時回報，沒有 Command+W／Q fallback。
 - HID 的亮度增加 consumer key 預設保持原樣。只有開啟獨立選項、Finder 增強已開且前景為本機 Finder，才轉成 Enter。
-- EventTap 沒有可靠的公開來源 device ID。HID 模式只由 helper 處理接管裝置，不啟動盲目的第二套 EventTap 翻譯。所有支援的簡單 keyboard descriptor 可接管，另保留內建／Apple 834 範圍；複合或無法安全接管的裝置維持原生，仍有覆蓋限制。
+- EventTap 沒有可靠的公開來源 device ID。HID helper 依實體 device ledger 保留 App-sensitive 輸入；只有接收端確認的 annotated recipient 才套 App 規則，沒有在 HID 與 EventTap 各翻譯一次。標準 keyboard／相對 mouse composite 可在完整 descriptor 可轉送時接管；未知、multitouch 或絕對座標服務保留原生，仍有覆蓋限制。
 - 後端交接等 helper 停止擷取回覆後才啟動新後端。逾時會保持新後端停用並顯示原因；放開所有按鍵再恢復。
 
 ## 截圖與遠端
@@ -24,7 +28,7 @@ Windows 快捷鍵與唯音／ABC 輸入法輔助整合在一個 macOS Menu Bar A
 
 暫停、停用、後端／session／generation／Secure Input 改變立即取消舊工作；逾時、權限、程序、磁碟、解碼與編碼失敗各有狀態。單一 capture slot 在工作真正結束前不接受新工作。圖片先檢查檔案、像素、尺寸、解碼記憶體預算；PNG 沿用原始編碼，不同時生成 TIFF。已完成的存檔保留。系統 `⇧⌘4` 保持原樣。
 
-移除全域遠端角色。實體 HID 在來源 Mac 轉換一次，UC 接收端通過；Remote 使用事件 creator PID、程序身份／簽章與來源獨立按鍵帳本。Google host Automatic 將 raw Ctrl 轉成 Mac 操作，已是 Command 的快捷鍵通過；未知 producer 保留原樣，可逐來源校準一次並保存。Remote preference 不停掉本機 HID、Fn 或 UC。其餘 transport 有獨立描述／fallback，沒有因 bundle ID 存在就列為 Verified。目的端 App context、PID 被隱藏、未知 virtual HID、共享 host 的多 peer 和 Client 本機保留快捷鍵仍有限制。
+移除全域遠端角色。所有鍵盤皆為 Windows Experience 時，HID 保留 App-sensitive 原始按鍵，在 annotated delivery 確認本機接收 App 後才翻譯；Win+L/R/Tab 的純 HID 系統輸出仍在來源端編碼並隨輸入傳送。來源 helper 不能執行 Finder、AX 或截圖動作。混合 Native Mac 的跨機來源辨識仍有限制。Remote 使用事件 creator PID、程序身份／簽章與來源獨立按鍵帳本。Google host Automatic 將 raw Ctrl 轉成 Mac 操作，已是 Command 的快捷鍵通過；未知 producer 保留原樣，可逐來源校準一次並保存。Remote preference 不停掉本機 HID、Fn 或 UC。其餘 transport 有獨立描述／fallback，沒有因 bundle ID 存在就列為 Verified。目的端 App context、PID 被隱藏、未知 virtual HID、共享 host 的多 peer 和 Client 本機保留快捷鍵仍有限制。
 
 ## 可靠性與資源
 

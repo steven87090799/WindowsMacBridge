@@ -7,6 +7,8 @@ import HIDProtocol
 private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDelegate, @unchecked Sendable {
     private let lock = NSLock()
     private var reply: (() -> Void)?
+    private var configureCount = 0
+    var configurations: Int { lock.lock(); defer { lock.unlock() }; return configureCount }
     var hasStop: Bool { lock.lock(); defer { lock.unlock() }; return reply != nil }
     func acknowledge() { lock.lock(); let action = reply; reply = nil; lock.unlock(); action?() }
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
@@ -14,13 +16,26 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         connection.exportedObject = self; connection.resume(); return true
     }
     func configure(_ data: Data, withReply reply: @escaping (Data) -> Void) {
+        lock.lock(); configureCount += 1; lock.unlock()
         reply((try? JSONEncoder().encode(HIDStatus())) ?? Data())
     }
     func stop(withReply reply: @escaping () -> Void) { lock.lock(); self.reply = reply; lock.unlock() }
     func requestInputAccess(withReply reply: @escaping (Bool) -> Void) { reply(false) }
+    func checkInputAccess(withReply reply: @escaping (Bool) -> Void) { reply(false) }
 }
 
 @MainActor struct BackendOwnershipTests {
+    @Test func permissionSetupWorksBeforeBackendActivationWithoutCapturingAKeyboard() async {
+        let helper = OfflineHelper()
+        let listener = NSXPCListener.anonymous(); listener.delegate = helper; listener.resume()
+        defer { listener.invalidate() }
+        let client = HIDBackendClient(connectionFactory: { NSXPCConnection(listenerEndpoint: listener.endpoint) })
+        let grant: Bool? = await withCheckedContinuation { continuation in
+            client.checkInputAccess { continuation.resume(returning: $0) }
+        }
+        #expect(grant == false)
+        #expect(helper.configurations == 0 && !client.hasOwnership && !client.releasePending)
+    }
     @Test func pendingStopConnectionDoesNotRetainItsController() async throws {
         let helper = OfflineHelper()
         let listener = NSXPCListener.anonymous(); listener.delegate = helper; listener.resume()
@@ -59,7 +74,7 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         #expect(!client.releasePending && !client.hasOwnership)
         client.stop()
     }
-    @Test func devicePreferenceActionEpochRejectsOldWorkWithoutChangingPhysicalGeneration() async throws {
+    @Test func helperActionCannotUseCurrentOrOldEpochAsDestinationDeliveryEvidence() async throws {
         let helper = OfflineHelper()
         let listener = NSXPCListener.anonymous(); listener.delegate = helper; listener.resume()
         defer { helper.acknowledge(); listener.invalidate() }
@@ -69,13 +84,13 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         var captures = 0; client.onScreenshot = { _ in captures += 1 }
         client.update(config, active: true)
         client.performAction("screenshot.region", processID: .max, generation: 1)
-        for _ in 0..<10 { await Task.yield() }; #expect(captures == 1)
+        for _ in 0..<10 { await Task.yield() }; #expect(captures == 0)
         config.deviceInputs = [.init(identity: "a", experience: .nativeMac)]
         client.update(config, active: true)
         client.performAction("screenshot.region", processID: .max, generation: 1)
-        for _ in 0..<10 { await Task.yield() }; #expect(captures == 1)
+        for _ in 0..<10 { await Task.yield() }; #expect(captures == 0)
         client.performAction("screenshot.region", processID: .max, generation: 2)
-        for _ in 0..<10 { await Task.yield() }; #expect(captures == 2 && config.generation == 10)
+        for _ in 0..<10 { await Task.yield() }; #expect(captures == 0 && config.generation == 10)
         client.stop()
     }
 }

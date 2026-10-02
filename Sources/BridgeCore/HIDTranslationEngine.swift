@@ -58,6 +58,8 @@ public struct HIDTranslationEngine: Sendable {
     private var finderPermanentDeleteEnabled = false, textNavigationEnabled = true, altF4Enabled = false
     private var finderBrightnessEnterEnabled = false
     private var screenshotEnabled = false
+    private var transportOnly = false
+    private var actionsEnabled = true
     private var printScreenBehavior: PrintScreenBehavior = .snipping
     private var windowsKeyModifier: WindowsKeyModifier = .option
     private var macBookFnControlSwap = false
@@ -90,15 +92,21 @@ public struct HIDTranslationEngine: Sendable {
                                    macBookFnControlSwap: Bool = false, winRunEnabled: Bool = false,
                                    winSettingsEnabled: Bool = false, winTaskViewEnabled: Bool = false,
                                    finderBrightnessEnterEnabled: Bool = false, screenshotEnabled: Bool = false,
-                                   printScreenBehavior: PrintScreenBehavior = .snipping) {
-        if self.context != context || self.layoutSupported != layoutSupported || self.finderEnabled != finderEnabled ||
+                                   printScreenBehavior: PrintScreenBehavior = .snipping, transportOnly: Bool = false, actionsEnabled: Bool = true) {
+        let semanticsChanged = self.context != context || self.layoutSupported != layoutSupported || self.finderEnabled != finderEnabled ||
             self.finderPermanentDeleteEnabled != finderPermanentDeleteEnabled ||
             self.textNavigationEnabled != textNavigationEnabled || self.altF4Enabled != altF4Enabled ||
-            self.windowsKeyModifier != windowsKeyModifier || self.macBookFnControlSwap != macBookFnControlSwap ||
             self.winRunEnabled != winRunEnabled || self.winSettingsEnabled != winSettingsEnabled ||
             self.winTaskViewEnabled != winTaskViewEnabled ||
             self.finderBrightnessEnterEnabled != finderBrightnessEnterEnabled || self.screenshotEnabled != screenshotEnabled ||
-            self.printScreenBehavior != printScreenBehavior { invalidate() }
+            self.printScreenBehavior != printScreenBehavior
+        if self.actionsEnabled != actionsEnabled || self.transportOnly != transportOnly || self.macBookFnControlSwap != macBookFnControlSwap ||
+            self.windowsKeyModifier != windowsKeyModifier ||
+            (transportOnly && (self.winRunEnabled != winRunEnabled || self.winTaskViewEnabled != winTaskViewEnabled ||
+                Self.systemTransportAllowed(self.context.mode) != Self.systemTransportAllowed(context.mode))) ||
+            (!transportOnly && semanticsChanged) { invalidate() }
+        self.transportOnly = transportOnly
+        self.actionsEnabled = actionsEnabled
         self.context = context; self.layoutSupported = layoutSupported; self.finderEnabled = finderEnabled
         self.finderPermanentDeleteEnabled = finderPermanentDeleteEnabled
         self.textNavigationEnabled = textNavigationEnabled; self.altF4Enabled = altF4Enabled
@@ -137,9 +145,9 @@ public struct HIDTranslationEngine: Sendable {
             }
         }
     }
-    private var local: Bool { context.mode == .macOS && layoutSupported && !manualPassThrough && !emergencyPaused }
+    private var local: Bool { !transportOnly && context.mode == .macOS && layoutSupported && !manualPassThrough && !emergencyPaused }
     private func inputModifier(_ modifier: HIDModifier, slot: Int) -> HIDModifier {
-        guard builtIn[slot] && macBookFnControlSwap else { return modifier }
+        guard builtIn[slot] && macBookFnControlSwap && !manualPassThrough && !emergencyPaused else { return modifier }
         switch modifier {
         case .fn: return .leftControl
         case .leftControl: return .fn
@@ -148,7 +156,7 @@ public struct HIDTranslationEngine: Sendable {
     }
     private func outputModifier(_ modifier: HIDModifier, slot: Int) -> HIDModifier {
         let value = inputModifier(modifier, slot: slot)
-        guard windowsKeyModifier == .command else { return value }
+        guard !transportOnly && windowsKeyModifier == .command else { return value }
         switch value {
         case .leftOption: return .leftCommand
         case .rightOption: return .rightCommand
@@ -238,6 +246,21 @@ public struct HIDTranslationEngine: Sendable {
     private static func isTextNavigation(_ rule: ShortcutRule) -> Bool {
         (32...41).contains(Int(rule.id.split(separator: ".").last ?? "") ?? -1)
     }
+    private static func systemTransportAllowed(_ mode: ApplicationMode) -> Bool { mode == .macOS || mode == .terminal }
+    private func transportSystemRule(key: UInt16, flags: Modifiers) -> ShortcutRule? {
+        guard transportOnly, !manualPassThrough, !emergencyPaused, Self.systemTransportAllowed(context.mode),
+              flags == windowsKeyModifier.flag else { return nil }
+        let left = windowsKeyModifier == .option ? HIDModifier.leftOption.bit : HIDModifier.leftCommand.bit
+        let right = windowsKeyModifier == .option ? HIDModifier.rightOption.bit : HIDModifier.rightCommand.bit
+        guard aggregate & left != 0 && aggregate & right == 0 else { return nil }
+        // App-independent HID outputs travel with UC to the receiving machine.
+        // Never invoke Finder, AX, Clipboard or source-side system actions here.
+        let rules = windowsKeyModifier == .option ? RuleEngine.system : RuleEngine.systemCommand
+        if let rule = rules.match(keyCode: key, modifiers: flags), rule.id == "karabiner.11" { return rule }
+        let extras = windowsKeyModifier == .option ? RuleEngine.systemExtras : RuleEngine.systemExtrasCommand
+        guard let rule = extras.match(keyCode: key, modifiers: flags), rule.action == nil else { return nil }
+        return (rule.id == "windows.winR" && winRunEnabled || rule.id == "windows.winTab" && winTaskViewEnabled) ? rule : nil
+    }
     /// Return an allow-listed non-keyboard action once per physical down.
     public mutating func observe(device: UInt64, page: UInt32, usage: UInt16, down: Bool) -> ShortcutAction? {
         lastRuleID = nil
@@ -269,8 +292,8 @@ public struct HIDTranslationEngine: Sendable {
             }
         }
         var rule: ShortcutRule?
-        if local && !waitingForNeutral, page == 7, Int(usage) < HIDKeyMap.carbon.count, let key = HIDKeyMap.carbon[Int(usage)] {
-            if screenshotEnabled, (key != 105 || usage == 0x46),
+        if (local || transportOnly) && !waitingForNeutral, page == 7, Int(usage) < HIDKeyMap.carbon.count, let key = HIDKeyMap.carbon[Int(usage)] {
+            if local && actionsEnabled && screenshotEnabled, (key != 105 || usage == 0x46),
                let kind = WindowsScreenshotShortcuts.match(key: key, modifiers: flags,
                 windowsKey: windowsKeyModifier, printScreen: printScreenBehavior) {
                 press.trigger = flags; press.ownsModifiers = true; press.suppressed = true
@@ -279,7 +302,8 @@ public struct HIDTranslationEngine: Sendable {
                 presses[free] = press; translated &+= 1
                 return .screenshot(kind)
             }
-            rule = match(key: key, flags: flags)
+            rule = local ? match(key: key, flags: flags) : transportSystemRule(key: key, flags: flags)
+            if rule?.action != nil && !actionsEnabled { rule = nil }
         }
         // Personal rule #77 is opt-in and retains its original Finder scope.
         if local && finderEnabled && finderBrightnessEnterEnabled && context.bundleID == "com.apple.finder" &&

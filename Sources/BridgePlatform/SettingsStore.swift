@@ -139,4 +139,17 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
             $0.overrides["com.openai.codex"] = .macOS
         }
     }
+    /// One explicit setup preset; preserve per-App/remote/device choices and
+    /// user key placement. Setup never opens system settings or grants TCC.
+    public func prepareOneClickSetup(hasBuiltInAppleKeyboard: Bool) {
+        update {
+            $0.enabled = true; $0.inputBackend = .deviceHID; $0.keyboardScope = .allKeyboards
+            $0.screenshotAutoCopy = true; $0.allowIMEShortcuts = true
+            $0.finderEnabled = true; $0.textNavigationEnabled = true; $0.altF4Enabled = true
+            $0.winRunEnabled = true; $0.winSettingsEnabled = true; $0.winTaskViewEnabled = true
+            $0.finderBrightnessEnterEnabled = false
+            if hasBuiltInAppleKeyboard { $0.macBookFnControlSwap = true }
+            $0.overrides["com.openai.codex"] = .macOS
+        }
+    }
 }

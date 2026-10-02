@@ -15,20 +15,35 @@ public struct RemoteSourceRouter: Sendable {
     private var configuration = SourceTranslationConfiguration()
     public private(set) var processedCount: UInt64 = 0, translatedCount: UInt64 = 0
     public init() {}
+    public func hasNativeAppSwitchSession(_ evidence: InputOriginEvidence) -> Bool {
+        configuration.enabled && slots.contains {
+            $0?.producer.processID == evidence.processID && $0?.stateID == evidence.stateID &&
+            $0?.appSwitchHeld == true && $0?.producer.work.isCurrent == true && $0?.frame.isCurrent == true
+        }
+    }
     public mutating func update(_ snapshot: InputRoutingSnapshot, configuration: SourceTranslationConfiguration,
+                                preservingModifiersOnAppChange: Bool = false,
                                 release: (UInt16, Modifiers, Int32) -> Void = { _,_,_ in }) {
+        var normalized = configuration
+        normalized.context = self.configuration.context; normalized.generation = self.configuration.generation
+        let continuous = preservingModifiersOnAppChange && normalized == self.configuration &&
+            configuration.generation != self.configuration.generation
         for i in slots.indices {
             guard var stream = slots[i] else { continue }
             let replacement = snapshot.producers.first { $0.processID == stream.producer.processID }
             if replacement != stream.producer || self.configuration != configuration {
                 stream.processor.drainTranslatedReleases(release)
                 if stream.appSwitchHeld { release(stream.appSwitchKey, [], self.configuration.context.processID); stream.appSwitchHeld = false }
-                stream.processor.invalidate(); stream.frame.invalidate(); stream.frame = SourceWorkGate()
+                // Keep the same producer's physical edges, but cancel every old
+                // action token and retain drained presses as suppressed tombstones.
+                let preserve = continuous && replacement == stream.producer
+                if !preserve { stream.processor.invalidate() }
+                stream.frame.invalidate(); stream.frame = SourceWorkGate()
                 // A changed source session also invalidates detached AX/screenshot work immediately.
                 if replacement != stream.producer { stream.producer.work.invalidate() }
                 guard let replacement else { slots[i] = nil; continue }
                 stream.producer = replacement
-                configure(&stream.processor, producer: replacement, config: configuration)
+                configure(&stream.processor, producer: replacement, config: configuration, preservingModifiers: preserve)
                 slots[i] = stream
             }
         }
@@ -41,14 +56,16 @@ public struct RemoteSourceRouter: Sendable {
             slots[i]!.processor.invalidate(); slots[i]!.frame.invalidate(); slots[i]!.frame = SourceWorkGate()
         }
     }
-    private func configure(_ processor: inout KeyboardEventProcessor, producer: RemoteProducer, config: SourceTranslationConfiguration) {
+    private func configure(_ processor: inout KeyboardEventProcessor, producer: RemoteProducer, config: SourceTranslationConfiguration,
+                           preservingModifiers: Bool = false) {
         processor.configure(context: config.context, enabled: config.enabled && producer.semantics != .macOS && producer.semantics != .alreadyTranslated,
                             layoutSupported: config.layoutSupported, controlsEnabled: false,
                             finderEnabled: config.finderEnabled, finderPermanentDeleteEnabled: config.finderPermanentDeleteEnabled,
                             textNavigationEnabled: config.textNavigationEnabled, altF4Enabled: config.altF4Enabled,
                             windowsKeyModifier: .command, winRunEnabled: config.winRunEnabled,
                             winSettingsEnabled: config.winSettingsEnabled, winTaskViewEnabled: config.winTaskViewEnabled,
-                            nativeAppSwitchEnabled: true, screenshotEnabled: config.screenshotEnabled, printScreen: config.printScreen)
+                            nativeAppSwitchEnabled: true, screenshotEnabled: config.screenshotEnabled, printScreen: config.printScreen,
+                            preservingModifiersOnAppChange: preservingModifiers)
     }
     /// Conservative loss guard: only this producer's translated outputs are released.
     /// Reuses lifecycle observation; no extra polling timer or global physical-key reset.
