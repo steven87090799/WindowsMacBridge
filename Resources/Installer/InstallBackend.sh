@@ -34,13 +34,13 @@ bridge_restore_application() {
         if [[ ! -d "$bridge_restore" ]]; then
             # Older interrupted transactions may only have the verified backup.
             # Reconstruct outside /Applications before publishing a complete App.
-            bridge_restore="$(/usr/bin/mktemp -d "$bridge_stage/restore.XXXXXX")/WindowsMacBridge.app"
+            bridge_restore="$(/usr/bin/mktemp -d "$bridge_stage/restore.XXXXXX")/WindowsMacBridge.app" || return 1
             /usr/bin/ditto "$bridge_stage/previous/WindowsMacBridge.app" "$bridge_restore" || return 1
         fi
         /usr/bin/codesign --verify --strict "$bridge_restore" || return 1
     fi
     if [[ -e "$bridge_app" ]]; then
-        bridge_rejected="$(/usr/bin/mktemp -d "$bridge_stage/rejected.XXXXXX")"
+        bridge_rejected="$(/usr/bin/mktemp -d "$bridge_stage/rejected.XXXXXX")" || return 1
         /bin/mv "$bridge_app" "$bridge_rejected/WindowsMacBridge.app" || return 1
     fi
     if [[ "$bridge_app_saved" == 1 ]]; then

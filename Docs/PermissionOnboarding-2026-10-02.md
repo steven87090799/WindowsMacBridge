@@ -29,4 +29,4 @@ production code 另有兩個造成多個授權提示的問題：第一列在一�
 
 實際安裝 0.5.18 (37) 時，App 已移入 /Applications 後的 chmod 收到 Operation not permitted；TCC 記錄同時顯示 SystemPolicyAppBundles 請求失敗。回復直接 ditto 到受保護的 App 路徑也失敗，留下不完整的 App 與受保護回復快照。這不是鍵盤／Driver 權限未申請造成的提示。
 
-0.5.19 (38) 在 root 暫存區完成 ownership 與 a+rX,go-w，再移動完整 App；回復優先移回完整舊 App，舊交易僅有備份時也先在暫存區重建。恢復流程先核對受保護快照，再檢查目的 App 的 Info.plist，避免不完整目的端阻止回復。新增 App 內容修改遭拒與不完整目的 App 的 regression fixtures；依使用者要求不在本機執行測試套件。
+0.5.19 (39) 在 root 暫存區完成 ownership 與 a+rX,go-w，再移動完整 App；回復優先移回完整舊 App，舊交易僅有備份時也先在暫存區重建。恢復流程先核對受保護快照，再檢查目的 App 的 Info.plist，避免不完整目的端阻止回復。新增 App 內容修改遭拒與不完整目的 App 的 regression fixtures；依使用者要求不在本機執行測試套件。

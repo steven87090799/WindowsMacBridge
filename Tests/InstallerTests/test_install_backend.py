@@ -26,6 +26,8 @@ with (root/'commands.log').open('a') as f: f.write(json.dumps([name]+args)+'\n')
 fail = os.environ.get('WMB_FAIL', '')
 def copy(src, dst):
     src, dst = pathlib.Path(src), pathlib.Path(dst)
+    if dst.resolve() != root and root not in dst.resolve().parents:
+        sys.exit(78)  # Regression failures must never write outside the fixture.
     if src.is_dir(): shutil.copytree(src, dst, dirs_exist_ok=True)
     else:
         dst.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(src, dst)
@@ -294,6 +296,27 @@ class InstallBackendTests(unittest.TestCase):
         self.assertNotEqual(retry.returncode, 0)
         self.assert_original(app, helper, daemons)
         self.assertFalse((helper/'.install-recovery').exists())
+
+    def test_failed_rollback_staging_preserves_snapshot_without_publishing_partial_app(self):
+        root, app, helper, _, result = self.run_install(fail='kill_before_bootstrap')
+        self.assertEqual(result.returncode, -9)
+        snapshot = Path((helper/'.install-recovery').read_text().splitlines()[1])
+        shutil.rmtree(snapshot/'retired-application.app')  # Exercise legacy backup reconstruction.
+        script = root/'InstallBackend.sh'
+        original = script.read_text()
+        allocation = '/usr/bin/mktemp -d "$bridge_stage/restore.XXXXXX"'
+        self.assertIn(allocation, original)
+        script.write_text(original.replace(allocation, '/usr/bin/false'))
+        env = dict(os.environ, WMB_TEST_ROOT=str(root), WMB_DRIVER_SHA=DRIVER_SHA,
+                   WMB_RECEIPT='query_error', WMB_FAIL='', WMB_APP_PROTECTED='1')
+        retry = subprocess.run(['/bin/bash',str(script),str(root/'payload')],
+                               env=env,capture_output=True,text=True,timeout=20)
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertEqual((app/'identity').read_text(), 'new-app')
+        self.assertEqual((snapshot/'previous/WindowsMacBridge.app/identity').read_text(), 'old-app')
+        self.assertTrue((helper/'.install-recovery').exists())
+        commands = [json.loads(row) for row in (root/'commands.log').read_text().splitlines()]
+        self.assertFalse(any(row[0] == 'ditto' and row[-1] == '/WindowsMacBridge.app' for row in commands))
 
     def test_compatible_shared_daemon_is_not_restarted_on_success_or_rollback(self):
         for failure in ['', 'bootstrap_helper']:
