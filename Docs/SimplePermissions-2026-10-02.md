@@ -23,3 +23,5 @@ Windows 截圖與取消生命週期修復承接 build 34，詳見 OneClickSetupR
 ## PR 編譯相容性修復
 
 PR CI 的較舊 Swift／CoreGraphics SDK 發現本機新版工具鏈未報告的相容性問題：PDF dictionary/object 在舊 SDK 同為 opaque pointer alias，不能依型別多載；改為明確命名兩種巡覽函式。截圖 observer 不再依賴 isolated deinit，改由可轉移 handle 在主 queue 釋放 FSEvents，stream context 保留弱 owner，避免背景 final release 後的晚到回呼讀取已釋放物件。未加入常駐工作或輪詢。新增背景釋放回歸，僅執行 NativeScreenshotObserverTests 三項，均通過；PR 完整檢查另以 Hosted CI 結果為準。此來源相容性修復未重新安裝或替換既有 preview.8 本機產物。
+
+CI 當機堆疊另確認 helper permission probe 的 XPC error handler 被舊 SDK 的非 Sendable closure 推斷為 MainActor；XPC 背景回呼在執行 Task hop 前已觸發 actor 檢查中斷。XPC 回呼現在明確標為 Sendable，再回主 actor 處理；連線以 UUID 辨識，舊回呼不能作用於新連線，停止回覆仍須符合自己的 stop UUID。新增不存在的 helper service 回歸，BackendOwnershipTests 五項針對性檢查通過，涵蓋失聯、獨立權限查詢、停止回覆及釋放 controller。CI 保留失敗時的當機診斷輸出。

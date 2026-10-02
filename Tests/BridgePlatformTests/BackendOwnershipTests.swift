@@ -25,6 +25,17 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
 }
 
 @MainActor struct BackendOwnershipTests {
+    @Test func permissionProbeTransportFailureReturnsUnknownWithoutCapturing() async {
+        let client = HIDBackendClient(connectionFactory: {
+            NSXPCConnection(machServiceName: "local.WindowsMacBridge.MissingFixture.\(UUID().uuidString)")
+        })
+        defer { client.stop() }
+        let grant: Bool? = await withCheckedContinuation { continuation in
+            client.checkInputAccess { continuation.resume(returning: $0) }
+        }
+        #expect(grant == nil)
+        #expect(!client.hasOwnership && !client.releasePending)
+    }
     @Test func permissionSetupWorksBeforeBackendActivationWithoutCapturingAKeyboard() async {
         let helper = OfflineHelper()
         let listener = NSXPCListener.anonymous(); listener.delegate = helper; listener.resume()
