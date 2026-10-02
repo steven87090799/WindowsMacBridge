@@ -17,6 +17,15 @@ import InputSourceCore
         NSApp.setActivationPolicy(.accessory)
         installMainMenu()
         controller = BridgeController()
+        if controller.bundledInstallerAvailable && Bundle.main.bundleURL.standardizedFileURL.path != "/Applications/WindowsMacBridge.app" {
+            let alert = NSAlert()
+            alert.messageText = "請先將 App 拖進「應用程式」"
+            alert.informativeText = "將 WindowsMacBridge 拖進「應用程式」，再從那裡開啟。"
+            alert.addButton(withTitle: "好")
+            alert.runModal()
+            NSApp.terminate(nil)
+            return
+        }
         if controller.bundledInstallerAvailable && (controller.backgroundInstallationNeeded || controller.installationRecoveryPending) {
             do { try BundledBackendInstaller.launch() }
             catch {
@@ -40,7 +49,8 @@ import InputSourceCore
         controller.start()
         if !controller.permissions.keyboardControlGranted || !controller.permissions.listening ||
             (controller.settings.screenshotAutoCopy && (!controller.permissions.screenRecording || !controller.permissions.loginItem)) ||
-            !controller.settings.enabled || controller.backgroundInstallationNeeded || controller.preparedSetupThisLaunch { showSettings() }
+            !controller.settings.enabled || controller.backgroundInstallationNeeded || controller.preparedSetupThisLaunch ||
+            CommandLine.arguments.contains("--permission-relaunch") { showSettings() }
     }
     private func updateStatusItem() {
         let tooltip = controller.summary + " · " + controller.sourceStatus.summary

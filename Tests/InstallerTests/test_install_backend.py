@@ -26,14 +26,22 @@ with (root/'commands.log').open('a') as f: f.write(json.dumps([name]+args)+'\n')
 fail = os.environ.get('WMB_FAIL', '')
 def copy(src, dst):
     src, dst = pathlib.Path(src), pathlib.Path(dst)
+    fixture_root = root.resolve()  # macOS /var and /private/var refer to the same temporary directory.
+    if dst.resolve() != fixture_root and fixture_root not in dst.resolve().parents:
+        sys.exit(78)  # Regression failures must never write outside the fixture.
     if src.is_dir(): shutil.copytree(src, dst, dirs_exist_ok=True)
     else:
         dst.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(src, dst)
 if name == 'ditto':
     src, dst = args[-2:]
     if fail == 'staging' and 'next' in dst: sys.exit(31)
+    if os.environ.get('WMB_APP_PROTECTED') == '1' and pathlib.Path(dst) == root/'Applications/WindowsMacBridge.app':
+        sys.exit(77)  # App Management can reject writes into an installed bundle.
     copy(src, dst)
-elif name == 'chown': pass
+elif name in ['chown', 'chmod']:
+    if os.environ.get('WMB_APP_PROTECTED') == '1' and pathlib.Path(args[-1]) == root/'Applications/WindowsMacBridge.app':
+        sys.exit(77)
+    if name == 'chmod': sys.exit(subprocess.call(['/bin/chmod']+args))
 elif name == 'codesign':
     if '-R' in args and not args[args.index('-R')+1].startswith('='):
         sys.exit(65)  # Native codesign interprets a bare expression as a filename.
@@ -136,7 +144,7 @@ class InstallBackendTests(unittest.TestCase):
                                         capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
-    def run_install(self, receipt='installed', fail='', existing=True, installed_driver_version='1.8.0', active_driver=True, driver_running=None, private_app_resource=False):
+    def run_install(self, receipt='installed', fail='', existing=True, installed_driver_version='1.8.0', active_driver=True, driver_running=None, private_app_resource=False, protected_app=False):
         temp = tempfile.TemporaryDirectory(prefix='wmb-install-test-')
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
@@ -214,7 +222,7 @@ class InstallBackendTests(unittest.TestCase):
                                 repr(str(daemons/f'local.WindowsMacBridge.{label}.plist')))
         # mktemp and filesystem commands operate exclusively under the above private test destinations.
         text = text.replace('/private/var/tmp/WindowsMacBridge-install.', str(root/'WindowsMacBridge-install.'))
-        for command in ['/usr/bin/ditto','/usr/sbin/chown','/usr/bin/codesign','/usr/sbin/pkgutil',
+        for command in ['/usr/bin/ditto','/usr/sbin/chown','/bin/chmod','/usr/bin/codesign','/usr/sbin/pkgutil',
                         '/usr/sbin/installer','/usr/bin/shasum','/bin/launchctl','/usr/bin/pgrep',
                         '/usr/bin/stat','/usr/bin/install']:
             stub = tools/Path(command).name; stub.write_text(STUB); stub.chmod(0o755)
@@ -232,7 +240,8 @@ class InstallBackendTests(unittest.TestCase):
                                for p in sorted(payload.rglob('*')) if p.is_file() and p.name != 'PAYLOAD-SHA256SUMS')
             (payload/'PAYLOAD-SHA256SUMS').write_text(manifest)
         env = dict(os.environ, WMB_TEST_ROOT=str(root), WMB_DRIVER_SHA=DRIVER_SHA,
-                   WMB_ROLLBACK_SHA=ROLLBACK_SHA, WMB_RECEIPT=receipt, WMB_FAIL=fail)
+                   WMB_ROLLBACK_SHA=ROLLBACK_SHA, WMB_RECEIPT=receipt, WMB_FAIL=fail,
+                   WMB_APP_PROTECTED='1' if protected_app else '0')
         result = subprocess.run(['/bin/bash',str(script),str(payload)], env=env, capture_output=True, text=True, timeout=20)
         return root, app, helper_root, daemons, result
 
@@ -263,6 +272,52 @@ class InstallBackendTests(unittest.TestCase):
                            (helper_root/'BridgeHIDHelper.app/Contents/Info.plist', 0o004)]:
             self.assertEqual(path.stat().st_mode & mask, mask)
             self.assertEqual(path.stat().st_mode & 0o022, 0)
+
+    def test_app_management_protection_does_not_interrupt_installation_or_atomic_rollback(self):
+        for failure in ['', 'bootstrap_helper']:
+            root, app, helper, daemons, result = self.run_install(
+                fail=failure, private_app_resource=True, protected_app=True)
+            self.assertEqual(result.returncode == 0, not failure, result.stderr)
+            if failure:
+                self.assert_original(app, helper, daemons)
+                self.assertEqual(json.loads((root/'services.json').read_text()), {'helper':True,'driver':True})
+            else:
+                self.assertEqual((app/'identity').read_text(), 'new-app')
+                self.assertEqual((app/'Contents/Resources/BackendPayload/Driver/rollback.pkg').stat().st_mode & 0o004, 0o004)
+            self.assertFalse((helper/'.install-recovery').exists())
+
+    def test_incomplete_destination_bundle_does_not_block_trusted_interrupted_recovery(self):
+        root, app, helper, daemons, result = self.run_install(fail='kill_before_bootstrap')
+        self.assertEqual(result.returncode, -9)
+        (app/'Contents/Info.plist').unlink()
+        env = dict(os.environ, WMB_TEST_ROOT=str(root), WMB_DRIVER_SHA=DRIVER_SHA,
+                   WMB_RECEIPT='query_error', WMB_FAIL='', WMB_APP_PROTECTED='1')
+        retry = subprocess.run(['/bin/bash',str(root/'InstallBackend.sh'),str(root/'payload')],
+                               env=env,capture_output=True,text=True,timeout=20)
+        self.assertNotEqual(retry.returncode, 0)
+        self.assert_original(app, helper, daemons)
+        self.assertFalse((helper/'.install-recovery').exists())
+
+    def test_failed_rollback_staging_preserves_snapshot_without_publishing_partial_app(self):
+        root, app, helper, _, result = self.run_install(fail='kill_before_bootstrap')
+        self.assertEqual(result.returncode, -9)
+        snapshot = Path((helper/'.install-recovery').read_text().splitlines()[1])
+        shutil.rmtree(snapshot/'retired-application.app')  # Exercise legacy backup reconstruction.
+        script = root/'InstallBackend.sh'
+        original = script.read_text()
+        allocation = '/usr/bin/mktemp -d "$bridge_stage/restore.XXXXXX"'
+        self.assertIn(allocation, original)
+        script.write_text(original.replace(allocation, '/usr/bin/false'))
+        env = dict(os.environ, WMB_TEST_ROOT=str(root), WMB_DRIVER_SHA=DRIVER_SHA,
+                   WMB_RECEIPT='query_error', WMB_FAIL='', WMB_APP_PROTECTED='1')
+        retry = subprocess.run(['/bin/bash',str(script),str(root/'payload')],
+                               env=env,capture_output=True,text=True,timeout=20)
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertEqual((app/'identity').read_text(), 'new-app')
+        self.assertEqual((snapshot/'previous/WindowsMacBridge.app/identity').read_text(), 'old-app')
+        self.assertTrue((helper/'.install-recovery').exists())
+        commands = [json.loads(row) for row in (root/'commands.log').read_text().splitlines()]
+        self.assertFalse(any(row[0] == 'ditto' and row[-1] == '/WindowsMacBridge.app' for row in commands))
 
     def test_compatible_shared_daemon_is_not_restarted_on_success_or_rollback(self):
         for failure in ['', 'bootstrap_helper']:

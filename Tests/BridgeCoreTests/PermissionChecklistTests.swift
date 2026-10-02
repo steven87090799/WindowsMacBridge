@@ -2,6 +2,33 @@ import Testing
 @testable import BridgeCore
 
 struct PermissionChecklistTests {
+    @Test func loginApprovalOnlyEnablesNativeMappingAfterActualApproval() {
+        var input = RuntimePolicyInput()
+        input.shortcutEnabled = true
+        input.loginItemEnabled = false
+        var coordinator = RuntimePolicyCoordinator()
+        let before = coordinator.transition(input)
+        #expect(before.permitsShortcuts)
+        #expect(!before.permitsPhysicalNormalization)
+        input.loginItemEnabled = true
+        let approved = coordinator.transition(input)
+        #expect(approved.permitsPhysicalNormalization)
+        #expect(approved.generation != before.generation)
+        input.loginItemEnabled = false
+        #expect(!coordinator.transition(input).permitsPhysicalNormalization)
+    }
+    @Test func partialKeyboardGrantCanSuggestRestartWithoutClaimingSuccess() {
+        for snapshot in [PermissionSnapshot(accessibility: true), PermissionSnapshot(posting: true)] {
+            var state = PermissionChecklistState()
+            state.verify(snapshot)
+            #expect(snapshot.keyboardControlPartiallyGranted)
+            #expect(state.verification(for: [.accessibility, .posting]) == .denied)
+        }
+        #expect(!PermissionSnapshot().keyboardControlPartiallyGranted)
+        let restarted = PermissionSnapshot(accessibility: true, posting: true)
+        #expect(!restarted.keyboardControlPartiallyGranted)
+        #expect(restarted.keyboardControlGranted)
+    }
     @Test func grantsAreNeverInferredFromUncheckedOrPendingState() {
         var state = PermissionChecklistState()
         #expect(state.verification(for: [.listening]) == .unchecked)

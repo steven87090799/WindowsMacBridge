@@ -2,7 +2,7 @@
 
 將 Windows 快捷鍵、MacBook 鍵位輔助、截圖與唯音／ABC 輸入法管理整合在同一個 macOS 選單列 App，以 Swift、AppKit、SwiftUI 與 macOS 原生 API 實作。
 
-**系統需求：Apple Silicon、macOS 14 以上。** 目前 `main` 原始碼版本為 **0.5.17（build 36）修復候選版**；下載包版本以 [GitHub Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 為準。合併原始碼不代表已發布新版安裝包；實體 HID、Universal Control、遠端、TCC 授權與安裝復原仍需實機驗收，目前不宣稱已可正式上線或完整取代 Karabiner。
+**系統需求：Apple Silicon、macOS 14 以上。** 目前 `main` 原始碼版本為 **0.5.19（build 37）修復候選版**；下載包版本以 [GitHub Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 為準。合併原始碼不代表已發布新版安裝包；實體 HID、Universal Control、遠端、TCC 授權與安裝復原仍需實機驗收，目前不宣稱已可正式上線或完整取代 Karabiner。
 
 本文介紹目前來源已實作的功能；新安裝預設指完整單一 App 首次完成安裝準備後的設定。最新權限與分頁流程見 [權限修復紀錄](Docs/SimplePermissions-2026-10-02.md)，鍵盤與資源審查見 [八類功能複查](Docs/ReviewerAudit-2026-10-02.md)，雙機操作見 [兩台 Mac 驗收](Resources/TwoMacAcceptance.md)。
 

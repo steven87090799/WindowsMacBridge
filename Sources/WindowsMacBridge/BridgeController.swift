@@ -62,6 +62,24 @@ import Carbon
     @Published var calibrationNotice: String?
     @Published private(set) var permissionChecklist = PermissionChecklistState()
     var permissions: PermissionSnapshot { permissionChecklist.verified }
+    var keyboardPermissionRestartSuggested: Bool {
+        permissions.keyboardControlPartiallyGranted &&
+        !permissionChecklist.awaitingVerification.contains(.accessibility) &&
+        !permissionChecklist.awaitingVerification.contains(.posting) &&
+        !CommandLine.arguments.contains("--permission-relaunch")
+    }
+    @Published private(set) var permissionRelaunchPending = false
+    @Published private(set) var permissionRelaunchNotice: String?
+    func restartForPermissions() {
+        guard !permissionRelaunchPending else { return }
+        do {
+            try PermissionRelauncher.start()
+            permissionRelaunchPending = true
+            // The existing termination handler stops capture, invalidates old
+            // screenshot work and restores this App's keyboard mapping.
+            NSApp.terminate(nil)
+        } catch { permissionRelaunchNotice = error.localizedDescription }
+    }
     var helperInputMonitoringVerification: PermissionVerification {
         hid.hasFreshVerifiedStatus ? PermissionVerification(verifiedGrant: hid.status.permissions) : helperPermissionVerification
     }
@@ -89,13 +107,13 @@ import Carbon
     private let screenshot = ScreenshotManager()
     private let macBookKeyboard = MacBookKeyboardMapper()
     private let finderPublisher = FinderModePublisher()
-    private let screenshotManagedLoginKey = "screenshot.loginManaged.v1"
-    private let macBookManagedLoginKey = "macbook.loginManaged.v1"
+    private let screenshotFolderRequestKey = "permissions.screenshotFolderRequest.v1"
     private var registry: ApplicationRegistry?
     private var timer: Timer?
     private var timerPlan: RuntimeWakePlan = .stopped
     private var running = false
     private var observers: [NSObjectProtocol] = []
+    private var applicationActivationObserver: NSObjectProtocol?
     private enum SuspensionReason { case systemSleep, screensSleep, inactiveSession }
     private var suspensionReasons = Set<SuspensionReason>()
     private var sessionActive: Bool { suspensionReasons.isEmpty }
@@ -186,6 +204,14 @@ import Carbon
         refreshLayout()
         let center = NSWorkspace.shared.notificationCenter
         observe(center, NSWorkspace.didActivateApplicationNotification) { $0.refreshApplication() }
+        applicationActivationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: NSApp, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.running else { return }
+                self.refreshPermissions()
+            }
+        }
         observe(center, NSWorkspace.didTerminateApplicationNotification) { $0.refreshApplication() }
         observe(center, NSWorkspace.willSleepNotification) { $0.setSuspended(.systemSleep, true) }
         observe(center, NSWorkspace.didWakeNotification) { $0.setSuspended(.systemSleep, false); $0.refreshApplication() }
@@ -206,9 +232,15 @@ import Carbon
         observe(center, NSWorkspace.didLaunchApplicationNotification) { $0.remoteRegistry.discover() }
         observe(center, NSWorkspace.didTerminateApplicationNotification) { $0.remoteRegistry.maintain([]) }
         hid.onOwnershipChange = { [weak self] in self?.publish() }
-        if settings.screenshotAutoCopy { ensureScreenshotLogin() }
-        if settings.macBookFnControlSwap { ensureMacBookLogin() }
+        if settings.screenshotAutoCopy { checkScreenshotLogin() }
         refreshPermissions()
+        let directory = ScreenshotFolderAccess.currentDirectory()
+        if let scope = screenshotFolderRequestScope(directory),
+           UserDefaults.standard.string(forKey: screenshotFolderRequestKey) == scope {
+            // A previous row-8 operation permits a fresh native check for this
+            // exact App/path, so normal launches don't require setup every time.
+            verifyScreenshotFolder(directory)
+        }
         engine.start()
         hid.start()
         publish()
@@ -256,6 +288,8 @@ import Carbon
         timer?.invalidate(); timer = nil; timerPlan = .stopped
         for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         observers.removeAll()
+        if let observer = applicationActivationObserver { NotificationCenter.default.removeObserver(observer) }
+        applicationActivationObserver = nil
         screenshot.stop()
         // Restoring a pending lease during quit must not re-enable the HID backend.
         macBookKeyboard.onChange = nil
@@ -348,7 +382,7 @@ import Carbon
         refreshLayout()
         publish()
     }
-    func refreshPermissions(userInitiated: Bool = false) {
+    func refreshPermissions(userInitiated: Bool = false, recheckScreenshotFolder: Bool = false) {
         // A source/login notification in the background must not confirm a
         // settings link. Verify once the user returns, or explicitly rechecks.
         if !userInitiated && !permissionChecklist.awaitingVerification.isEmpty && !NSApp.isActive { return }
@@ -359,19 +393,24 @@ import Carbon
         if permissionChecklist != next { permissionChecklist = next }
         permissionsCheckedAt = Date()
         let directory = ScreenshotFolderAccess.currentDirectory()
-        if screenshotFolderPath != directory.path {
+        let folderChanged = screenshotFolderPath != directory.path
+        if folderChanged {
             screenshotFolderPath = directory.path
             screenshotFolderVerification = .unchecked
             screenshotFolderNotice = nil
+            UserDefaults.standard.removeObject(forKey: screenshotFolderRequestKey)
         }
-        // Folder access has no public TCC preflight API. Never infer a grant
-        // from a selected path. Explicit rechecks perform bounded native I/O.
-        if userInitiated { verifyScreenshotFolder(directory) }
+        // Folder reads can themselves prompt for access. Opening an unrelated
+        // permission row must not request Desktop/Documents/Downloads access.
+        // Only row 8 starts that I/O; later foreground checks can recheck it.
+        if recheckScreenshotFolder && (screenshotFolderVerification == .granted || screenshotFolderVerification == .denied) {
+            verifyScreenshotFolder(directory)
+        }
         if userInitiated || driverNeedsVerification || (NSApp.isActive && settingsPage == .permissions) {
             refreshDriverPermission()
             if !backgroundInstallationNeeded { refreshHelperPermission() }
         }
-        if running && previous != current {
+        if running && (previous != current || folderChanged) {
             publish()
             engine.maintain()
             if settings.screenshotAutoCopy {
@@ -391,7 +430,6 @@ import Carbon
             else {
                 self.driverVerification = PermissionVerification(verifiedGrant: result?.granted)
                 self.driverRegistered = result?.registered ?? false
-                if result?.registered == false { self.prepareDriverActivation() }
                 if result?.registered == true { self.driverApprovalNotice = nil }
             }
         }
@@ -408,6 +446,9 @@ import Carbon
             NSWorkspace.shared.open(url)
         }
     }
+    private func screenshotFolderRequestScope(_ directory: URL) -> String? {
+        PermissionStatus.codeIdentity.map { $0 + "\n" + directory.resolvingSymlinksInPath().standardizedFileURL.path }
+    }
     private func verifyScreenshotFolder(_ directory: URL) {
         // Directory I/O can wait on a volume. Keep at most one worker even if
         // the user repeatedly checks, cancels, or changes the screenshot path.
@@ -415,6 +456,7 @@ import Carbon
         let id = UUID(); screenshotFolderCheckID = id
         screenshotFolderVerification = .awaitingVerification
         screenshotFolderNotice = nil
+        publish()
         screenshotFolderCheckTask = Task { [weak self] in
             let readable = await Task.detached(priority: .utility) {
                 return ScreenshotFolderAccess.canRead(directory)
@@ -423,10 +465,17 @@ import Carbon
             self.screenshotFolderCheckTask = nil
             guard directory.resolvingSymlinksInPath().standardizedFileURL == ScreenshotFolderAccess.currentDirectory() else {
                 self.screenshotFolderVerification = .unchecked
+                self.publish()
                 return
             }
             self.screenshotFolderPath = directory.resolvingSymlinksInPath().standardizedFileURL.path
             self.screenshotFolderVerification = PermissionVerification(verifiedGrant: readable)
+            if readable, let scope = self.screenshotFolderRequestScope(directory) {
+                UserDefaults.standard.set(scope, forKey: self.screenshotFolderRequestKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: self.screenshotFolderRequestKey)
+            }
+            self.publish()
             if readable, self.settings.screenshotAutoCopy {
                 self.screenshot.verifyAndRepair(reason: "截圖資料夾存取已確認")
             }
@@ -446,6 +495,11 @@ import Carbon
         case .loginItem: inputSources.openLoginSettings()
         }
     }
+    func requestLoginItem() {
+        inputSources.setLoginEnabled(true)
+        refreshPermissions(userInitiated: true)
+        openPermissionSettings(.loginItem)
+    }
     private func sourceSuspension(for app: ApplicationContext) -> InputSourceSuspension? {
         if installationRecoveryPending { return .protectedApplication }
         if IsSecureEventInputEnabled() { return .protectedApplication }
@@ -463,7 +517,8 @@ import Carbon
     }
     private func configureMacBookKeyboard(configuration: EngineConfiguration) {
         let native = configuration.usesNativePhysicalMapping
-        macBookKeyboard.configure(enabled: settings.macBookFnControlSwap && policy.current?.permitsPhysicalNormalization == true,
+        macBookKeyboard.configure(enabled: settings.macBookFnControlSwap && permissions.loginItem &&
+            policy.current?.permitsPhysicalNormalization == true,
             eventTapBackend: native, sessionActive: sessionActive)
         macBookKeyboardStatus = macBookKeyboard.status
     }
@@ -471,7 +526,6 @@ import Carbon
         store.update { $0.macBookFnControlSwap = value }; settings = store.settings
         configurationError = store.errorMessage
         guard store.errorMessage == nil else { return }
-        if value { ensureMacBookLogin() } else { releaseFeatureLoginIfUnused() }
         publish()
     }
     func refreshMacBookKeyboard() {
@@ -484,8 +538,8 @@ import Carbon
         configurationError = store.errorMessage
         guard store.errorMessage == nil else { return }
         if value {
-            ensureScreenshotLogin()
-        } else { releaseFeatureLoginIfUnused() }
+            checkScreenshotLogin()
+        }
         publish()
     }
     func setWindowsKeyModifier(_ value: WindowsKeyModifier) {
@@ -507,29 +561,9 @@ import Carbon
         store.update { $0.winTaskViewEnabled = value }; settings = store.settings
         configurationError = store.errorMessage; publish()
     }
-    private func ensureMacBookLogin() {
-        let wasRegistered = inputSources.loginIsRegistered
-        if inputSources.ensureLoginEnabled(), !wasRegistered {
-            UserDefaults.standard.set(true, forKey: macBookManagedLoginKey)
-            KeyboardMappingDiagnostics.append("Fn／Ctrl 模式已註冊 App 登入啟動")
-        }
-    }
-    private func releaseFeatureLoginIfUnused() {
-        guard !settings.screenshotAutoCopy && !settings.macBookFnControlSwap,
-              UserDefaults.standard.bool(forKey: screenshotManagedLoginKey) ||
-                UserDefaults.standard.bool(forKey: macBookManagedLoginKey) else { return }
-        inputSources.setLoginEnabled(false)
-        if !inputSources.loginIsRegistered {
-            UserDefaults.standard.removeObject(forKey: screenshotManagedLoginKey)
-            UserDefaults.standard.removeObject(forKey: macBookManagedLoginKey)
-        }
-    }
-    private func ensureScreenshotLogin() {
-        let wasRegistered = inputSources.loginIsRegistered
-        if inputSources.ensureLoginEnabled(), !wasRegistered {
-            UserDefaults.standard.set(true, forKey: screenshotManagedLoginKey)
-            screenshot.recordRepair("登入啟動已註冊")
-        }
+    private func checkScreenshotLogin() {
+        // Runtime checks and feature toggles never register/unregister a
+        // different permission. Row 4 owns the login authorization action.
         if !inputSources.loginIsActive {
             screenshot.reportConfigurationIssue("登入啟動未生效（\(inputSources.loginStatusText)）；請在系統設定核准登入項目。")
         }
@@ -546,7 +580,7 @@ import Carbon
                 screenshot.recordRepair("持久設定已重新寫入")
             }
         }
-        ensureScreenshotLogin()
+        checkScreenshotLogin()
     }
     var screenshotLogPath: String { screenshot.logPath }
     func refreshSourceDiagnostics() {
@@ -580,10 +614,14 @@ import Carbon
         input.secureInput = IsSecureEventInputEnabled()
         input.session = sessionEpoch; input.sessionActive = sessionActive
         input.shortcutEnabled = settings.enabled && registry != nil && configurationError == nil && !installationRecoveryPending
-        input.screenshotEnabled = settings.screenshotAutoCopy
+        // Do not touch the user's protected screenshot directory while they
+        // are authorizing a different row. Row 8 enables screenshot work only
+        // after a genuine directory read succeeds.
+        input.screenshotEnabled = settings.screenshotAutoCopy && screenshotFolderVerification == .granted
         input.settingsRevision = settingsRevision
         input.restartToken = restartToken
         input.accessibility = AXIsProcessTrusted(); input.posting = CGPreflightPostEventAccess()
+        input.loginItemEnabled = permissions.loginItem
         input.layoutIdentity = layoutID
         input.layoutSupported = layoutSupported; input.diagnosticsEnabled = diagnosticsEnabled
         input.hidReleasePending = hid.releasePending
@@ -629,7 +667,7 @@ import Carbon
         // The rule engine checks the receiving App mode. Keep the feature flag
         // stable across App-only changes; ScreenshotManager still applies the
         // stricter runtime policy and cancels old jobs on every generation.
-        config.screenshotEnabled = settings.screenshotAutoCopy && snapshot.permitsShortcuts
+        config.screenshotEnabled = input.screenshotEnabled && snapshot.permitsShortcuts
         config.printScreenBehavior = settings.printScreenBehavior
         // Disable old ownership before native mapping restoration or new capture begins.
         var stopped = config; stopped.enabled = false
@@ -691,6 +729,7 @@ import Carbon
         }
     }
     func requestHIDListening() {
+        if helperInputMonitoringVerification == .granted { openInputMonitoring(); return }
         helperPermissionVerification = .awaitingVerification
         helperPermissionRequest.start { [weak self] error in
             guard let self else { return }
@@ -825,7 +864,10 @@ import Carbon
         refreshPermissions(userInitiated: true)
         publish()
     }
-    func requestListening() { _ = CGRequestListenEventAccess(); refreshPermissions(userInitiated: true) }
+    func requestListening() {
+        if !CGPreflightListenEventAccess() { _ = CGRequestListenEventAccess() }
+        refreshPermissions(userInitiated: true)
+    }
     func openPermissions() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)

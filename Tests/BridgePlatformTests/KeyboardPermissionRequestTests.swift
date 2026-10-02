@@ -23,6 +23,16 @@ import BridgeCore
         let result = KeyboardPermissionRequest.perform(read: { complete }, request: { _ in calls += 1; return false })
         #expect(calls == 0 && result.keyboardControlGranted)
         #expect(KeyboardPermissionRequest.plan(for: .init(posting: true)) == [.accessibility])
-        #expect(KeyboardPermissionRequest.plan(for: .init()) == [.posting, .accessibility])
+        #expect(KeyboardPermissionRequest.plan(for: .init()) == [.posting])
+    }
+    @Test func oneClickDoesNotStackTwoNativePermissionPrompts() {
+        let initial = PermissionSnapshot()
+        var requests: [PermissionKind] = []
+        let result = KeyboardPermissionRequest.perform(read: { initial }, request: {
+            requests.append($0)
+            return false
+        })
+        #expect(requests == [.posting])
+        #expect(!result.keyboardControlGranted)
     }
 }

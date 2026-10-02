@@ -13,16 +13,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build pinned VirtualHID client and run offline tests
         run: bash scripts/build-hid-helper.sh
-      - name: Build App and package integrated installer without installation
+      - name: Build App and package complete drag-install DMG without installation
         run: |
           bash scripts/build-app.sh
           bash scripts/package-hid-release.sh
+          export BRIDGE_RELEASE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)-preview.1"
+          bash scripts/package-single-app.sh
+          bash scripts/package-app-dmg.sh
       - uses: actions/upload-artifact@v4
         with:
           name: WindowsMacBridge-HID-installer-development
           path: |
             build/download/*.zip
             build/download/*.zip.sha256
+            build/download/*.dmg
+            build/download/*.dmg.sha256
   test-and-package:
     runs-on: macos-15
     timeout-minutes: 15
@@ -49,8 +54,6 @@ jobs:
           bridge_zip_source="$(mktemp -d)"
           git archive HEAD | tar -x -C "$bridge_zip_source"
           bash "$bridge_zip_source/scripts/build-app.sh"
-      - name: Package app
-        run: bash scripts/package-app-dmg.sh
       - name: Test process crash diagnostics
         if: failure()
         run: |
@@ -61,9 +64,3 @@ jobs:
               print(report.name)
               print(report.read_text(errors='replace')[:100000])
           PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: WindowsMacBridge-development
-          path: |
-            build/download/*.dmg
-            build/download/*.dmg.sha256

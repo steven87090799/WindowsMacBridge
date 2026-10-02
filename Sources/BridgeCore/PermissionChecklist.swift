@@ -22,6 +22,9 @@ public struct PermissionSnapshot: Equatable, Sendable {
     /// One settings pane controls keyboard/AX access, but both native capabilities
     /// must be checked. A UI switch or one successful API does not prove the other.
     public var keyboardControlGranted: Bool { accessibility && posting }
+    /// Observed after granting the shared system switch in a running process.
+    /// This is a restart hint, never proof that the missing capability is granted.
+    public var keyboardControlPartiallyGranted: Bool { accessibility != posting }
 
     public init(accessibility: Bool = false, posting: Bool = false, listening: Bool = false,
                 screenRecording: Bool = false, finderExtension: Bool = false, loginItem: Bool = false) {
