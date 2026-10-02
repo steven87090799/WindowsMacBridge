@@ -19,3 +19,7 @@ Windows 截圖與取消生命週期修復承接 build 34，詳見 OneClickSetupR
 依使用者後續更正，保留 build 35 的八項權限清單與核准流程，恢復原本上方分頁：權限、一般設定、唯音與輸入法、App 規則、診斷。移除獨立「進階設定」、返回權限按鈕與對應狀態；每次只掛載目前分頁，沒有新增計時器或背景工作。只進行必要 Release 建置及封裝檢查，沒有重跑功能測試。新版安裝包為 `build/download/WindowsMacBridge-0.5.17-preview.8-app-macos-arm64.zip`。
 
 2026-10-02 晚上 22:12 已完成 build 36 安裝；GUI 確認上方五個分頁直接可見，預設為權限頁，八項清單與各列「開啟設定」均保留，沒有獨立進階設定。App/helper 均為 build 36，安裝後簽章檢查通過。未代替使用者核准系統權限。
+
+## PR 編譯相容性修復
+
+PR CI 的較舊 Swift／CoreGraphics SDK 發現本機新版工具鏈未報告的相容性問題：PDF dictionary/object 在舊 SDK 同為 opaque pointer alias，不能依型別多載；改為明確命名兩種巡覽函式。截圖 observer 不再依賴 isolated deinit，改由可轉移 handle 在主 queue 釋放 FSEvents，stream context 保留弱 owner，避免背景 final release 後的晚到回呼讀取已釋放物件。未加入常駐工作或輪詢。新增背景釋放回歸，僅執行 NativeScreenshotObserverTests 三項，均通過；PR 完整檢查另以 Hosted CI 結果為準。此來源相容性修復未重新安裝或替換既有 preview.8 本機產物。

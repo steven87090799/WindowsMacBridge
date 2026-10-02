@@ -3,11 +3,24 @@ import CoreServices
 import Darwin
 import BridgeCore
 
+/// The handle is transferred to the main queue only for final cleanup.
+private struct NativeScreenshotStream: @unchecked Sendable {
+    let raw: FSEventStreamRef
+    func close() {
+        FSEventStreamStop(raw); FSEventStreamInvalidate(raw); FSEventStreamRelease(raw)
+    }
+}
+
+private final class NativeScreenshotContext {
+    weak var owner: NativeScreenshotObserver?
+    init(_ owner: NativeScreenshotObserver) { self.owner = owner }
+}
+
 /// Observe files produced by macOS itself, after its cross-machine routing and
 /// screenshot UI have finished. No early key interception, folder polling or
 /// global screenshot preference changes are needed for Command-Shift-3/4.
 @MainActor final class NativeScreenshotObserver {
-    private var stream: FSEventStreamRef?
+    private var stream: NativeScreenshotStream?
     private var directory: URL?
     private var startedAt = Date.distantFuture
     private var generation: UInt64 = 0
@@ -17,21 +30,32 @@ import BridgeCore
     private var lastDelivered = Date.distantPast
     var onScreenshot: ((URL) -> Void)?
 
-    isolated deinit { stop() }
+    deinit {
+        guard let stream else { return }
+        if Thread.isMainThread { stream.close() }
+        else { DispatchQueue.main.async { stream.close() } }
+    }
 
     func start(directory: URL) -> Bool {
         let directory = directory.resolvingSymlinksInPath().standardizedFileURL
         if stream != nil && self.directory == directory { return true }
         stop()
         self.directory = directory; startedAt = Date()
-        var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
-            retain: nil, release: nil, copyDescription: nil)
+        let contextOwner = NativeScreenshotContext(self)
+        var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(contextOwner).toOpaque(),
+            retain: { info in
+                guard let info else { return nil }
+                return UnsafeRawPointer(Unmanaged<NativeScreenshotContext>.fromOpaque(info).retain().toOpaque())
+            }, release: { info in
+                guard let info else { return }
+                Unmanaged<NativeScreenshotContext>.fromOpaque(info).release()
+            }, copyDescription: nil)
         let callback: FSEventStreamCallback = { _, info, count, rawPaths, flags, _ in
             guard let info else { return }
-            let owner = Unmanaged<NativeScreenshotObserver>.fromOpaque(info).takeUnretainedValue()
-            // The stream is scheduled on the main queue; its context is destroyed
-            // synchronously on that same queue before releasing the observer.
             MainActor.assumeIsolated {
+                // A background final release may defer stream cleanup. Its
+                // retained context has a weak owner, so queued callbacks are safe.
+                guard let owner = Unmanaged<NativeScreenshotContext>.fromOpaque(info).takeUnretainedValue().owner else { return }
                 let paths = rawPaths.assumingMemoryBound(to: UnsafePointer<CChar>.self)
                 var urls: [URL] = []
                 for i in max(0, count - 64)..<count {
@@ -41,20 +65,20 @@ import BridgeCore
                 owner.receive(urls)
             }
         }
-        guard let next = FSEventStreamCreate(nil, callback, &context, [directory.path] as CFArray,
-            FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 0.15,
-            FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer)) else { return false }
+        guard let next = withExtendedLifetime(contextOwner, {
+            FSEventStreamCreate(nil, callback, &context, [directory.path] as CFArray,
+                FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 0.15,
+                FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer))
+        }) else { return false }
         FSEventStreamSetDispatchQueue(next, .main)
         guard FSEventStreamStart(next) else { FSEventStreamInvalidate(next); FSEventStreamRelease(next); return false }
-        stream = next
+        stream = NativeScreenshotStream(raw: next)
         return true
     }
 
     func stop() {
         generation &+= 1
-        if let stream {
-            FSEventStreamStop(stream); FSEventStreamInvalidate(stream); FSEventStreamRelease(stream)
-        }
+        stream?.close()
         stream = nil; directory = nil; seen.removeAll(); pending.removeAll()
         lastDelivered = .distantPast
     }

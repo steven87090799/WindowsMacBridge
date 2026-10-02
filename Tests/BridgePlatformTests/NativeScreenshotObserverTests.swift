@@ -4,6 +4,11 @@ import Testing
 import BridgeCore
 @testable import BridgePlatform
 
+private final class ObserverReleaseBox: @unchecked Sendable {
+    var observer: NativeScreenshotObserver?
+    init(_ observer: NativeScreenshotObserver) { self.observer = observer }
+}
+
 @MainActor struct NativeScreenshotObserverTests {
     private func directory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("BridgeNativeObserver-\(UUID().uuidString)")
@@ -14,6 +19,22 @@ import BridgeCore
         let data = try PropertyListSerialization.data(fromPropertyList: true, format: .binary, options: 0)
         let result = data.withUnsafeBytes { setxattr(url.path, "com.apple.metadata:kMDItemIsScreenCapture", $0.baseAddress, data.count, 0, 0) }
         #expect(result == 0)
+    }
+    @Test func backgroundReleaseDoesNotKeepObserverOrDeliverLateFiles() async throws {
+        let folder = try directory(); defer { try? FileManager.default.removeItem(at: folder) }
+        var observer: NativeScreenshotObserver? = NativeScreenshotObserver()
+        weak var released = observer
+        var deliveries = 0
+        observer?.onScreenshot = { _ in deliveries += 1 }
+        #expect(observer?.start(directory: folder) == true)
+        let box = ObserverReleaseBox(try #require(observer))
+        observer = nil
+        await Task.detached { box.observer = nil }.value
+        #expect(released == nil)
+        let file = folder.appendingPathComponent("after-release.png")
+        try Data([1]).write(to: file); try mark(file)
+        try await Task.sleep(for: .milliseconds(350))
+        #expect(deliveries == 0)
     }
     @Test func onlyNewNativeMarkedFilesInTheConfiguredFolderAreEligible() throws {
         let folder = try directory(); defer { try? FileManager.default.removeItem(at: folder) }
