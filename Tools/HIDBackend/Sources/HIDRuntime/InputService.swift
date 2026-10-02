@@ -20,6 +20,7 @@ final class InputService: NSObject, NSXPCListenerDelegate {
     }
     private let pinnedHash: Data
     private var connection: NSXPCConnection?
+    private let acceptedConnections = ConnectionRetainer<NSXPCConnection>()
     private let listener = NSXPCListener(machServiceName: HIDService.name)
     private var termination: DispatchSourceSignal?
     init?(pinPath: String = HIDService.root + "/controller.plist") {
@@ -40,22 +41,24 @@ final class InputService: NSObject, NSXPCListenerDelegate {
         source.setEventHandler { [weak self] in self?.captureStorage?.stop(); exit(0) }
         source.resume(); termination = source
         guard let lifetime = PassiveRunLoopLifetime() else { exit(70) }
-        withExtendedLifetime(lifetime) { listener.resume(); RunLoop.main.run() }
+        withExtendedLifetime((self, lifetime)) { listener.resume(); RunLoop.main.run() }
     }
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection candidate: NSXPCConnection) -> Bool {
-        guard authenticated(candidate) else { return false }
+        guard authenticated(candidate), acceptedConnections.insert(candidate) else { return false }
         let api = Endpoint(service: self, connection: candidate)
         candidate.exportedInterface = NSXPCInterface(with: HIDHelperProtocol.self)
         candidate.exportedObject = api
         candidate.remoteObjectInterface = NSXPCInterface(with: HIDControllerProtocol.self)
         candidate.invalidationHandler = { [weak self, weak candidate] in
             DispatchQueue.main.async {
-                if self?.connection === candidate {
-                    self?.captureStorage?.stop(); self?.connection = nil; exit(0)
+                guard let self, let candidate else { return }
+                self.acceptedConnections.remove(candidate)
+                if self.connection === candidate {
+                    self.captureStorage?.stop(); self.connection = nil
                 }
-                // A permission-only probe has no capture lease. Exit after its
-                // reply/connection ends so the next check uses a fresh TCC client.
-                if self?.connection == nil && self?.captureStorage == nil { exit(0) }
+                // Keep the passive service available between permission checks.
+                // Exiting after each probe triggers launchd's restart throttle;
+                // an idle service has no capture timer or periodic wakeups.
             }
         }
         candidate.interruptionHandler = candidate.invalidationHandler
