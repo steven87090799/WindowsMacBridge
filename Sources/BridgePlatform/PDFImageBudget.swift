@@ -29,7 +29,7 @@ final class PDFImageBudget {
             if CGPDFDictionaryGetObject(current, "Resources", &object) {
                 var resources: CGPDFDictionaryRef?
                 guard CGPDFDictionaryGetDictionary(current, "Resources", &resources), let resources else { return false }
-                return inspect(resources, depth: 0)
+                return inspectDictionary(resources, depth: 0)
             }
             var parent: CGPDFDictionaryRef?
             guard CGPDFDictionaryGetDictionary(current, "Parent", &parent), let parent else { return true }
@@ -56,7 +56,7 @@ final class PDFImageBudget {
         defer { CGPDFScannerRelease(scanner) }
         return CGPDFScannerScan(scanner) && valid
     }
-    private func inspect(_ dictionary: CGPDFDictionaryRef, depth: Int) -> Bool {
+    private func inspectDictionary(_ dictionary: CGPDFDictionaryRef, depth: Int) -> Bool {
         guard depth <= 12, remainingNodes > 0, CGPDFDictionaryGetCount(dictionary) <= 64 else { return false }
         if visited.contains(dictionary) { return true }
         visited.insert(dictionary); remainingNodes -= 1
@@ -65,22 +65,22 @@ final class PDFImageBudget {
            String(cString: subtype) == "Image", !image(dictionary) { return false }
         var accepted = true
         CGPDFDictionaryApplyBlock(dictionary, { _, object, _ in
-            accepted = self.inspect(object, depth: depth + 1)
+            accepted = self.inspectObject(object, depth: depth + 1)
             return accepted
         }, nil)
         return accepted
     }
-    private func inspect(_ object: CGPDFObjectRef, depth: Int) -> Bool {
+    private func inspectObject(_ object: CGPDFObjectRef, depth: Int) -> Bool {
         guard depth <= 12, remainingNodes > 0 else { return false }
         remainingNodes -= 1
         switch CGPDFObjectGetType(object) {
         case .dictionary:
             var dictionary: CGPDFDictionaryRef?
-            return CGPDFObjectGetValue(object, .dictionary, &dictionary) && dictionary.map { inspect($0, depth: depth) } == true
+            return CGPDFObjectGetValue(object, .dictionary, &dictionary) && dictionary.map { inspectDictionary($0, depth: depth) } == true
         case .stream:
             var stream: CGPDFStreamRef?
             guard CGPDFObjectGetValue(object, .stream, &stream), let stream,
-                  let dictionary = CGPDFStreamGetDictionary(stream), inspect(dictionary, depth: depth) else { return false }
+                  let dictionary = CGPDFStreamGetDictionary(stream), inspectDictionary(dictionary, depth: depth) else { return false }
             var subtype: UnsafePointer<CChar>?
             if CGPDFDictionaryGetName(dictionary, "Subtype", &subtype), let subtype,
                String(cString: subtype) == "Form" {
@@ -98,7 +98,7 @@ final class PDFImageBudget {
                   CGPDFArrayGetCount(array) <= 64 else { return false }
             for index in 0..<CGPDFArrayGetCount(array) {
                 var child: CGPDFObjectRef?
-                guard CGPDFArrayGetObject(array, index, &child), let child, inspect(child, depth: depth + 1) else { return false }
+                guard CGPDFArrayGetObject(array, index, &child), let child, inspectObject(child, depth: depth + 1) else { return false }
             }
             return true
         default: return true

@@ -19,7 +19,9 @@ let package = Package(
         .target(name: "InputSourceSupport", dependencies: ["InputSourceCore", "BridgeCore"],
                 swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(name: "BridgePlatform", dependencies: ["BridgeCore", "HIDProtocol"],
-                resources: [.process("Resources")]),
+                resources: [.process("Resources")],
+                // Swift 6.1 requires this flag for main-actor stream teardown.
+                swiftSettings: [.enableExperimentalFeature("IsolatedDeinit")]),
         .executableTarget(name: "WindowsMacBridge", dependencies: ["BridgeCore", "BridgePlatform", "InputSourceCore", "InputSourceSupport"]),
         // Offline codec measurement only; explicitly excluded from App packaging.
         .executableTarget(name: "BridgeImageBenchmark", dependencies: ["BridgeCore", "BridgePlatform"], path: "Tools/ImageBenchmark"),
