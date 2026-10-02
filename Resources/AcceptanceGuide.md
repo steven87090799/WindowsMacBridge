@@ -1,3 +1,5 @@
+> 0.6.0（build 41）安裝回歸：DMG 拖進應用程式、首次自動準備、輸入監控只列 WindowsMacBridge。逐項授權後檢查原生結果；第 6 項鍵盤驅動與第 7 項截圖資料夾。同一 App 的背景執行模式也必須通過原生 IOHID 檢查，未確認不得亮綠。以下 UC、實體 HID、授權重開與記憶體峰值仍待實機驗收。
+
 # WindowsMacBridge：實機驗收
 
 這份流程用於確認你實際的鍵盤、輸入法與遠端環境。請使用可丟棄的測試文字與檔案，
@@ -6,7 +8,7 @@
 
 ## 準備（約兩分鐘）
 
-0.5.16（build 28）：新安裝使用裝置 HID／Command Win 鍵位、保留 Control 與 Fn／Globe。兩台 Mac 完成 helper／Driver 授權後開啟 Windows Experience；UC 不選 Sender／Receiver。既有 EventTap／鍵位／Fn 交換設定保留，先記錄再對照。截圖／modifier／Remote 都必須實際操作，純核心測試不替代它。
+0.5.16（build 28）：新安裝使用裝置 HID／Command Win 鍵位、保留 Control 與 Fn／Globe。兩台 Mac 完成 HID／Driver 授權後開啟 Windows Experience；UC 不選 Sender／Receiver。既有 EventTap／鍵位／Fn 交換設定保留，先記錄再對照。截圖／modifier／Remote 都必須實際操作，純核心測試不替代它。
 
 1. 從 Applications 啟動 App；HID 應 Ready 且接管數大於零；EventTap 備援則確認 tap Active。不要為了驗收關閉真正的 Secure Input。
 2. 記下 App 版本、macOS 版本、鍵盤型號、輸入來源。先關掉 Karabiner 中重複的規則。
@@ -89,7 +91,7 @@ E/F 先暫停接收端 Bridge 記錄基準，再啟用。Remote Advanced 必須�
 
 本機與遠端同時按不同 Ctrl／Shift、同時有 UC、修改一個遠端的偏好，其他來源與本機持鍵應保持獨立。測 host 關閉、連線中斷、focus loss、PID／session 變動，以及 60 秒靜止遠端持鍵失效；不能清掉本機真正按住的修飾鍵。Client／來源 OS 若先吃掉 Alt+Tab／Win+Shift+S，使用 Client 的傳送按鍵功能再測。
 
-UC 必須另外測來源 Terminal／目的端文字 App，以及來源 Finder／目的端其他 App。來源端 helper 已禁止執行 App-sensitive action。必須確認 WindowServer 在接收端提供正確 recipient，來源 Mac 沒有改動 Finder、Clipboard 或關閉視窗；不能用純模型測試推定 UC 路由正確。加入 Win+Tab／Win+L／Win+R 與 native Cmd+Tab 的 WindowServer 順序驗收，未知 recipient 必須保留輸入。
+UC 必須另外測來源 Terminal／目的端文字 App，以及來源 Finder／目的端其他 App。來源端鍵盤處理 已禁止執行 App-sensitive action。必須確認 WindowServer 在接收端提供正確 recipient，來源 Mac 沒有改動 Finder、Clipboard 或關閉視窗；不能用純模型測試推定 UC 路由正確。加入 Win+Tab／Win+L／Win+R 與 native Cmd+Tab 的 WindowServer 順序驗收，未知 recipient 必須保留輸入。
 
 ## 暫停、恢復與裝置
 
@@ -138,4 +140,4 @@ UC 必須另外測來源 Terminal／目的端文字 App，以及來源 Finder／
 
 離線通過不代表以上實機項目通過。本次來源架構、實際結果與限制見原始碼的 Docs/UnifiedInput-2026-10-01.md；前批修復另見 Docs/PreReleaseRepair-2026-09-30.md。
 
-本版授權回歸：從 Finder 開啟 /Applications 的同一份 App，記錄鍵盤控制狀態，按「要求／修復授權」，完成系統提示後回到 App 重新檢查。不得用 Terminal 啟動 CLI 的 TCC 結果替代目前 GUI process；測 app/helper 更新、撤權、重新加入與重新登入。授權頁合併一列，helper 輸入監控仍獨立。
+本版授權回歸：從 Finder 開啟 /Applications 的同一份 App，記錄鍵盤控制狀態，按該列「開啟設定」，完成系統提示後回到 App 重新檢查。不得用 Terminal 啟動 CLI 的 TCC 結果替代目前 GUI process；測 App 更新、撤權、重新加入與重新登入。主 App 與背景鍵盤處理必須同屬 WindowsMacBridge 的單一輸入監控身分；確認沒有新增 HID Helper 權限列。

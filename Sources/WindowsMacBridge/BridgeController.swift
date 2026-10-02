@@ -8,6 +8,7 @@ import InputSourceCore
 import HIDProtocol
 import FinderSync
 import Carbon
+import IOKit.hid
 
 @MainActor final class BridgeController: ObservableObject {
     @Published var settingsPage = SettingsPage.permissions
@@ -34,7 +35,7 @@ import Carbon
     private var driverRegistered = false
     private(set) var preparedSetupThisLaunch = false
     func requestDriverActivation() {
-        if !driverRegistered { prepareDriverActivation() }
+        if driverVerification != .granted { prepareDriverActivation() }
         openDriverSettings()
     }
     private func prepareDriverActivation() {
@@ -45,6 +46,7 @@ import Carbon
         do {
             try driverActivation.start { [weak self] result in
                 guard let self else { return }
+                self.driverApprovalLaunched = false
                 if result != 0 { self.driverApprovalNotice = "驅動程式準備尚未完成；請依系統提示核准或重新開機，再開啟 App。" }
                 self.refreshDriverPermission()
             }
@@ -80,13 +82,14 @@ import Carbon
             NSApp.terminate(nil)
         } catch { permissionRelaunchNotice = error.localizedDescription }
     }
-    var helperInputMonitoringVerification: PermissionVerification {
-        hid.hasFreshVerifiedStatus ? PermissionVerification(verifiedGrant: hid.status.permissions) : helperPermissionVerification
+    var inputMonitoringVerification: PermissionVerification {
+        let main = permissionChecklist.verification(for: [.listening])
+        guard main == .granted, settings.inputBackend == .deviceHID else { return main }
+        return hid.hasFreshVerifiedStatus ? PermissionVerification(verifiedGrant: hid.status.permissions) : backgroundInputVerification
     }
-    @Published private(set) var helperPermissionVerification = PermissionVerification.unchecked
-    @Published private(set) var helperPermissionNotice: String?
-    private var helperPermissionPending = false
-    private let helperPermissionRequest = HelperPermissionRequest()
+    @Published private(set) var backgroundInputVerification = PermissionVerification.unchecked
+    @Published private(set) var backgroundInputNotice: String?
+    private var backgroundInputCheckPending = false
     @Published private(set) var driverVerification = PermissionVerification.unchecked
     private var driverCheckTask: Task<Void, Never>?
     private var driverNeedsVerification = true
@@ -237,7 +240,7 @@ import Carbon
         let directory = ScreenshotFolderAccess.currentDirectory()
         if let scope = screenshotFolderRequestScope(directory),
            UserDefaults.standard.string(forKey: screenshotFolderRequestKey) == scope {
-            // A previous row-8 operation permits a fresh native check for this
+            // A previous row-7 operation permits a fresh native check for this
             // exact App/path, so normal launches don't require setup every time.
             verifyScreenshotFolder(directory)
         }
@@ -402,13 +405,13 @@ import Carbon
         }
         // Folder reads can themselves prompt for access. Opening an unrelated
         // permission row must not request Desktop/Documents/Downloads access.
-        // Only row 8 starts that I/O; later foreground checks can recheck it.
+        // Only row 7 starts that I/O; later foreground checks can recheck it.
         if recheckScreenshotFolder && (screenshotFolderVerification == .granted || screenshotFolderVerification == .denied) {
             verifyScreenshotFolder(directory)
         }
         if userInitiated || driverNeedsVerification || (NSApp.isActive && settingsPage == .permissions) {
             refreshDriverPermission()
-            if !backgroundInstallationNeeded { refreshHelperPermission() }
+            if settings.inputBackend == .deviceHID && !backgroundInstallationNeeded { refreshBackgroundInputPermission() }
         }
         if running && (previous != current || folderChanged) {
             publish()
@@ -430,13 +433,15 @@ import Carbon
             else {
                 self.driverVerification = PermissionVerification(verifiedGrant: result?.granted)
                 self.driverRegistered = result?.registered ?? false
-                if result?.registered == true { self.driverApprovalNotice = nil }
+                if result?.granted == true { self.driverApprovalNotice = nil }
             }
         }
     }
     func openDriverSettings() {
         driverVerification = .awaitingVerification
         driverNeedsVerification = true
+        if #available(macOS 15, *), let url = URL(string: "x-apple.systempreferences:com.apple.ExtensionsPreferences?extensionPointIdentifier=com.apple.system_extension.driver_extension.extension-point"),
+           NSWorkspace.shared.open(url) { return }
         inputSources.openLoginSettings()
     }
     func openScreenshotFolderSettings() {
@@ -615,7 +620,7 @@ import Carbon
         input.session = sessionEpoch; input.sessionActive = sessionActive
         input.shortcutEnabled = settings.enabled && registry != nil && configurationError == nil && !installationRecoveryPending
         // Do not touch the user's protected screenshot directory while they
-        // are authorizing a different row. Row 8 enables screenshot work only
+        // are authorizing a different row. Row 7 enables screenshot work only
         // after a genuine directory read succeeds.
         input.screenshotEnabled = settings.screenshotAutoCopy && screenshotFolderVerification == .granted
         input.settingsRevision = settingsRevision
@@ -717,25 +722,15 @@ import Carbon
         // do not claim Shift+Alt+S from another keyboard as a screenshot.
         restartToken &+= 1; publish()
     }
-    private func refreshHelperPermission() {
-        guard !helperPermissionPending else { return }
-        helperPermissionPending = true
-        helperPermissionVerification = .awaitingVerification
+    private func refreshBackgroundInputPermission() {
+        guard !backgroundInputCheckPending else { return }
+        backgroundInputCheckPending = true
+        backgroundInputVerification = .awaitingVerification
         hid.checkInputAccess { [weak self] grant in
             guard let self else { return }
-            self.helperPermissionPending = false
-            self.helperPermissionVerification = PermissionVerification(verifiedGrant: grant)
-            self.helperPermissionNotice = grant == nil ? "背景元件尚未連線，請關閉並重新開啟 App。" : nil
-        }
-    }
-    func requestHIDListening() {
-        if helperInputMonitoringVerification == .granted { openInputMonitoring(); return }
-        helperPermissionVerification = .awaitingVerification
-        helperPermissionRequest.start { [weak self] error in
-            guard let self else { return }
-            if let error { self.helperPermissionNotice = error.localizedDescription }
-            else { self.helperPermissionNotice = nil }
-            self.openInputMonitoring()
+            self.backgroundInputCheckPending = false
+            self.backgroundInputVerification = PermissionVerification(verifiedGrant: grant)
+            self.backgroundInputNotice = grant == nil ? "背景元件尚未連線，請關閉並重新開啟 App。" : nil
         }
     }
     func openUserGuide() {
@@ -865,7 +860,12 @@ import Carbon
         publish()
     }
     func requestListening() {
-        if !CGPreflightListenEventAccess() { _ = CGRequestListenEventAccess() }
+        // Exactly one request for this App's Input Monitoring permission.
+        if settings.inputBackend == .deviceHID {
+            if IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) != kIOHIDAccessTypeGranted {
+                _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+            }
+        } else if !CGPreflightListenEventAccess() { _ = CGRequestListenEventAccess() }
         refreshPermissions(userInitiated: true)
     }
     func openPermissions() {

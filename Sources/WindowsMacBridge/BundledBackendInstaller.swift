@@ -1,5 +1,6 @@
 import AppKit
 import HIDProtocol
+import Security
 
 /// Explicit setup only. No polling, automatic elevation or permission changes.
 @MainActor enum BundledBackendInstaller {
@@ -8,10 +9,26 @@ import HIDProtocol
         return FileManager.default.fileExists(atPath: resources.appendingPathComponent("BackendPayload/InstallBackend.sh").path)
     }
     static var needsInstallation: Bool {
-        let helper = Bundle(path: HIDService.root + "/BridgeHIDHelper.app")
+        let runtimeURL = URL(fileURLWithPath: HIDService.root + "/WindowsMacBridge.app")
+        let runtime = Bundle(url: runtimeURL)
         return Bundle.main.bundleURL.standardizedFileURL.path != "/Applications/WindowsMacBridge.app" ||
-            helper?.object(forInfoDictionaryKey: "CFBundleVersion") as? String != AppBuildInfo.current.buildNumber ||
+            runtime?.object(forInfoDictionaryKey: "CFBundleVersion") as? String != AppBuildInfo.current.buildNumber ||
+            !runtimeIdentityMatches ||
+            FileManager.default.fileExists(atPath: HIDService.root + "/BridgeHIDHelper.app") ||
+            !FileManager.default.fileExists(atPath: HIDService.root + "/controller.plist") ||
             !FileManager.default.fileExists(atPath: "/Library/LaunchDaemons/local.WindowsMacBridge.HIDHelper.plist")
+    }
+    private static let runtimeIdentityMatches: Bool = {
+        guard let current = PermissionStatus.codeIdentity else { return false }
+        return signedHash(URL(fileURLWithPath: HIDService.root + "/WindowsMacBridge.app")) == current
+    }()
+    private static func signedHash(_ url: URL) -> String? {
+        var code: SecStaticCode?, info: CFDictionary?
+        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code,
+              SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSStrictValidate), nil) == errSecSuccess,
+              SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let values = info as? [String: Any], let hash = values[kSecCodeInfoUnique as String] as? Data else { return nil }
+        return hash.map { String(format: "%02x", $0) }.joined()
     }
     static func launch() throws {
         guard available, let resources = Bundle.main.resourceURL else {

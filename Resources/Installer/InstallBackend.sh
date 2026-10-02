@@ -2,12 +2,6 @@
 set -euo pipefail
 umask 077
 [[ "$EUID" -eq 0 && "$#" -eq 1 ]] || { echo 'Needs administrator installation context.' >&2; exit 77; }
-if /usr/bin/pgrep -x WindowsMacBridge >/dev/null; then
-    echo 'Quit WindowsMacBridge before replacing its App/helper/Driver.' >&2; exit 1
-else
-    bridge_process_query=$?
-    [[ "$bridge_process_query" == 1 ]] || exit "$bridge_process_query"
-fi
 bridge_source="$1"
 bridge_root='/Library/Application Support/WindowsMacBridge'
 bridge_daemon='/Library/LaunchDaemons/local.WindowsMacBridge.HIDHelper.plist'
@@ -51,7 +45,7 @@ bridge_rollback() {
     local bridge_failed=0 bridge_name bridge_destination
     /bin/launchctl bootout system "$bridge_daemon" 2>/dev/null || true
     # A compatible shared daemon can serve other clients even though we own its
-    # launchd label. Keep it running through App/helper updates and their rollback.
+    # launchd label. Keep it running through App/runtime updates and their rollback.
     if [[ "$bridge_driver_kind" != reuse || "$bridge_driver_running" == 0 ]]; then
         /bin/launchctl bootout system "$bridge_driver_daemon" 2>/dev/null || true
     fi
@@ -65,6 +59,10 @@ bridge_rollback() {
             /usr/bin/ditto "$bridge_stage/previous/$bridge_name" "$bridge_destination" || bridge_failed=1
         fi
     done
+    /bin/rm -rf "$bridge_root/WindowsMacBridge.app" || bridge_failed=1
+    if [[ -d "$bridge_stage/previous/RuntimeApplication.app" ]]; then
+        /usr/bin/ditto "$bridge_stage/previous/RuntimeApplication.app" "$bridge_root/WindowsMacBridge.app" || bridge_failed=1
+    fi
     for bridge_destination in "$bridge_daemon" "$bridge_driver_daemon"; do
         /bin/rm -f "$bridge_destination" || bridge_failed=1
         bridge_name="$(/usr/bin/basename "$bridge_destination")"
@@ -95,7 +93,7 @@ bridge_finish() {
             echo "Rollback incomplete. Protected recovery snapshot retained at $bridge_stage" >&2
             exit 1
         fi
-        echo 'Installation failed; previous App, helper, pin, Driver and service state restored.' >&2
+        echo 'Installation failed; previous App, input runtime, pin, Driver and service state restored.' >&2
     fi
     if [[ "$bridge_switched" == 1 ]]; then
         if ! /bin/rm -f "$bridge_recovery"; then
@@ -172,7 +170,7 @@ bridge_recover_interrupted() {
     bridge_stage="$bridge_new_stage"; bridge_preserve_stage=0
     bridge_app_saved=0; bridge_app_changed=0; bridge_helper_running=0; bridge_driver_running=0
     bridge_driver_kind=reuse; bridge_driver_changed=0; bridge_driver_old_active=0; bridge_driver_old_version=''
-    echo 'Recovered an interrupted App/helper/service update before proceeding.'
+    echo 'Recovered an interrupted App/runtime/service update before proceeding.'
 }
 # Copy into a private root-owned snapshot before verifying or running payload files.
 /usr/bin/ditto --noextattr --norsrc "$bridge_source" "$bridge_stage/payload"
@@ -183,16 +181,22 @@ cd "$bridge_payload"
 # Functions must be loaded before interrupted-transaction recovery can use them.
 source "$bridge_payload/DriverTransaction.sh"
 /usr/bin/codesign --verify --strict WindowsMacBridge.app
-/usr/bin/codesign --verify --strict BridgeHIDHelper.app
+source "$bridge_payload/AppProcess.sh"
+if bridge_gui_running; then
+    echo 'Quit WindowsMacBridge before replacing its App or keyboard driver.' >&2; exit 1
+else
+    bridge_process_query=$?
+    [[ "$bridge_process_query" == 1 ]] || exit "$bridge_process_query"
+fi
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' WindowsMacBridge.app/Contents/Info.plist)" == 'local.WindowsMacBridge' ]]
 for bridge_path in "$bridge_root" "$bridge_app" "$bridge_daemon" "$bridge_driver_daemon"; do
     [[ ! -L "$bridge_path" ]] || { echo "Symlink install destination rejected: $bridge_path" >&2; exit 1; }
 done
 if [[ -d "$bridge_root" ]]; then
-    [[ "$(/usr/bin/stat -f '%u' "$bridge_root")" == 0 ]] || { echo 'Untrusted helper directory owner.' >&2; exit 1; }
+    [[ "$(/usr/bin/stat -f '%u' "$bridge_root")" == 0 ]] || { echo 'Untrusted input runtime directory owner.' >&2; exit 1; }
     bridge_permissions="$(/usr/bin/stat -f '%Lp' "$bridge_root")"
-    [[ "$((8#$bridge_permissions & 022))" == 0 ]] || { echo 'Writable helper directory rejected.' >&2; exit 1; }
-    [[ -z "$(/usr/bin/find "$bridge_root" -type l -print -quit)" ]] || { echo 'Symlink in helper directory rejected.' >&2; exit 1; }
+    [[ "$((8#$bridge_permissions & 022))" == 0 ]] || { echo 'Writable input runtime directory rejected.' >&2; exit 1; }
+    [[ -z "$(/usr/bin/find "$bridge_root" -type l -print -quit)" ]] || { echo 'Symlink in input runtime directory rejected.' >&2; exit 1; }
 fi
 bridge_verify_shared_driver() {
     local bridge_daemon_app bridge_extension bridge_path bridge_mode bridge_abi
@@ -243,22 +247,27 @@ if [[ -n "$bridge_driver_installed" ]]; then bridge_verify_shared_driver; fi
 # Stage every owned component and verify its identity before any service or App is switched.
 /bin/mkdir -p "$bridge_stage/next" "$bridge_stage/previous"
 /usr/bin/ditto WindowsMacBridge.app "$bridge_stage/next/WindowsMacBridge.app"
-/usr/bin/ditto BridgeHIDHelper.app "$bridge_stage/next/BridgeHIDHelper.app"
+/usr/bin/ditto WindowsMacBridge.app "$bridge_stage/next/RuntimeApplication.app"
 /usr/bin/ditto Licenses "$bridge_stage/next/Licenses"
-for bridge_key in CFBundleShortVersionString CFBundleVersion; do
-    [[ "$(/usr/libexec/PlistBuddy -c "Print :$bridge_key" WindowsMacBridge.app/Contents/Info.plist)" == \
-       "$(/usr/libexec/PlistBuddy -c "Print :$bridge_key" BridgeHIDHelper.app/Contents/Info.plist)" ]] || {
-        echo 'App/helper version mismatch.' >&2; exit 1;
-    }
-done
-"$bridge_stage/next/BridgeHIDHelper.app/Contents/MacOS/BridgeHIDHelper" --controller-pin \
+"$bridge_stage/next/WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge" --controller-pin \
     "$bridge_stage/next/WindowsMacBridge.app" > "$bridge_stage/next/controller.plist"
 /usr/sbin/chown -R root:wheel "$bridge_stage/next"
 # Finish ownership and public-software permissions in the private staging area.
 # macOS App Management may reject even root chmod/chown after App publication.
 /bin/chmod -R a+rX,go-w "$bridge_stage/next"
 /usr/bin/codesign --verify --strict "$bridge_stage/next/WindowsMacBridge.app"
-/usr/bin/codesign --verify --strict "$bridge_stage/next/BridgeHIDHelper.app"
+/usr/bin/codesign --verify --strict "$bridge_stage/next/RuntimeApplication.app"
+# Preserve both the legacy helper and the unified runtime for transactional migration.
+for bridge_owned in WindowsMacBridge.app BridgeHIDHelper.app; do
+    if [[ -e "$bridge_root/$bridge_owned" ]]; then
+        bridge_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bridge_root/$bridge_owned/Contents/Info.plist")"
+        [[ ( "$bridge_owned" == WindowsMacBridge.app && "$bridge_id" == local.WindowsMacBridge ) ||
+           ( "$bridge_owned" == BridgeHIDHelper.app && "$bridge_id" == local.WindowsMacBridge.HIDHelper ) ]] || exit 1
+    fi
+done
+if [[ -d "$bridge_root/WindowsMacBridge.app" ]]; then
+    /usr/bin/ditto "$bridge_root/WindowsMacBridge.app" "$bridge_stage/previous/RuntimeApplication.app"
+fi
 for bridge_name in BridgeHIDHelper.app Licenses controller.plist; do
     if [[ -e "$bridge_root/$bridge_name" ]]; then
         /usr/bin/ditto "$bridge_root/$bridge_name" "$bridge_stage/previous/$bridge_name"
@@ -303,10 +312,15 @@ if [[ -d "$bridge_app" ]]; then
 fi
 bridge_app_changed=1
 /bin/mv "$bridge_stage/next/WindowsMacBridge.app" "$bridge_app"
-for bridge_name in BridgeHIDHelper.app Licenses; do
-    /bin/rm -rf "$bridge_root/$bridge_name"
-    /bin/mv "$bridge_stage/next/$bridge_name" "$bridge_root/$bridge_name"
+for bridge_name in WindowsMacBridge.app BridgeHIDHelper.app; do
+    if [[ -e "$bridge_root/$bridge_name" ]]; then
+        /bin/mv "$bridge_root/$bridge_name" "$bridge_stage/retired-$bridge_name"
+    fi
 done
+/bin/mv "$bridge_stage/next/RuntimeApplication.app" "$bridge_root/WindowsMacBridge.app"
+/bin/rm -rf "$bridge_root/Licenses"
+/bin/mv "$bridge_stage/next/Licenses" "$bridge_root/Licenses"
+/usr/bin/codesign --verify --strict "$bridge_root/WindowsMacBridge.app"
 /usr/bin/install -o root -g wheel -m 644 local.WindowsMacBridge.HIDHelper.plist "$bridge_daemon"
 /usr/bin/codesign --verify --strict "$bridge_app"
 /bin/mv "$bridge_stage/next/controller.plist" "$bridge_root/controller.plist"
@@ -334,4 +348,4 @@ while IFS= read -r bridge_backup; do
     if [[ "$bridge_kept" -gt 2 ]]; then /bin/rm -rf "$bridge_backup"; fi
 done < <(/bin/ls -dt "$bridge_root"/PreviousApplication.* 2>/dev/null || true)
 bridge_committed=1
-echo 'App and pinned helper installed. Driver activation and TCC approval remain user-controlled.'
+echo 'Unified App and keyboard runtime installed. Driver activation and TCC approval remain user-controlled.'

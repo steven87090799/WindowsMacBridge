@@ -2,7 +2,7 @@
 
 將 Windows 快捷鍵、MacBook 鍵位輔助、截圖與唯音／ABC 輸入法管理整合在同一個 macOS 選單列 App，以 Swift、AppKit、SwiftUI 與 macOS 原生 API 實作。
 
-**系統需求：Apple Silicon、macOS 14 以上。** 目前 `main` 原始碼版本為 **0.5.19（build 37）修復候選版**；下載包版本以 [GitHub Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 為準。合併原始碼不代表已發布新版安裝包；實體 HID、Universal Control、遠端、TCC 授權與安裝復原仍需實機驗收，目前不宣稱已可正式上線或完整取代 Karabiner。
+**系統需求：Apple Silicon、macOS 14 以上。** 目前 `main` 原始碼版本為 **0.6.0（build 41）修復候選版**；下載包版本以 [GitHub Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 為準。合併原始碼不代表已發布新版安裝包；實體 HID、Universal Control、遠端、TCC 授權與安裝復原仍需實機驗收，目前不宣稱已可正式上線或完整取代 Karabiner。
 
 本文介紹目前來源已實作的功能；新安裝預設指完整單一 App 首次完成安裝準備後的設定。最新權限與分頁流程見 [權限修復紀錄](Docs/SimplePermissions-2026-10-02.md)，鍵盤與資源審查見 [八類功能複查](Docs/ReviewerAudit-2026-10-02.md)，雙機操作見 [兩台 Mac 驗收](Resources/TwoMacAcceptance.md)。
 
@@ -32,9 +32,9 @@
 
 ## 安裝與開始使用
 
-1. 使用完整單一 App ZIP，先從選單列結束舊版，解壓後開啟 `WindowsMacBridge.app`。程式自動準備 App、helper 與共用 Driver，依系統提示確認管理員驗證，完成後開啟已安裝的 App。
+1. 點兩下完整單一 App DMG，先從選單列結束舊版，將 `WindowsMacBridge.app` 拖進「應用程式」取代，再從那裡開啟。程式自動準備內含鍵盤處理與共用 Driver，需要時完成系統管理員驗證。
 2. 上方保留「權限」、「一般設定」、「唯音與輸入法」、「App 規則」、「診斷」分頁，沒有獨立進階設定或安裝／修復按鈕。
-3. 權限頁平鋪八項，每列按「開啟設定」，核准後回來自動檢查，確認通過才亮綠燈。不需加入元件或選截圖資料夾；若系統要求重開 App 或重開機，依提示完成。
+3. 權限頁平鋪七項，每列按「開啟設定」，核准後回來自動檢查，確認通過才亮綠燈。不需加入元件或選截圖資料夾；若系統要求重開 App 或重開機，依提示完成。
 4. 權限完成後，用 ABC 與可丟棄的文字文件試 `Ctrl+A/C/X/V/Z`，再確認截圖可貼上。兩台 Mac 的 Universal Control 與 Driver 恢復仍需實機驗收。
 
 單一 App 下載包是否已發布，以 [GitHub Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 為準。一般 DMG 不包含 HID 安裝 payload，不能當成上述完整安裝版。「套用建議預設」會選 HID／所有鍵盤、開啟 Windows／中文快捷鍵、指定 Codex 為 Default macOS，並關閉 Finder 增強；其他 App 規則與選用功能依實作保留。詳細操作見 [使用指南](Resources/UserGuide.md)。
@@ -156,9 +156,9 @@ Alt+F4 保留接收 App 的未儲存內容提示；找不到可用關閉按鈕�
 
 以原生 HID 鍵盤服務，只交換**本機實體內建鍵盤**的 Fn／Globe 與左 Ctrl，排除外接鍵盤及通用控制虛擬服務。MacBook 新安裝預設開啟，桌上型 Mac 預設關閉；舊設定有明確選擇時保留。
 
-此功能不需 helper／Driver。設定顯示已交換、等待鍵盤或衝突，並可「重新檢查鍵盤模式」。按鍵仍按住時延後變更或還原；其他工具占用 Fn／Ctrl 時保守停止，不覆蓋其映射。
+此功能不需 鍵盤處理／Driver。設定顯示已交換、等待鍵盤或衝突，並可「重新檢查鍵盤模式」。按鍵仍按住時延後變更或還原；其他工具占用 Fn／Ctrl 時保守停止，不覆蓋其映射。
 
-關閉、全域暫停或正常退出會還原本程式的映射。寫入前保存私人還原 journal，強制結束後可於下次啟動復原，不能宣稱 SIGKILL 後立即還原。選 HID 時先還原原生交換，再由 helper 處理接管的內建鍵盤。Universal Control 兩個方向的實體 Ctrl／Fn、中文組字及睡眠恢復仍需實測。
+關閉、全域暫停或正常退出會還原本程式的映射。寫入前保存私人還原 journal，強制結束後可於下次啟動復原，不能宣稱 SIGKILL 後立即還原。選 HID 時先還原原生交換，再由 背景鍵盤模式處理接管的內建鍵盤。Universal Control 兩個方向的實體 Ctrl／Fn、中文組字及睡眠恢復仍需實測。
 
 ## App Profiles 與遠端／通用控制
 
@@ -214,26 +214,26 @@ Alt+F4 保留接收 App 的未儲存內容提示；找不到可用關閉按鈕�
 
 | 項目 | EventTap（相容備援） | 裝置 HID（新安裝預設） |
 | --- | --- | --- |
-| 一般／瀏覽器／Finder／截圖入口 | 有 | 有，由 helper 與主 App 分工 |
+| 一般／瀏覽器／Finder／截圖入口 | 有 | 有，由同一 App 的前景與背景模式分工 |
 | 可靠逐實體裝置識別與接管 | 無，使用所有鍵盤 | 依範圍與安全 descriptor 擷取 |
 | Option／Command 裝置配置 | 不更改全域修飾鍵 | 對接管裝置依 Win 配置處理 |
-| MacBook Fn／Ctrl | 獨立原生鍵盤映射 | helper 處理接管的內建鍵盤 |
+| MacBook Fn／Ctrl | 獨立原生鍵盤映射 | 背景鍵盤模式處理接管的內建鍵盤 |
 | consumer 亮度增加 → Enter | 無 | Finder 的獨立選用功能 |
-| 安裝 helper／Driver | 不需要 | 需要管理員安裝及 macOS 核准 |
+| 安裝 鍵盤處理／Driver | 不需要 | 需要管理員安裝及 macOS 核准 |
 
 HID 可選「所有支援的鍵盤」或「內建／Apple VID 1452、PID 834」。本版支援可完整轉送的 keyboard／相對 mouse descriptor 與標準複合服務；虛擬、multitouch、絕對座標或未知／不完整描述保持原生，最多 16 個服務。EventTap 選內建限定範圍時會停止翻譯，因其不能可靠辨識來源裝置。
 
-完整單一 App 自動準備 App、root helper 與官方 VirtualHID 8.6.0；使用者只需依權限頁核准。Helper／Driver Ready 與接管數表示執行狀態，仍不等於實體鍵盤已驗收。共用 Driver 更新只接受已核對的版本與回復套件，未知版本停止；不移除其他工具正在共用的服務。
+完整單一 App 自動準備鍵盤處理與官方 VirtualHID 8.6.0；使用者只需依權限頁核准。Helper／Driver Ready 與接管數表示執行狀態，仍不等於實體鍵盤已驗收。共用 Driver 更新只接受已核對的版本與回復套件，未知版本停止；不移除其他工具正在共用的服務。
 
-後端交接先等 helper 停止擷取回覆，逾時保留新後端停用。受保護情境、Secure Input、session 不可用、失聯或 Driver 停滯會停止／釋放擷取，回到本機等待實體按鍵放開再接管；HID 不對同一按鍵再啟動一套 EventTap 翻譯。
+後端交接先等背景鍵盤模式停止擷取回覆，逾時保留新後端停用。受保護情境、Secure Input、session 不可用、失聯或 Driver 停滯會停止／釋放擷取，回到本機等待實體按鍵放開再接管；HID 不對同一按鍵再啟動一套 EventTap 翻譯。
 
-更新以 staging、checksum／簽章／版本／controller pin 驗證後切換；一般失敗嘗試回復 App/helper/pin/服務，最多保留兩份 App 備份。中止時保留私人復原 journal，下次執行安裝器先復原；共用 Driver 與 DriverKit activation 的副作用仍需實測。
+更新以 staging、checksum／簽章／版本／controller pin 驗證後切換；一般失敗嘗試回復 App/runtime/pin/服務，最多保留兩份 App 備份。中止時保留私人復原 journal，下次執行安裝器先復原；共用 Driver 與 DriverKit activation 的副作用仍需實測。
 
-停止可用選單列暫停／結束，App 無回應時使用 `Stop.command`。`Uninstall.command` 移除本工具 helper 與 launchd 註冊，保留 App、使用者設定、備份與共用官方 Driver；Driver 移除依原廠流程處理。見 [HID 安裝指南](Resources/Installer/READ-ME-FIRST.md) 與 [HID 架構](Docs/HIDIntegration.md)。
+停止可用選單列暫停／結束，App 無回應時可使用開發者停止腳本；內含 `UninstallBackend.sh` 移除本工具背景模式與 launchd 註冊，保留 App、使用者設定、備份與共用官方 Driver；Driver 移除依原廠流程處理。見 [HID 安裝指南](Resources/Installer/READ-ME-FIRST.md) 與 [HID 架構](Docs/HIDIntegration.md)。
 
 ## 授權、登入、暫停與恢復
 
-權限頁平鋪八項：裝置控制與按鍵輸出、App 輸入監控、螢幕錄製、登入啟動、Finder 擴充、helper 輸入監控、Driver 核准及截圖資料夾存取。每項只有「開啟設定」，程式會先提出對應要求；返回前景及手動「重新檢查」時確認原生結果，真正取得才顯示綠勾。開過設定、安裝完成或要求送出不能當成通過。
+權限頁平鋪七項：裝置控制與按鍵輸出、WindowsMacBridge 單一輸入監控、螢幕錄製、登入啟動、Finder 擴充、Driver 核准及截圖資料夾存取。每項只有「開啟設定」，程式會先提出對應要求；返回前景及手動「重新檢查」時確認原生結果，真正取得才顯示綠勾。開過設定、安裝完成或要求送出不能當成通過。
 
 登入啟動使用原生登入項目，可能需系統核准。截圖功能會註冊登入項目，關閉時只移除由此功能新增的註冊，建議先將 App 放在 `/Applications`。
 
@@ -272,7 +272,7 @@ python3 scripts/monitor-runtime.py --duration-seconds 600 --interval-seconds 60 
 
 ## 建置與測試
 
-需要 macOS 與 Swift 6 工具鏈。主 App 無第三方 Swift 套件；HID helper 使用固定 checksum 的官方 VirtualHID SDK。腳本可從 Git clone 或無 `.git` 的來源 ZIP 建置；ZIP 記錄 `archive` source state，可用合法十六進位 `SOURCE_REVISION` 指定來源版本。
+需要 macOS 與 Swift 6 工具鏈。主 App 無第三方 Swift 套件；內含 HID 使用固定 checksum 的官方 VirtualHID SDK。腳本可從 Git clone 或無 `.git` 的來源 ZIP 建置；ZIP 記錄 `archive` source state，可用合法十六進位 `SOURCE_REVISION` 指定來源版本。
 
 ```sh
 # 核心與平台測試
@@ -285,12 +285,12 @@ python3 -m unittest discover -s Tests/MonitoringTests -v
 bash scripts/build-app.sh
 bash scripts/package-app-dmg.sh
 
-# 建置 helper、離線測試與 HID 整合 ZIP
-bash scripts/build-hid-helper.sh
-bash scripts/package-hid-release.sh
+# 封裝含鍵盤處理及 Driver 安裝的單一 App 與 DMG
+bash scripts/package-single-app.sh
+bash scripts/package-app-dmg.sh
 ```
 
-建置輸出在 `~/Library/Caches/WindowsMacBridge`，`build/` 保留輸出指標，下載包在 `build/download/`。App 只打包 allowlist 的 resource bundle；Finder extension Release 預設 `-O`，可用 `FINDER_RELEASE_OPTIMIZATION=-Osize` 比較。helper build／self-check 不安裝或啟動 Driver。
+建置輸出在 `~/Library/Caches/WindowsMacBridge`，`build/` 保留輸出指標，下載包在 `build/download/`。App 只打包 allowlist 的 resource bundle；Finder extension Release 預設 `-O`，可用 `FINDER_RELEASE_OPTIMIZATION=-Osize` 比較。建置及封裝不安裝或啟動 Driver。
 
 GitHub Actions 對 PR 與 `main` 執行 macOS 測試、Release 回歸、安裝器及量測工具測試，並建置 App、DMG 與 HID 整合包。CI 通過表示該次自動檢查成功，不代表 Release 已發布或實機相容性完成。
 
@@ -310,7 +310,7 @@ EventTap 沒有可靠逐裝置識別，HID 有 descriptor 覆蓋限制。ANSI／
 | [八類功能複查](Docs/ReviewerAudit-2026-10-02.md) | 程式修復、支援缺口與實機方法 |
 | [四方向修復](Docs/FourAreaRepair-2026-10-02.md) | 前批測試證據與未完成验收 |
 | [架構](Docs/Architecture.md) | 輸入層次與安全邊界 |
-| [HID 整合](Docs/HIDIntegration.md) | helper、XPC、Driver、擷取與安裝 |
+| [HID 整合](Docs/HIDIntegration.md) | 單一 App、XPC、Driver、擷取與安裝 |
 | [HID 安裝指南](Resources/Installer/READ-ME-FIRST.md) | 核准、停止、復原與移除 |
 | [專案整合](Docs/ProjectIntegration.md) | 唯音助手與快捷鍵整合 |
 | [Karabiner 對照](Docs/KarabinerReplacement.md) | 規則遷移與後端限制 |

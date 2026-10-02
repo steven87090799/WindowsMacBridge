@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
     <key>Label</key><string>local.WindowsMacBridge.HIDHelper</string>
-    <key>ProgramArguments</key><array><string>/Library/Application Support/WindowsMacBridge/BridgeHIDHelper.app/Contents/MacOS/BridgeHIDHelper</string><string>--serve</string></array>
+    <key>ProgramArguments</key><array><string>/Library/Application Support/WindowsMacBridge/WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge</string><string>--hid-service</string></array>
     <key>MachServices</key><dict><key>local.WindowsMacBridge.HIDHelper</key><true/></dict>
     <key>RunAtLoad</key><false/>
     <key>KeepAlive</key><false/>

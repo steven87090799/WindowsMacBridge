@@ -33,18 +33,23 @@ trap bridge_finish_setup EXIT
 )
 /bin/mv "$bridge_work/manifest" "$bridge_payload/PAYLOAD-SHA256SUMS"
 # Installation must not replace an executing App or overlap its key ownership.
+source "$bridge_payload/AppProcess.sh"
 for bridge_attempt in {1..50}; do
-    if /usr/bin/pgrep -x WindowsMacBridge >/dev/null; then /bin/sleep 0.2
+    if bridge_gui_running; then /bin/sleep 0.2
     else
         bridge_query=$?
         [[ "$bridge_query" == 1 ]] || exit "$bridge_query"
         break
     fi
 done
-if /usr/bin/pgrep -x WindowsMacBridge >/dev/null; then exit 1; fi
+if bridge_gui_running; then exit 1
+else
+    bridge_query=$?
+    [[ "$bridge_query" == 1 ]] || exit "$bridge_query"
+fi
 /usr/bin/osascript - "$bridge_payload/InstallBackend.sh" "$bridge_payload" > "$bridge_log" 2>&1 <<'APPLESCRIPT'
 on run arguments
     do shell script "/bin/bash " & quoted form of item 1 of arguments & " " & quoted form of item 2 of arguments & " 1>&2" with administrator privileges
 end run
 APPLESCRIPT
-/usr/bin/open /Applications/WindowsMacBridge.app
+/usr/bin/open -n /Applications/WindowsMacBridge.app
