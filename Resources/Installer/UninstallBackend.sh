@@ -6,12 +6,12 @@ bridge_daemon='/Library/LaunchDaemons/local.WindowsMacBridge.HIDHelper.plist'
 bridge_driver_daemon='/Library/LaunchDaemons/local.WindowsMacBridge.VirtualHIDService.plist'
 [[ ! -L "$bridge_root" && ! -L "$bridge_daemon" && ! -L "$bridge_driver_daemon" ]] || exit 1
 if [[ -e "$bridge_root/.install-recovery" || -L "$bridge_root/.install-recovery" ]]; then
-    echo 'An interrupted update needs recovery. Run Install.command before uninstalling.' >&2
+    echo 'An interrupted update needs recovery. Reopen WindowsMacBridge before uninstalling.' >&2
     exit 1
 fi
 /bin/launchctl bootout system "$bridge_daemon" 2>/dev/null || true
 if /bin/launchctl print system/local.WindowsMacBridge.HIDHelper >/dev/null 2>&1; then
-    echo 'Bridge helper is still registered; refusing to remove its files.' >&2
+    echo 'Bridge input runtime is still registered; refusing to remove its files.' >&2
     exit 1
 fi
 # The daemon may have acquired other clients since Bridge installed its plist.
@@ -31,4 +31,11 @@ if [[ -d "$bridge_helper" ]]; then
     [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bridge_helper/Contents/Info.plist")" == local.WindowsMacBridge.HIDHelper ]] || exit 1
     /bin/rm -rf "$bridge_helper"
 fi
-echo 'Bridge helper removed. Shared VirtualHID driver and service registration were preserved.'
+bridge_runtime="$bridge_root/WindowsMacBridge.app"
+if [[ -d "$bridge_runtime" ]]; then
+    [[ ! -L "$bridge_runtime" && "$(/usr/bin/stat -f '%u' "$bridge_runtime")" == 0 ]] || exit 1
+    [[ -z "$(/usr/bin/find "$bridge_runtime" -type l -print -quit)" ]] || exit 1
+    [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bridge_runtime/Contents/Info.plist")" == local.WindowsMacBridge ]] || exit 1
+    /bin/rm -rf "$bridge_runtime"
+fi
+echo 'Bridge input runtime removed. Shared VirtualHID driver and service registration were preserved.'

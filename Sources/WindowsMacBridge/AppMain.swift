@@ -3,6 +3,8 @@ import ApplicationServices
 import SwiftUI
 import BridgePlatform
 import BridgeCore
+import HIDRuntime
+import Darwin
 import InputSourceSupport
 import InputSourceCore
 
@@ -179,6 +181,8 @@ import InputSourceCore
 
 @main enum WindowsMacBridgeMain {
     @MainActor static func main() {
+        if HIDRuntimeCommand.handle(Array(CommandLine.arguments.dropFirst())) { return }
+        guard geteuid() != 0 else { exit(77) }
         if CommandLine.arguments.contains("--self-check") {
             do {
                 let registry = try ApplicationRegistry()

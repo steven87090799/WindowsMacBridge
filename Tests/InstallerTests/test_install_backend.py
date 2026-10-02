@@ -100,9 +100,11 @@ elif name == 'launchctl':
         state[label] = True
         state_path.write_text(json.dumps(state))
 elif name == 'pgrep':
-    if (fail in ['foreign_daemon','foreign_client'] and args[-1] == 'Karabiner-VirtualHIDDevice-Daemon') or (fail == 'app_running' and args[-1] == 'WindowsMacBridge'):
+    if (fail in ['foreign_daemon','foreign_client'] and args[-1] == 'Karabiner-VirtualHIDDevice-Daemon') or (fail in ['app_running','root_runtime'] and args[-1] == 'WindowsMacBridge'):
         print('4242'); sys.exit(0)
     sys.exit(1)
+elif name == 'ps':
+    print('0' if fail == 'root_runtime' else '501')
 elif name == 'lsof':
     print('p4242\nf3\nf4' if fail == 'foreign_client' else 'p4242\nf3')
 elif name == 'systemextensionsctl':
@@ -144,7 +146,7 @@ class InstallBackendTests(unittest.TestCase):
                                         capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
-    def run_install(self, receipt='installed', fail='', existing=True, installed_driver_version='1.8.0', active_driver=True, driver_running=None, private_app_resource=False, protected_app=False):
+    def run_install(self, receipt='installed', fail='', existing=True, installed_driver_version='1.8.0', active_driver=True, driver_running=None, private_app_resource=False, protected_app=False, unified_runtime=False):
         temp = tempfile.TemporaryDirectory(prefix='wmb-install-test-')
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
@@ -172,24 +174,23 @@ class InstallBackendTests(unittest.TestCase):
         if receipt == 'fresh':
             shutil.rmtree(driver_root); shutil.rmtree(manager)
         (root/'extension-state').write_text('1.8.0' if receipt != 'fresh' and active_driver else '')
-        for target, value in [(payload/'WindowsMacBridge.app', 'new-app'),
-                              (payload/'BridgeHIDHelper.app','new-helper')]:
+        for target, value in [(payload/'WindowsMacBridge.app', 'new-app')]:
             (target/'Contents/MacOS').mkdir(parents=True)
             identifier = 'local.WindowsMacBridge'+('.HIDHelper' if 'Helper' in target.name else '')
             (target/'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':identifier,
                 'CFBundleShortVersionString':'0.5.13','CFBundleVersion':'25'}))
             (target/'identity').write_text(value)
-        executable = payload/'BridgeHIDHelper.app/Contents/MacOS/BridgeHIDHelper'
+        executable = payload/'WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge'
         executable.write_text('#!/bin/bash\nprintf "new-pin\\n"\n'); executable.chmod(0o755)
         if private_app_resource:
             folder = payload/'WindowsMacBridge.app/Contents/Resources/BackendPayload/Driver'
             folder.mkdir(parents=True)
             package = folder/'rollback.pkg'; package.write_bytes(b'public-software'); package.chmod(0o600)
             folder.chmod(0o700)
-            (payload/'BridgeHIDHelper.app/Contents/Info.plist').chmod(0o600)
         (payload/'Licenses').mkdir(); (payload/'Licenses/license').write_text('notice')
         (payload/'Driver').mkdir(); (payload/'Driver/Karabiner-DriverKit-VirtualHIDDevice-8.6.0.pkg').write_bytes(b'pkg')
         (payload/'Driver/Karabiner-DriverKit-VirtualHIDDevice-7.3.0.pkg').write_bytes(b'rollback')
+        shutil.copy2(ROOT/'Resources/Installer/AppProcess.sh', payload/'AppProcess.sh')
         transaction = ROOT/'Resources/Installer/DriverTransaction.sh'
         if transaction.exists(): shutil.copy2(transaction,payload/'DriverTransaction.sh')
         runner = payload/'DriverProcessRunner'; runner.write_text(STUB); runner.chmod(0o755)
@@ -199,8 +200,13 @@ class InstallBackendTests(unittest.TestCase):
             shutil.copytree(payload/'WindowsMacBridge.app', app)
             (app/'identity').write_text('old-app')
             helper_root.mkdir(parents=True)
-            shutil.copytree(payload/'BridgeHIDHelper.app', helper_root/'BridgeHIDHelper.app')
-            (helper_root/'BridgeHIDHelper.app/identity').write_text('old-helper')
+            if unified_runtime:
+                shutil.copytree(app, helper_root/'WindowsMacBridge.app')
+                (helper_root/'WindowsMacBridge.app/identity').write_text('old-runtime')
+            else:
+                shutil.copytree(payload/'WindowsMacBridge.app', helper_root/'BridgeHIDHelper.app')
+                (helper_root/'BridgeHIDHelper.app/Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':'local.WindowsMacBridge.HIDHelper'}))
+                (helper_root/'BridgeHIDHelper.app/identity').write_text('old-helper')
             (helper_root/'controller.plist').write_text('old-pin')
             (helper_root/'unrelated.txt').write_text('preserve')
             for label in ['HIDHelper','VirtualHIDService']:
@@ -223,15 +229,20 @@ class InstallBackendTests(unittest.TestCase):
         # mktemp and filesystem commands operate exclusively under the above private test destinations.
         text = text.replace('/private/var/tmp/WindowsMacBridge-install.', str(root/'WindowsMacBridge-install.'))
         for command in ['/usr/bin/ditto','/usr/sbin/chown','/bin/chmod','/usr/bin/codesign','/usr/sbin/pkgutil',
-                        '/usr/sbin/installer','/usr/bin/shasum','/bin/launchctl','/usr/bin/pgrep',
+                        '/usr/sbin/installer','/usr/bin/shasum','/bin/launchctl','/usr/bin/pgrep','/bin/ps',
                         '/usr/bin/stat','/usr/bin/install']:
             stub = tools/Path(command).name; stub.write_text(STUB); stub.chmod(0o755)
             text = text.replace(command, str(stub))
+        roles = (payload/'AppProcess.sh').read_text().replace('/usr/bin/pgrep',str(tools/'pgrep')).replace('/bin/ps',str(tools/'ps'))
+        (payload/'AppProcess.sh').write_text(roles)
+        manifest = ''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+str(p.relative_to(payload))+'\n'
+                           for p in sorted(payload.rglob('*')) if p.is_file() and p.name != 'PAYLOAD-SHA256SUMS')
+        (payload/'PAYLOAD-SHA256SUMS').write_text(manifest)
         script = root/'InstallBackend.sh'; script.write_text(text)
         if transaction.exists():
             transaction_text = transaction.read_text()
             for command in ['/usr/bin/ditto','/usr/sbin/chown','/usr/bin/codesign','/usr/sbin/pkgutil',
-                            '/usr/sbin/installer','/usr/bin/shasum','/bin/launchctl','/usr/bin/pgrep',
+                            '/usr/sbin/installer','/usr/bin/shasum','/bin/launchctl','/usr/bin/pgrep','/bin/ps',
                             '/usr/bin/stat','/usr/bin/install','/usr/sbin/lsof','/usr/bin/systemextensionsctl']:
                 stub = tools/Path(command).name; stub.write_text(STUB); stub.chmod(0o755)
                 transaction_text = transaction_text.replace(command,str(stub))
@@ -250,6 +261,7 @@ class InstallBackendTests(unittest.TestCase):
         self.assertEqual((helper/'BridgeHIDHelper.app/identity').read_text(),'old-helper')
         self.assertEqual((helper/'controller.plist').read_text(),'old-pin')
         self.assertEqual((helper/'unrelated.txt').read_text(),'preserve')
+        self.assertFalse((helper/'WindowsMacBridge.app').exists())
         self.assertEqual((daemons/'local.WindowsMacBridge.HIDHelper.plist').read_text(),'old-HIDHelper')
 
     def test_fresh_driver_install_reaches_installation(self):
@@ -258,6 +270,31 @@ class InstallBackendTests(unittest.TestCase):
         self.assertTrue((root/'driver-installed').exists())
         self.assertEqual((app/'identity').read_text(),'new-app')
         self.assertEqual((root/'extension-state').read_text(), '')
+
+    def test_one_app_payload_migrates_legacy_helper_to_the_same_app_identity(self):
+        _, app, support, _, result = self.run_install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((support/'BridgeHIDHelper.app').exists())
+        runtime = support/'WindowsMacBridge.app'
+        self.assertEqual((runtime/'identity').read_text(), 'new-app')
+        self.assertEqual(plistlib.loads((runtime/'Contents/Info.plist').read_bytes()),
+                         plistlib.loads((app/'Contents/Info.plist').read_bytes()))
+        self.assertFalse((app/'Contents/Resources/BridgeHIDHelper.app').exists())
+
+    def test_failed_unified_update_restores_main_app_and_root_runtime_separately(self):
+        _, app, support, _, result = self.run_install(fail='bootstrap_helper', unified_runtime=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((app/'identity').read_text(), 'old-app')
+        self.assertEqual((support/'WindowsMacBridge.app/identity').read_text(), 'old-runtime')
+        self.assertEqual((support/'controller.plist').read_text(), 'old-pin')
+        self.assertFalse((support/'BridgeHIDHelper.app').exists())
+        self.assertFalse((support/'.install-recovery').exists())
+
+    def test_root_runtime_does_not_block_app_update(self):
+        _, app, support, _, result = self.run_install(fail='root_runtime')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((app/'identity').read_text(), 'new-app')
+        self.assertEqual((support/'WindowsMacBridge.app/identity').read_text(), 'new-app')
 
     def test_already_installed_driver_is_not_reinstalled(self):
         root, _, _, _, result = self.run_install()
@@ -269,7 +306,7 @@ class InstallBackendTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         folder = app/'Contents/Resources/BackendPayload/Driver'
         for path, mask in [(folder, 0o005), (folder/'rollback.pkg', 0o004),
-                           (helper_root/'BridgeHIDHelper.app/Contents/Info.plist', 0o004)]:
+                           (helper_root/'WindowsMacBridge.app/Contents/Info.plist', 0o004)]:
             self.assertEqual(path.stat().st_mode & mask, mask)
             self.assertEqual(path.stat().st_mode & 0o022, 0)
 

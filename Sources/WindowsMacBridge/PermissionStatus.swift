@@ -3,6 +3,7 @@ import AppKit
 import FinderSync
 import ServiceManagement
 import Security
+import IOKit.hid
 import BridgeCore
 
 /// Read-only checks for this running app. Reading a status never requests access.
@@ -20,7 +21,7 @@ import BridgeCore
     static func current() -> PermissionSnapshot {
         PermissionSnapshot(accessibility: AXIsProcessTrusted(),
              posting: CGPreflightPostEventAccess(),
-             listening: CGPreflightListenEventAccess(),
+             listening: CGPreflightListenEventAccess() && IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted,
              screenRecording: CGPreflightScreenCaptureAccess(),
              finderExtension: FIFinderSyncController.isExtensionEnabled,
              loginItem: SMAppService.mainApp.status == .enabled)

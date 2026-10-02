@@ -45,19 +45,3 @@ if [ ! -e "$bridge_package/SDKOverride" ] && [ ! -L "$bridge_package/SDKOverride
 elif [ "$(readlink "$bridge_package/SDKOverride")" != "$bridge_cache/bounded-include" ]; then
     echo 'Existing SDKOverride differs; left unchanged.' >&2; exit 1
 fi
-swift build --package-path "$bridge_package" --scratch-path "$bridge_scratch" -c release
-bridge_swift="$(xcrun --find swiftc)"
-bridge_plugin="$(dirname "$(dirname "$bridge_swift")")/lib/swift/host/plugins/testing/libTestingMacros.dylib"
-if [ -f "$bridge_plugin" ]; then
-    swift test --package-path "$bridge_package" --scratch-path "$bridge_scratch" --disable-xctest \
-        -Xswiftc -load-plugin-library -Xswiftc "$bridge_plugin"
-else
-    swift test --package-path "$bridge_package" --scratch-path "$bridge_scratch" --disable-xctest
-fi
-bridge_bin="$(swift build --package-path "$bridge_package" --scratch-path "$bridge_scratch" -c release --show-bin-path)/BridgeHIDHelper"
-"$bridge_bin" --self-check
-/usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --identifier local.WindowsMacBridge.HIDHelper --options runtime "$bridge_bin"
-/usr/bin/codesign --verify --strict "$bridge_bin"
-mkdir -p "$bridge_root/build"
-printf '%s\n' "$bridge_bin" > "$bridge_root/build/HID_HELPER_PATH.txt"
-printf 'Helper built (not installed): %s\n' "$bridge_bin"

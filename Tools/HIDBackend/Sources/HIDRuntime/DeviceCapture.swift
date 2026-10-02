@@ -290,7 +290,7 @@ final class DeviceCapture {
         status.processed = engine.processed; status.translated = engine.translated; status.maxMicroseconds = maxMicroseconds
         if !fault.isEmpty { status.state = fault }
         else if nativePass && config.enabled { status.state = "原生穿透：\(config.mode.title)；已釋放實體鍵盤" }
-        else if !status.permissions { status.state = "等待 helper 輸入監控權限" }
+        else if !status.permissions { status.state = "等待 WindowsMacBridge 輸入監控權限" }
         else if status.secureInput { status.state = "Secure Input：已釋放裝置" }
         else if !valid { status.state = "已停止擷取" }
         else if !status.driverReady { status.state = "等待 VirtualHID Driver；不擷取鍵盤" }

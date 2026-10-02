@@ -75,12 +75,15 @@ struct SettingsView: View {
                         Text(notice).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
                     }
                     permissionRow("2. 輸入監控：WindowsMacBridge",
-                                  verification: controller.permissionChecklist.verification(for: [.listening]),
+                                  verification: controller.inputMonitoringVerification,
                                   required: controller.settings.enabled || controller.settings.screenshotAutoCopy,
                                   location: "隱私權與安全性 → 輸入監控 → WindowsMacBridge",
-                                  detail: "主 App 接收按鍵所需；Ctrl 快捷鍵及 Windows 截圖需要。只開啟鍵盤控制並不足夠。",
+                                  detail: "實體鍵盤、Ctrl 快捷鍵及 Windows 截圖都使用此 App 的同一項輸入監控權限。",
                                   actionLabel: "開啟設定") {
                         controller.requestListening(); controller.openPermissionSettings(.listening)
+                    }
+                    if let notice = controller.backgroundInputNotice {
+                        Text(notice).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
                     }
                     permissionRow("3. 螢幕錄製",
                                   verification: controller.permissionChecklist.verification(for: [.screenRecording]),
@@ -106,20 +109,10 @@ struct SettingsView: View {
                                   enabledLabel: "已啟用", disabledLabel: "未啟用") {
                         controller.openPermissionSettings(.finderExtension)
                     }
-                    permissionRow("6. 輸入監控：WindowsMacBridge HID Helper",
-                                  verification: controller.helperInputMonitoringVerification, required: usesHID,
-                                  location: "隱私權與安全性 → 輸入監控 → WindowsMacBridge HID Helper",
-                                  detail: "讀取實體鍵盤。程式會自動提出申請，你只需在系統設定開啟這個名稱的權限。",
-                                  actionLabel: "開啟設定") {
-                        controller.requestHIDListening()
-                    }
-                    if let notice = controller.helperPermissionNotice {
-                        Text(notice).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
-                    }
-                    permissionRow("7. Driver 核准",
+                    permissionRow("6. WindowsMacBridge 鍵盤驅動",
                                   verification: controller.driverVerification, required: usesHID,
                                   location: "一般 → 登入項目與延伸功能 → 驅動程式延伸功能 → Karabiner‑VirtualHIDDevice",
-                                  detail: "鍵盤驅動已由程式準備。按本列按鈕，開啟 Karabiner‑VirtualHIDDevice；若系統要求重開機，請依提示完成。",
+                                  detail: "按本列即可申請並開啟驅動設定。系統中的名稱為 Karabiner‑VirtualHIDDevice；開啟該開關，若要求重開機請依提示完成。",
                                   enabledLabel: "已核准／啟用", disabledLabel: "未核准／未啟用",
                                   actionLabel: "開啟設定") {
                         controller.requestDriverActivation()
@@ -127,7 +120,7 @@ struct SettingsView: View {
                     if let notice = controller.driverApprovalNotice {
                         Text(notice).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
                     }
-                    permissionRow("8. 截圖資料夾存取",
+                    permissionRow("7. 截圖資料夾存取",
                                   verification: controller.screenshotFolderVerification,
                                   required: controller.settings.screenshotAutoCopy,
                                   location: "隱私權與安全性 → 檔案與檔案夾 → WindowsMacBridge",
@@ -205,7 +198,7 @@ struct SettingsView: View {
                     Button("完整操作說明") { controller.openUserGuide() }
                     Button("實機驗收步驟") { controller.openAcceptanceGuide() }
                 }
-                explanation("「套用建議預設」會啟用快捷鍵及中文／唯音相容、選裝置 HID／所有鍵盤、將 Codex 設為 Default macOS，並關閉 Finder 檔案加強。保留其他 App 規則、各來源偏好、輸入法及登入設定。HID 需要安裝包內的 helper 與 Driver。")
+                explanation("「套用建議預設」會啟用快捷鍵及中文／唯音相容、選裝置 HID／所有鍵盤、將 Codex 設為 Default macOS，並關閉 Finder 檔案加強。保留其他 App 規則、各來源偏好、輸入法及登入設定。鍵盤處理與驅動安裝都已包含在此 App。")
                 if let notice = controller.presetNotice { Text(notice).foregroundStyle(.secondary) }
             }
             Section("Windows 快捷鍵") {
@@ -241,7 +234,7 @@ struct SettingsView: View {
                             }
                             Text(device.captured ? "此鍵盤已接管" : "此鍵盤維持原生輸入／等待就緒").font(.caption).foregroundStyle(.secondary)
                         }
-                        explanation("背景元件安裝、Driver 核准及 helper 輸入監控的操作統一放在「授權」頁。Ready 且接管數大於 0 才表示此後端有鍵盤可用；不支援的鍵盤維持原樣。")
+                        explanation("輸入監控及鍵盤驅動核准統一放在「權限」頁。Ready 且接管數大於 0 才表示此後端有鍵盤可用；不支援的鍵盤維持原樣。")
                     }
                     explanation("Fn／Globe、Touch ID、音量及亮度預設保留原本功能；Fn／Ctrl 交換是另外的明確選項。")
                 }

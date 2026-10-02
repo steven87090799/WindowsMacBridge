@@ -11,12 +11,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Build pinned VirtualHID client and run offline tests
-        run: bash scripts/build-hid-helper.sh
       - name: Build App and package complete drag-install DMG without installation
         run: |
           bash scripts/build-app.sh
-          bash scripts/package-hid-release.sh
           export BRIDGE_RELEASE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)-preview.1"
           bash scripts/package-single-app.sh
           bash scripts/package-app-dmg.sh

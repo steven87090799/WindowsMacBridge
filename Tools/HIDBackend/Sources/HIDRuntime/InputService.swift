@@ -5,8 +5,18 @@ import HIDProtocol
 
 /// Installed root-owned pin + console UID authenticate the single controller.
 /// No commands, paths, arbitrary output reports or clipboard data are accepted over IPC.
-final class HelperService: NSObject, NSXPCListenerDelegate {
-    private let capture = DeviceCapture()
+final class InputService: NSObject, NSXPCListenerDelegate {
+    private var captureStorage: DeviceCapture?
+    private var capture: DeviceCapture {
+        if let captureStorage { return captureStorage }
+        let capture = DeviceCapture()
+        capture.onAction = { [weak self] action, pid, generation in
+            guard let remote = self?.connection?.remoteObjectProxy as? HIDControllerProtocol else { return }
+            remote.performAction(HIDActionCodec.encode(action), processID: pid, generation: generation)
+        }
+        captureStorage = capture
+        return capture
+    }
     private let pinnedHash: Data
     private var connection: NSXPCConnection?
     private let listener = NSXPCListener(machServiceName: HIDService.name)
@@ -22,15 +32,11 @@ final class HelperService: NSObject, NSXPCListenerDelegate {
               let hash = plist["CDHash"] as? Data, hash.count == 20 else { return nil }
         self.pinnedHash = hash
         super.init(); listener.delegate = self
-        capture.onAction = { [weak self] action, pid, generation in
-            guard let remote = self?.connection?.remoteObjectProxy as? HIDControllerProtocol else { return }
-            remote.performAction(HIDActionCodec.encode(action), processID: pid, generation: generation)
-        }
     }
     func run() {
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-        source.setEventHandler { [weak self] in self?.capture.stop(); exit(0) }
+        source.setEventHandler { [weak self] in self?.captureStorage?.stop(); exit(0) }
         source.resume(); termination = source
         listener.resume(); RunLoop.main.run()
     }
@@ -42,7 +48,7 @@ final class HelperService: NSObject, NSXPCListenerDelegate {
         candidate.remoteObjectInterface = NSXPCInterface(with: HIDControllerProtocol.self)
         candidate.invalidationHandler = { [weak self, weak candidate] in
             DispatchQueue.main.async {
-                if self?.connection === candidate { self?.capture.stop(); self?.connection = nil }
+                if self?.connection === candidate { self?.captureStorage?.stop(); self?.connection = nil; exit(0) }
             }
         }
         candidate.interruptionHandler = candidate.invalidationHandler
@@ -66,9 +72,9 @@ final class HelperService: NSObject, NSXPCListenerDelegate {
         return true
     }
     private final class Endpoint: NSObject, HIDHelperProtocol {
-        weak var service: HelperService?
+        weak var service: InputService?
         weak var connection: NSXPCConnection?
-        init(service: HelperService, connection: NSXPCConnection) { self.service = service; self.connection = connection }
+        init(service: InputService, connection: NSXPCConnection) { self.service = service; self.connection = connection }
         func configure(_ data: Data, withReply reply: @escaping (Data) -> Void) {
             guard data.count <= 8192, let config = try? JSONDecoder().decode(HIDConfiguration.self, from: data), config.valid else {
                 connection?.invalidate(); reply(Data()); return
@@ -94,7 +100,7 @@ final class HelperService: NSObject, NSXPCListenerDelegate {
                 guard let self, service != nil, let connection,
                       connection.effectiveUserIdentifier == DeviceCapture.consoleUID() else { reply(false); return }
                 // Root daemons cannot present a login-session permission UI.
-                // The installed App launches our non-capturing GUI request mode.
+                // The main App requests its own permission in the login session.
                 reply(IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted)
             }
         }

@@ -10,11 +10,11 @@ class SDKBuildTests(unittest.TestCase):
             root = Path(d); (root/'scripts').mkdir(); (root/'Tools/HIDBackend').mkdir(parents=True)
             cache = root/'cache'; cache.mkdir(); (cache/'verified').write_text('old marker')
             (cache/'source.tar.gz').write_bytes(b'tampered archive')
-            script = (ROOT/'scripts/build-hid-helper.sh').read_text().replace(
+            script = (ROOT/'scripts/prepare-hid-backend.sh').read_text().replace(
                 'bridge_cache="$HOME/Library/Caches/WindowsMacBridge/HIDSDK/$bridge_revision"',
                 f'bridge_cache="{cache}"')
-            (root/'scripts/build-hid-helper.sh').write_text(script)
-            result = subprocess.run(['/bin/bash',str(root/'scripts/build-hid-helper.sh')], capture_output=True,text=True)
+            (root/'scripts/prepare-hid-backend.sh').write_text(script)
+            result = subprocess.run(['/bin/bash',str(root/'scripts/prepare-hid-backend.sh')], capture_output=True,text=True)
             self.assertNotEqual(result.returncode,0)
             self.assertIn('checksum mismatch',result.stderr)
             self.assertFalse((root/'Tools/HIDBackend/SDK').exists())

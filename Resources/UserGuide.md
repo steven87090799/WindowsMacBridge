@@ -1,8 +1,8 @@
-> 授權頁已平鋪八項，每項都有必要／選用與系統位置。主 App「輸入監控」也必須核准，不能只開鍵盤控制。綠色僅代表 native 檢查通過；未檢查、待核准及已安裝都不算通過。⌘⇧3／⌘⇧4 自動複製另列截圖資料夾存取，程式自動申請目前截圖資料夾，確認實際可讀才綠色。
+> 授權頁已平鋪七項，每項都有必要／選用與系統位置。主 App「輸入監控」也必須核准，不能只開鍵盤控制。綠色僅代表 native 檢查通過；未檢查、待核准及已安裝都不算通過。⌘⇧3／⌘⇧4 自動複製另列截圖資料夾存取，程式自動申請目前截圖資料夾，確認實際可讀才綠色。
 
-> 單一 App 安裝版（0.5.19 / build 39）：打開 DMG，將 App 拖進「應用程式」，再從那裡開啟。首次使用由 App 處理內含背景元件，需要時完成系統管理員驗證即可。權限頁平鋪八項，每次只申請自己那一項；確認綠燈再繼續。第一項若需要重開，直接按該列「重新開啟 App」。上方保留「權限」、「一般設定」、「唯音與輸入法」、「App 規則」、「診斷」分頁，沒有獨立進階設定。Driver 使用原廠 Karabiner 名稱／圖示。
+> 單一 App 安裝版（0.6.0 / build 40）：打開 DMG，將 App 拖進「應用程式」，再從那裡開啟。首次使用由 App 處理內含背景元件，需要時完成系統管理員驗證即可。權限頁平鋪七項，每次只申請自己那一項；確認綠燈再繼續。第一項若需要重開，直接按該列「重新開啟 App」。上方保留「權限」、「一般設定」、「唯音與輸入法」、「App 規則」、「診斷」分頁，沒有獨立進階設定。App 的第 6 項稱為「WindowsMacBridge 鍵盤驅動」。macOS 核准頁仍顯示官方簽署名稱 Karabiner‑VirtualHIDDevice；請開啟該項。
 
-# WindowsMacBridge 0.5.19（build 39）— 操作說明
+# WindowsMacBridge 0.6.0（build 40）— 操作說明
 
 截圖尚在框選或圖片轉換時，關閉開關會取消該次自動複製；即使馬上重開，也不會複製上一輪圖片。已儲存的圖片保留。原生框選仍可按 Esc 取消；同一時間只接受一輪截圖。Pause、backend、session、Secure Input 或設定世代改變會取消舊工作；120 秒逾時，權限、程序、磁碟、解碼與編碼失敗各自顯示原因。截圖 Event Tap 在 60 秒內第三次停用時停止自動重試並顯示錯誤，放開按鍵後重開截圖開關即可重新檢查。
 
@@ -19,7 +19,7 @@ Finder 右鍵路徑選單需要 App 正在執行及 Finder Mode 已開啟。設�
 
 這是待實機驗收的修復候選版，適用 Apple Silicon、macOS 14+，不需要購買 Developer 帳號。App 使用 ad-hoc 簽章，沒有 Apple 公證；若 macOS 阻擋，嘗試開啟後到「系統設定 → 隱私權與安全性」使用系統提供的「仍要打開」。不要關閉 Gatekeeper／SIP 或清除 quarantine。
 
-EventTap 備援不需安裝 Driver，但不能提供可靠的逐裝置偏好與通用控制來源分流。所有鍵盤使用 Windows Experience 時，HID 保留 App-sensitive 原始按鍵，由實際接收事件的 Mac 依自己的 App 翻譯；兩台 Mac 均需新版 App/helper。混合 Native Mac 裝置時，無法確定跨機來源，Finder／AX／HID 截圖增強停用。純 HID 系統快捷鍵先編碼，再交由 macOS／UC 傳送。
+EventTap 備援不需安裝 Driver，但不能提供可靠的逐裝置偏好與通用控制來源分流。所有鍵盤使用 Windows Experience 時，HID 保留 App-sensitive 原始按鍵，由實際接收事件的 Mac 依自己的 App 翻譯；兩台 Mac 均需新版 App。混合 Native Mac 裝置時，無法確定跨機來源，Finder／AX／HID 截圖增強停用。純 HID 系統快捷鍵先編碼，再交由 macOS／UC 傳送。
 
 實體鍵盤、中文組字、Terminal、遠端與睡眠恢復驗收，請按 App 的「實機驗收步驟」，
 或閱讀同資料夾的 [AcceptanceGuide.md](AcceptanceGuide.md)。未操作過的情境保留為未驗收。
@@ -29,7 +29,7 @@ EventTap 備援不需安裝 Driver，但不能提供可靠的逐裝置偏好與�
 | 設定 | 新安裝預設 | 用途 |
 | --- | --- | --- |
 | Windows 快捷鍵 | 開 | 本機 Ctrl 快捷鍵轉為 macOS 操作 |
-| 輸入方式 | 裝置 HID | 實體來源先正規化；需要 helper／Driver；舊版 EventTap 保留 |
+| 輸入方式 | 裝置 HID | 實體來源先正規化；需要 內含鍵盤處理及 Driver；舊版 EventTap 保留 |
 | 鍵盤範圍 | 所有鍵盤 | 內建、USB、Bluetooth 均使用同一套快捷鍵規則 |
 | MacBook Fn／Ctrl 交換 | 關 | 保留實體 Control 與 Fn／Globe；舊版明確選項保留 |
 | Codex／ChatGPT App | Default macOS | 依 `com.openai.codex` 套用聊天／文字操作 |
@@ -59,17 +59,17 @@ EventTap 備援不需安裝 Driver，但不能提供可靠的逐裝置偏好與�
 
 通用控制兩種方向都能使用同一份設定：只在來源 MacBook 交換實體內建鍵盤，另一臺收到的虛擬服務不會再次交換；外接鍵盤操控 MacBook 時仍保持外接排列。實際跨機 Ctrl／Fn、中文組字及睡眠恢復需按驗收指南測試，未測之前不視為已驗收。
 
-這個原生選項不需安裝 HID。選進階 HID 時，先還原原生交換，再由 helper 只在接管的內建鍵盤服務依同一開關交換；外接鍵盤不交換 Fn／Ctrl。Remote／VM／Game 的 HID 模式會交還實體鍵盤，該情境的 Fn／Ctrl 交換需實體驗收，不能只靠離線測試推定。全域 Pause 同步停止翻譯、截圖、Finder／輸入法工作與 Fn／Ctrl 映射；仍有按鍵按住時延後原生映射還原，等待放開後才完成。
+這個原生選項不需安裝 HID。選進階 HID 時，先還原原生交換，再由內含鍵盤處理 只在接管的內建鍵盤服務依同一開關交換；外接鍵盤不交換 Fn／Ctrl。Remote／VM／Game 的 HID 模式會交還實體鍵盤，該情境的 Fn／Ctrl 交換需實體驗收，不能只靠離線測試推定。全域 Pause 同步停止翻譯、截圖、Finder／輸入法工作與 Fn／Ctrl 映射；仍有按鍵按住時延後原生映射還原，等待放開後才完成。
 
 關閉或正常退出還原本程式的交換，其他映射保留。系統或其他工具已占用 Fn／Ctrl 時顯示衝突，先在對應工具還原這把內建鍵盤，再按「重新檢查鍵盤模式」。強制終止可能留下暫存映射，重新開啟可依還原紀錄恢復；重新開機清除暫存映射。App 的登入啟動依保存的開關重新套用，若待核准，按授權清單的登入項目前往系統設定。診斷紀錄為 `~/Library/Logs/WindowsMacBridge/KeyboardMapping.log`。
 
 ## 授權清單
 
-鍵盤控制合併成一列：macOS 27 顯示「裝置控制和資料取用」，較舊系統顯示「輔助使用」。按「開啟設定」會呼叫缺少的原生要求 API，再重新驗證目前 App；開啟設定頁本身不代表授權成功。主 App 與 HID helper 的輸入監控各自列出。螢幕錄製、登入啟動、Finder 擴充、Driver 核准及截圖資料夾存取也固定列出，依目前功能標明必要／選用。背景元件的權限檢查不會接管鍵盤，在尚未啟動 HID 時也能提出授權要求。
+鍵盤控制合併成一列：macOS 27 顯示「裝置控制和資料取用」，較舊系統顯示「輔助使用」。按「開啟設定」會呼叫缺少的原生要求 API，再重新驗證目前 App；開啟設定頁本身不代表授權成功。實體鍵盤與主 App 共用「WindowsMacBridge」輸入監控，不再另列 HID Helper。螢幕錄製、登入啟動、Finder 擴充、Driver 核准及截圖資料夾存取也固定列出，依目前功能標明必要／選用。背景元件的權限檢查不會接管鍵盤，在尚未啟動 HID 時也能提出授權要求。
 
 App 啟動、開啟設定及返回前景時會重新檢查，也可按「重新檢查」。狀態來自目前 App 的原生 API；系統的同名舊項目顯示開啟，不代表新版已取得權限。每項按鈕會處理目前版本的權限申請，然後開啟對應系統設定。
 
-每列只處理自己的權限；第 4 項才註冊登入啟動，第 7 項才送出 Driver 啟用要求，第 8 項才初次讀取截圖資料夾。檢查狀態不會申請其他權限。系統沒有重開提示時，第一項的「需重新開啟」仍可正常重開 App，重開後再以原生 API 確認。
+每列只處理自己的權限；第 4 項才註冊登入啟動，第 6 項才送出 Driver 啟用要求，第 7 項才初次讀取截圖資料夾。檢查狀態不會申請其他權限。系統沒有重開提示時，第一項的「需重新開啟」仍可正常重開 App，重開後再以原生 API 確認。
 
 | 順序 | App 項目 | 到系統設定要開啟的項目 |
 | --- | --- | --- |
@@ -78,17 +78,16 @@ App 啟動、開啟設定及返回前景時會重新檢查，也可按「重新�
 | 3 | 螢幕錄製 | 隱私權與安全性 → 螢幕與系統音訊錄製 → WindowsMacBridge |
 | 4 | 登入時啟動 | 一般 → 登入項目與延伸功能 → WindowsMacBridge |
 | 5 | Finder 擴充功能 | 一般 → 登入項目與延伸功能 → Finder → WindowsMacBridge Finder |
-| 6 | 輸入監控：背景鍵盤元件 | 隱私權與安全性 → 輸入監控 → WindowsMacBridge HID Helper |
-| 7 | Driver 核准 | 一般 → 登入項目與延伸功能 → 驅動程式延伸功能 → Karabiner‑VirtualHIDDevice |
-| 8 | 截圖資料夾存取 | 隱私權與安全性 → 檔案與檔案夾 → WindowsMacBridge → 目前的截圖資料夾 |
+| 6 | WindowsMacBridge 鍵盤驅動 | 一般 → 登入項目與延伸功能 → 驅動程式延伸功能 → Karabiner‑VirtualHIDDevice |
+| 7 | 截圖資料夾存取 | 隱私權與安全性 → 檔案與檔案夾 → WindowsMacBridge → 目前的截圖資料夾 |
 
-若第 8 項已確認可讀而系統沒有對應開關，代表該位置不需要額外授權。Driver 若要求重開機，依系統提示完成後回來檢查。
+若第 7 項已確認可讀而系統沒有對應開關，代表該位置不需要額外授權。Driver 若要求重開機，依系統提示完成後回來檢查。
 
 ## 一般
 
 - **Windows 快捷鍵**：開啟後翻譯既有 29 組一般規則與 19 組瀏覽器規則，涵蓋複製、貼上、復原、儲存、分頁與文字導覽；關閉不會連帶關閉輸入法守護。
 - **EventTap 備援**：只在未識別為遠端／UC／自身輸出的 hardware 事件上翻譯；沒有可靠鍵盤 device ID。存在 Native Mac 裝置偏好或指定範圍時停止備援的實體翻譯並顯示原因，不能忽略你的裝置選擇。已辨識遠端仍可獨立處理。自製視窗切換器已移除；遠端 Alt+Tab 只是輸出 macOS 原生 Command+Tab。
-- **HID**：進階裝置測試後端，需要另裝 root helper 與官方 VirtualHID Driver。「所有支援的鍵盤」接管符合安全 descriptor 的內建及外接鍵盤；另保留內建／Apple VID 1452/PID 834 範圍。複合、虛擬或未知 descriptor 維持原生。依目前 Win 鍵位置配置 Option／Command，內建鍵盤依同一 Fn／Ctrl 開關配置，Finder／文字／Alt+F4／Win+R/I/Tab 開關會傳給 helper。切換輸入方式會選擇對應範圍。
+- **HID**：進階裝置測試後端，需要App 自動準備鍵盤處理與官方 VirtualHID Driver。「所有支援的鍵盤」接管符合安全 descriptor 的內建及外接鍵盤；另保留內建／Apple VID 1452/PID 834 範圍。複合、虛擬或未知 descriptor 維持原生。依目前 Win 鍵位置配置 Option／Command，內建鍵盤依同一 Fn／Ctrl 開關配置，Finder／文字／Alt+F4／Win+R/I/Tab 開關會傳給內含鍵盤處理。切換輸入方式會選擇對應範圍。
 - **鍵盤範圍**：EventTap 使用所有鍵盤，HID 使用指定範圍。EventTap 選內建限定時停止翻譯，避免錯誤地套用到全部鍵盤。
 - **Finder 加強**：確認在檔案列表才啟用開啟、改名、刪除與 Ctrl+X／V 移動。Ctrl+X 先執行 Copy 並記住剪下狀態，Ctrl+V 再交由 Finder 的 Move 執行。開資料夾、上一層與切換路徑保持剪下狀態；剪貼簿更新、切換 App、暫停或 5 分鐘後取消標記；不保證 Move 已成功。Shift+Delete 必須另外啟用並逐次確認。右鍵路徑選單由 Finder Sync 提供，請在系統的 Finder 擴充功能設定啟用；「顯示目前資料夾路徑」子選單優先顯示選取項目的完整 POSIX 路徑，並有「複製此路徑」。只有按下複製才寫入剪貼簿。
 - **Windows 文字游標／Alt+F4**：Ctrl+方向鍵按單字移動，Home／End 到行首行尾，Ctrl+Home／End 到文件邊界，Shift 組合選取。Alt+F4 使用 AX 關閉目前視窗，未儲存內容仍由 App 確認；找不到可用關閉按鈕時顯示原因。沒有 Command+W 或 Command+Q fallback。
@@ -97,7 +96,7 @@ App 啟動、開啟設定及返回前景時會重新檢查，也可按「重新�
 - **截圖自動複製**：預設開啟。`Shift+Win+S` 進入框選，Alt+PrintScreen 擷取目前視窗，Win+PrintScreen 全螢幕存檔，PrintScreen 可選框選或傳統全螢幕複製；完成時存檔並複製 PNG 供 `⌘V`。Esc 取消不改剪貼簿。EventTap 的 PrintScreen 對應 F13 位置，需核對實體鍵盤輸出。`Ctrl+Shift+S` 不會觸發截圖，仍依 App Profile 保留另存新檔翻譯或原樣通過。`⌘⇧3`／`⌘⇧4` 保留系統全螢幕、框選與空白鍵選視窗；系統完成存檔後自動複製，不必點開縮圖。若啟用浮動縮圖，可能需等縮圖消失；要即時複製可用 `Win+Shift+S`。儲存位置使用 macOS 截圖設定；更改位置後按截圖重新檢查或重開開關。只有啟用後新增、帶 Apple 截圖標記的圖片會被處理，不掃描歷史圖片；Bridge 自己產生的圖片不重複複製。關閉時移除截圖攔截與檔案事件觀察。Remote／VM／Game 等保護 Profile 原樣通過。
 - **登入啟動**：由權限頁第 4 項提出申請，若系統顯示待核准，開啟 WindowsMacBridge 的登入項目。截圖與 Fn／Ctrl 功能不會自行更改這項權限。
 - **鍵盤控制**：同一系統授權頁提供視窗存取與按鍵送出能力，但 App 必須分別驗證 Accessibility／PostEvent 原生 API。沒有把紅叉改成假成功，也沒有移除釋放 synthetic key 所需的授權檢查。更新後若系統舊項目已開啟而目前 App 仍未取得，按該項「開啟設定」，核准目前版本後依系統提示重新啟動 App。ad-hoc 簽章更新後可能需要重新授權。
-- **App 輸入監控**：用「要求 App 輸入監控」提出請求；EventTap 的可用性依系統授權而定。HID helper 必須另外取得自己的輸入監控權限。
+- **App 輸入監控**：按第 2 項「開啟設定」申請 WindowsMacBridge 的單一輸入監控；主 App 與背景模式均需原生檢查通過。
 - **中文／唯音快捷鍵**：預設開啟，在底層 ABC／U.S. 的中文輸入法也可依實體鍵位翻譯。不讀取組字內容，無法可靠判斷正在選字；若 App 候選或組字行為有衝突，可關閉此項，只在 ABC／U.S. 來源使用翻譯。
 - **暫停**：設定頁提供 5 分鐘或至重啟，Menu Bar 另有 15 分鐘／1 小時。同步暫停 HID／EventTap、截圖、Finder、Fn／Ctrl 與輸入法守護；「恢復／重啟引擎」取消暫停與穿透，重新嘗試啟動。
 - **緊急操作**：右 Option+P 切換穿透，Control+Option+Command+P 暫停。在 Remote／VM／Game 的 HID 原生鍵流不攔截這些熱鍵，請從 Menu Bar 暫停／結束。
@@ -169,9 +168,9 @@ Remote Advanced 顯示實際來源、Known／Likely／Unknown、語意與 Detect
 
 ## 進階 HID／停止與移除
 
-單一 App 第一次開啟會安裝所有內含元件，管理員驗證由系統處理；新版 HID 預設只會在 helper／Driver Ready、所有安全條件成立時接管支援的實體裝置。不支援 descriptor 保留原生。
+單一 App 第一次開啟會安裝所有內含元件，管理員驗證由系統處理；新版 HID 預設只會在 內含鍵盤處理及 Driver Ready、所有安全條件成立時接管支援的實體裝置。不支援 descriptor 保留原生。
 
-先從 Menu Bar 暫停／結束。只用 EventTap 時，將 App 移到垃圾桶即可停止使用；macOS 的登入項目與權限可自行移除，設定偏好會保留。若裝過 helper，使用 Uninstall.command 移除本工具服務；共用官方 Driver 保留，避免影響其他軟體。
+先從 Menu Bar 暫停／結束。只用 EventTap 時，將 App 移到垃圾桶即可停止使用；macOS 的登入項目與權限可自行移除，設定偏好會保留。裝置 HID 的停止／移除腳本內含於 App 的 BackendPayload；移除本工具服務；共用官方 Driver 保留，避免影響其他軟體。
 
 更新中止時，App 會顯示待復原並停用相關輸入。依系統提示完成核准或重新開機，再開啟下载的 App；程式先處理待復原交易，再完成安裝。已驗證相容的官方 8.0.0–8.6.0 Driver 沿用且不改寫；未知／不相容 ABI 停止，不能以回復 App 推定 DriverKit 已還原。
 

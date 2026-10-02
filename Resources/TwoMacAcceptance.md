@@ -1,6 +1,6 @@
-# 兩台 Mac 的安裝、使用與驗收（0.5.17 / build 36）
+# 兩台 Mac 的安裝、使用與驗收（0.6.0 / build 40）
 
-目前狀態：2026-10-02 reviewer 修正納入 0.5.17 / build 36（preview.8）安裝候選版。依使用者後續安裝要求進行必要建置與封裝，只執行權限及事件遮罩的針對性檢查，沒有執行完整測試套件；仍須依以下步驟實機驗收。舊 preview.1 / build 29 不含 reviewer 修正。詳見 Docs/ReviewerAudit-2026-10-02.md。
+本版整合 HID 程式進主 App，輸入監控只授權 WindowsMacBridge；鍵盤驅動核准仍採官方簽署的系統名稱。以下實體操作尚未完成，不以建置或 CI 取代。
 
 以下實體操作尚未完成。MacBook 已開通用控制、尚未安裝 Bridge，可以照此順序加入。兩台都用 Apple Silicon / macOS 14 以上。不要把一台 Mac 的測試結果當成另一台也通過。
 
@@ -8,13 +8,13 @@
 
 稱目前這台為 A，MacBook 為 B。先確認不開 Bridge 時，A 的滑鼠能移到 B，鍵盤能在 B 的 TextEdit 打字，再反向確認 B → A。這一步只驗證 Apple 通用控制。
 
-將同一個 `WindowsMacBridge-0.5.17-preview.8-app-macos-arm64.zip` 傳到兩台並解壓縮。此 ZIP 解壓後只有 WindowsMacBridge.app，背景元件已收在 App 內。兩台都使用此單一 App 版。
+將同一個 `WindowsMacBridge-0.6.0-preview.1-macos-arm64.dmg` 傳到兩台。點兩下 DMG，將 WindowsMacBridge 拖進「應用程式」，鍵盤處理及驅動安裝都已內含。兩台都使用此單一 App 版。
 
 1. A：從 Bridge 選單正常結束旧版；B 尚未安裝可直接下一步。先放開所有按鍵。
-2. 各自在解壓縮資料夾開啟 App，程式自動安裝，依系統要求完成管理員驗證。所有背景元件已內含，不用加入或選取程式。遇到未知或其他程式共用的不相容 Driver 時會保留現狀並顯示安裝失敗；不手動刪除共用 Driver。
+2. 各自從「應用程式」開啟 App，程式自動安裝，依系統要求完成管理員驗證。所有背景元件已內含，不用加入或選取程式。遇到未知或其他程式共用的不相容 Driver 時會保留現狀並顯示安裝失敗；不手動刪除共用 Driver。
 3. 安裝完成會重新開啟權限清單。依序按各項「開啟設定」、在 macOS 核准、回到 App 確認綠燈。若系统要求重新開機或重新開啟 App，請依提示完成。安裝取消不自動反覆重試。
-4. 從各自的 `/Applications/WindowsMacBridge.app` 開啟設定，確認 **0.5.17（35）**。在第一項「開啟設定」完成鍵盤控制；App 必須實際顯示 Accessibility 與事件輸出都取得，不能只看系統同名開關。WindowsMacBridge 主 App 也需輸入監控；HID helper 需自己的輸入監控，Win+Shift+S 另需螢幕錄製。八項設定均在權限頁平鋪；第 8 項由程式申請目前截圖資料夾存取，不需選取路徑。
-5. 安裝完成已準備 Windows Experience、**裝置 HID**、**所有支援的鍵盤**；保留手動 App／來源偏好。MacBook 偵測到內建 Apple 鍵盤時啟用 Fn／Ctrl 交換，Mac mini 不會自動交換外接鍵盤。確認 helper／Driver Ready，來源端的實體鍵盤有被接管。目的端 UC 事件本身不要求被 seize。
+4. 從各自的 `/Applications/WindowsMacBridge.app` 開啟設定，確認 **0.6.0（40）**。在第一項「開啟設定」完成鍵盤控制；App 必須實際顯示 Accessibility 與事件輸出都取得，不能只看系統同名開關。WindowsMacBridge 的單一輸入監控需核准，Win+Shift+S 另需螢幕錄製。七項設定均在權限頁平鋪；第 7 項由程式申請目前截圖資料夾存取，不需選取路徑。
+5. 安裝完成已準備 Windows Experience、**裝置 HID**、**所有支援的鍵盤**；保留手動 App／來源偏好。MacBook 需要 Fn／Ctrl 交換時，在一般設定開啟；Mac mini 保持關閉，外接鍵盤不交換。確認 HID／Driver Ready，來源端的實體鍵盤有被接管。目的端 UC 事件本身不要求被 seize。
 6. 若 Karabiner 或其他改鍵程式也在改同一把鍵盤，先由你選擇停用那把鍵盤的重疊規則，再測 Bridge；保留它的共用 Driver。不要同時改多個設定排查。
 
 每台先在自己的 TextEdit 測 Ctrl+A、C、V、Z。若這裡不正常，先處理授權／Ready，還不用測通用控制。
