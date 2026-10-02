@@ -29,3 +29,5 @@ CI 當機堆疊另確認 helper permission probe 的 XPC error handler 被舊 SD
 XPC 修正後 CI 可完成完整 Debug 執行；三個截圖失敗顯示 decoder fixture 已在 5 秒自行逾時，而平行模型測試使主 actor 約 13 秒後才繼續。僅將這個測試閘門 fallback 改為 60 秒，仍由測試主動釋放，保留單一工作、Pause／session 失效、剪貼簿不被覆寫及普通 App 切換可複製的原斷言。production capture／decode 逾時沒有改動。
 
 其後三個截圖斷言在完整 Debug CI 通過；獨立 permission probe fixture 偶發因排程超過正式三秒 deadline 而回 unknown。該測試最多重查三次，仍要求取得明確 false 且沒有 capture configuration／ownership；一直失聯仍失敗，正式 deadline 不變。不存在 service 的回歸仍直接要求 nil，不把逾時誤認為已核准。
+
+完整 Debug／Release 後，安裝器的 pending-deactivation fixture 仍假設首次安裝會自動啟用 Driver，實際上新版已將 activation 留给使用者權限步驟。該 fixture 現在明確模擬檔案安裝後已有系統延伸功能註冊，才能驗證 deactivate 回傳成功但仍待重開機／啟用時，recovery journal 與已安裝檔案不能丟棄。fresh install 測試另要求 extension-state 維持未啟用，未改 production 安裝流程。

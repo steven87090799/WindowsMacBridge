@@ -63,6 +63,10 @@ elif name == 'installer':
     (driver/'identity').write_text('new-shared-driver' if version == '8.6.0' else 'original-shared-driver')
     (root/'receipt-state').write_text(version)
     (root/'driver-installed').write_text(version)
+    if fail in ['deactivation_pending','deactivation_active'] and version == '8.6.0':
+        # Explicitly simulate registration after package installation. Fresh
+        # installs otherwise leave activation to the user's permission step.
+        (root/'extension-state').write_text('1.8.0')
     if fail == 'driver' and version == '8.6.0': sys.exit(42)
     if fail == 'kill_during_driver' and version == '8.6.0':
         import signal, time
@@ -244,6 +248,7 @@ class InstallBackendTests(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertTrue((root/'driver-installed').exists())
         self.assertEqual((app/'identity').read_text(),'new-app')
+        self.assertEqual((root/'extension-state').read_text(), '')
 
     def test_already_installed_driver_is_not_reinstalled(self):
         root, _, _, _, result = self.run_install()
