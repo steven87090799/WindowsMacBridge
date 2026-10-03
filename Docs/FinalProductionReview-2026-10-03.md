@@ -131,7 +131,7 @@ Severity follows the brief: P0 keyboard unusable / root execution / stuck state;
 | WMB-36 | P2 | Screenshot taps run on the main run loop (latency coupling) | Moving taps off MainActor is a subsystem refactor; WMB-14 removed the per-key main-thread work that amplified it | latency measurement |
 | WMB-37 | P2 | Virtual-device exclusion relies on names/vendor | `IOHIDUserDevice` exclusion would also exclude Bluetooth LE keyboards | hardware |
 | WMB-38 | P2 | Ad-hoc signing: no publisher authenticity; shared Driver has no ownership marker | Needs Developer ID / installer design | release process |
-| — | P3 | Inert FinderSync extension still packaged; vendor 0x16c0 excludes all V-USB keyboards; installer logs and `PreviousApplication.*` not pruned | Low risk, packaging churn | — |
+| — | P3 | Inert FinderSync extension still packaged; vendor 0x16c0 excludes all V-USB keyboards; installer logs and `PreviousApplication.*` not pruned; legacy `Install/Uninstall/Stop/ActivateDriver.command` scripts are unpackaged and stale | Low risk, packaging churn | — |
 
 ## 3. Karabiner comparison (device_grabber principles)
 
