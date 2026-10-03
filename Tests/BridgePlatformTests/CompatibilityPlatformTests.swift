@@ -40,7 +40,7 @@ struct CompatibilityPlatformTests {
         let settings = try JSONDecoder().decode(BridgeSettings.self, from: old)
         #expect(settings.enabled)
         #expect(settings.keyboardScope == .allKeyboards)
-        #expect(!settings.finderEnabled)
+        #expect(settings.finderEnabled)
         #expect(!settings.allowIMEShortcuts)
         let fresh = BridgeSettings()
         #expect(fresh.keyboardScope == .allKeyboards)

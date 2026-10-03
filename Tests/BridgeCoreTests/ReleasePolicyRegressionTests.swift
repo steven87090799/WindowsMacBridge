@@ -84,11 +84,14 @@ struct FinderMenuRegressionTests {
 }
 
 struct BackendHandoffRegressionTests {
-    @Test func eventTapAndScreenshotsWaitForHIDReleaseAcknowledgement() {
+    @Test func eventTapRemainsUsableButNewHIDWaitsForItsRelease() {
         var input = RuntimePolicyInput(); input.shortcutEnabled = true; input.screenshotEnabled = true
         input.foreground = .init(processID: 1, bundleID: "test", mode: .macOS)
         input.hidReleasePending = true
         var policy = RuntimePolicyCoordinator()
+        let normal = policy.transition(input)
+        #expect(normal.permitsInput && normal.permitsScreenshots)
+        input.backend = .deviceHID
         let blocked = policy.transition(input)
         #expect(!blocked.permitsInput && !blocked.permitsScreenshots)
         input.hidReleasePending = false
