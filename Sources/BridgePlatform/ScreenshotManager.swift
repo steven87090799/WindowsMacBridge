@@ -376,7 +376,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
             return
         }
         if tap == nil { createTap() }
-        if let tap, CGEvent.tapIsEnabled(tap: tap), KeyboardEventTapCoverage.currentProcessIsVerified(),
+        if let tap, CGEvent.tapIsEnabled(tap: tap), KeyboardEventTapCoverage.currentProcessIsVerified(tap: tap),
            nativeTap.map({ CGEvent.tapIsEnabled(tap: $0) }) == true {
             setStatus(issue: nil, result: "Win+Shift+S 使用 macOS 原生框選並自動複製")
             log("\(reason)：截圖事件攔截已就緒")
@@ -433,7 +433,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         nativeTapGeneration &+= 1
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        if !KeyboardEventTapCoverage.currentProcessIsVerified() { destroyNativeTap() }
+        if !KeyboardEventTapCoverage.currentProcessIsVerified(tap: tap) { destroyNativeTap() }
     }
     private func destroyNativeTap(keepReleases: Bool = false) {
         if keepReleases && (nativeMapping.hasHeldKeys || nativeHeld.contains(where: { $0 != nil })) { return }
