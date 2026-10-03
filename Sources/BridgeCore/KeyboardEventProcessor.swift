@@ -286,7 +286,7 @@ public struct KeyboardEventProcessor: Sendable {
     }
 
     private static func isTextNavigation(_ rule: ShortcutRule) -> Bool {
-        (32...41).contains(Int(rule.id.split(separator: ".").last ?? "") ?? -1)
+        rule.isTextNavigation
     }
 
     private func rewrite(_ event: KeyboardEvent, rule: ShortcutRule) -> EventDecision {

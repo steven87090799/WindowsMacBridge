@@ -6,6 +6,10 @@ import Foundation
 import InputSourceCore
 import BridgeCore
 
+private final class GuardNotificationOwner {
+    weak var controller: GuardController?
+    init(_ controller: GuardController) { self.controller = controller }
+}
 final class GuardController {
     private enum EnvironmentSuspensionReason: Hashable {
         case hostPolicy
@@ -73,6 +77,8 @@ final class GuardController {
             maximumSelectionAttempts: Configuration.maximumSelectionAttempts
         )
     }
+
+    deinit { stop() }
 
     var desired: DesiredInputSource { machine.desired }
     var isEnabled: Bool { machine.isEnabled }
@@ -174,7 +180,7 @@ final class GuardController {
         if let observer {
             let center = CFNotificationCenterGetDistributedCenter()
             CFNotificationCenterRemoveObserver(center, observer, nil, nil)
-            Unmanaged<GuardController>.fromOpaque(observer).release()
+            Unmanaged<GuardNotificationOwner>.fromOpaque(observer).release()
             self.observer = nil
         }
 
@@ -400,7 +406,7 @@ final class GuardController {
 
     private func installTISObservers() {
         let center = CFNotificationCenterGetDistributedCenter()
-        let pointer = Unmanaged.passRetained(self).toOpaque()
+        let pointer = Unmanaged.passRetained(GuardNotificationOwner(self)).toOpaque()
         observer = pointer
 
         CFNotificationCenterAddObserver(
@@ -525,7 +531,7 @@ final class GuardController {
 
     private static let handleDistributedNotification: CFNotificationCallback = { _, observer, name, _, _ in
         guard let observer else { return }
-        let controller = Unmanaged<GuardController>.fromOpaque(observer).takeUnretainedValue()
+        guard let controller = Unmanaged<GuardNotificationOwner>.fromOpaque(observer).takeUnretainedValue().controller else { return }
 
         let enabledChanged = name.map { ($0.rawValue as String) == (kTISNotifyEnabledKeyboardInputSourcesChanged as String) } ?? false
         guard controller.notifications.offer(enabledChanged ? 2 : 1) else { return }

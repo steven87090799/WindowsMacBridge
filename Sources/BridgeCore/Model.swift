@@ -128,9 +128,11 @@ public struct ShortcutRule: Sendable {
     public let input: Shortcut
     public let output: Shortcut
     public let action: ShortcutAction?
+    public let isTextNavigation: Bool
     public init(id: String, input: Shortcut, output: Shortcut, action: ShortcutAction? = nil) {
         self.id = id; self.input = input; self.output = output
         self.action = action
+        isTextNavigation = id.hasPrefix("karabiner.") && (32...41).contains(Int(id.dropFirst(10)) ?? -1)
     }
 }
 

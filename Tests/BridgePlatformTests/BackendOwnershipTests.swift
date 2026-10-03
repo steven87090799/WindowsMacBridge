@@ -73,11 +73,11 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         for _ in 0..<100 where released != nil { try await Task.sleep(for: .milliseconds(2)) }
         #expect(released == nil)
     }
-    @Test func realIPCTransportWaitsForStopReplyAndTimeoutNeverClaimsRelease() async throws {
+    @Test func realIPCStopTimeoutInvalidatesOldLeaseWithoutBlockingEventTap() async throws {
         let helper = OfflineHelper()
         let listener = NSXPCListener.anonymous(); listener.delegate = helper; listener.resume()
         defer { listener.invalidate() }
-        let client = HIDBackendClient(connectionFactory: { NSXPCConnection(listenerEndpoint: listener.endpoint) }, stopAcknowledgementTimeout: 0.01)
+        let client = HIDBackendClient(connectionFactory: { NSXPCConnection(listenerEndpoint: listener.endpoint) }, stopAcknowledgementTimeout: 0.2)
         var config = EngineConfiguration(); config.enabled = true; config.generation = 1
         config.context = .init(processID: .max, bundleID: "test", mode: .macOS)
         client.start(); client.update(config, active: true)
@@ -85,8 +85,9 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         client.releaseOwnership()
         for _ in 0..<100 where !helper.hasStop { try await Task.sleep(for: .milliseconds(2)) }
         #expect(helper.hasStop && client.releasePending)
-        try await Task.sleep(for: .milliseconds(30))
-        #expect(client.releasePending && client.hasOwnership)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(!client.releasePending && !client.hasOwnership)
+        #expect(client.status.state.contains("未獲確認"))
         helper.acknowledge()
         for _ in 0..<100 where client.releasePending { try await Task.sleep(for: .milliseconds(2)) }
         #expect(!client.releasePending && !client.hasOwnership)

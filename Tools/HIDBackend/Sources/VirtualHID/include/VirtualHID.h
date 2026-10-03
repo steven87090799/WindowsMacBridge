@@ -52,6 +52,8 @@ bool wmb_virtual_hid_post_pointing(WMBVirtualHID *client, uint32_t buttons, int1
 // Posting is accepted only after the official service reports keyboard ready.
 bool wmb_virtual_hid_post(WMBVirtualHID *client, const WMBHIDState *state);
 void wmb_virtual_hid_reset(WMBVirtualHID *client);
+typedef void (*WMBStatusCallback)(void *context);
+void wmb_virtual_hid_set_status_callback(WMBVirtualHID *client, WMBStatusCallback callback, void *context);
 void wmb_virtual_hid_destroy(WMBVirtualHID *client);
 #ifdef __cplusplus
 }

@@ -18,12 +18,12 @@ import BridgeCore
               let values = info as? [String: Any], let hash = values[kSecCodeInfoUnique as String] as? Data else { return nil }
         return hash.map { String(format: "%02x", $0) }.joined()
     }()
-    static func current() -> PermissionSnapshot {
+    static func current(advanced: Bool = false) -> PermissionSnapshot {
         PermissionSnapshot(accessibility: AXIsProcessTrusted(),
              posting: CGPreflightPostEventAccess(),
-             listening: CGPreflightListenEventAccess() && IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted,
+             listening: advanced && CGPreflightListenEventAccess() && IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted,
              screenRecording: CGPreflightScreenCaptureAccess(),
-             finderExtension: FIFinderSyncController.isExtensionEnabled,
+             finderExtension: advanced && FIFinderSyncController.isExtensionEnabled,
              loginItem: SMAppService.mainApp.status == .enabled)
     }
 

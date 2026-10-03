@@ -15,6 +15,12 @@ final class InputService: NSObject, NSXPCListenerDelegate {
             guard let remote = self?.connection?.remoteObjectProxy as? HIDControllerProtocol else { return }
             remote.performAction(HIDActionCodec.encode(action), processID: pid, generation: generation)
         }
+        capture.onStatus = { [weak self] status, generation in
+            guard let peer = self?.connection,
+                  let remote = peer.remoteObjectProxy as? HIDControllerProtocol,
+                  let data = try? JSONEncoder().encode(status), data.count <= 16384 else { return }
+            remote.receiveStatus(data, generation: generation)
+        }
         captureStorage = capture
         return capture
     }
@@ -23,6 +29,7 @@ final class InputService: NSObject, NSXPCListenerDelegate {
     private let acceptedConnections = ConnectionRetainer<NSXPCConnection>()
     private let listener = NSXPCListener(machServiceName: HIDService.name)
     private var termination: DispatchSourceSignal?
+    private var idleExit: DispatchWorkItem?
     init?(pinPath: String = HIDService.root + "/controller.plist") {
         guard geteuid() == 0,
               let attrs = try? FileManager.default.attributesOfItem(atPath: pinPath),
@@ -45,6 +52,7 @@ final class InputService: NSObject, NSXPCListenerDelegate {
     }
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection candidate: NSXPCConnection) -> Bool {
         guard authenticated(candidate), acceptedConnections.insert(candidate) else { return false }
+        DispatchQueue.main.async { [weak self] in self?.idleExit?.cancel(); self?.idleExit = nil }
         let api = Endpoint(service: self, connection: candidate)
         candidate.exportedInterface = NSXPCInterface(with: HIDHelperProtocol.self)
         candidate.exportedObject = api
@@ -56,15 +64,23 @@ final class InputService: NSObject, NSXPCListenerDelegate {
                 if self.connection === candidate {
                     self.captureStorage?.stop(); self.connection = nil
                 }
-                // Keep the passive service available between permission checks.
-                // Exiting after each probe triggers launchd's restart throttle;
-                // an idle service has no capture timer or periodic wakeups.
+                self.scheduleIdleExit()
             }
         }
         candidate.interruptionHandler = candidate.invalidationHandler
         // Permission-only connections never take keyboard ownership. The
         // authenticated configure request acquires the single capture lease.
         candidate.resume(); return true
+    }
+    private func scheduleIdleExit() {
+        idleExit?.cancel()
+        guard acceptedConnections.isEmpty, connection == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.acceptedConnections.isEmpty, self.connection == nil else { return }
+            if let capture = self.captureStorage { capture.stop { exit(0) } }
+            else { exit(0) }
+        }
+        idleExit = work; DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
     }
     private func authenticated(_ connection: NSXPCConnection) -> Bool {
         guard connection.effectiveUserIdentifier != 0,
@@ -101,8 +117,8 @@ final class InputService: NSObject, NSXPCListenerDelegate {
         }
         func stop(withReply reply: @escaping () -> Void) {
             DispatchQueue.main.async { [weak self] in
-                if let self, let service, service.connection === connection { service.capture.stop() }
-                reply()
+                guard let self, let service, service.connection === connection else { reply(); return }
+                service.capture.stop(completion: reply)
             }
         }
         func requestInputAccess(withReply reply: @escaping (Bool) -> Void) {

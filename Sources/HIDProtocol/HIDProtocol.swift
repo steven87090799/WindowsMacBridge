@@ -4,7 +4,7 @@ import BridgeCore
 public enum HIDService {
     public static let name = "local.WindowsMacBridge.HIDHelper"
     public static let root = "/Library/Application Support/WindowsMacBridge"
-    public static let protocolVersion = 6
+    public static let protocolVersion = 7
 }
 
 /// Only bounded policy/status messages cross IPC. Never a stream of typed characters.
@@ -16,6 +16,7 @@ public enum HIDService {
 }
 @objc public protocol HIDControllerProtocol {
     func performAction(_ id: String, processID: Int32, generation: UInt64)
+    func receiveStatus(_ data: Data, generation: UInt64)
 }
 
 public struct HIDConfiguration: Codable, Sendable {

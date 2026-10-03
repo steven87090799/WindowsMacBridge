@@ -56,6 +56,8 @@ import ApplicationServices
                 modifierMapping: Self.decode(property(kIOHIDKeyboardModifierMappingPairsKey)))
         }
     }
+    // TN2450 specifies UserKeyMapping with HIDKeyboardModifierMappingSrc/Dst.
+    // The system ModifierMappingPairs table is read only for conflict detection.
     public func write(_ mapping: [NativeKeyMapping], serviceID: UInt64) -> Bool {
         guard let service = handles[serviceID],
               services()?.contains(where: { $0.identity.registryID == serviceID &&

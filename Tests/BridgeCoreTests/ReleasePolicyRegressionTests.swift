@@ -121,17 +121,17 @@ struct RuntimeWakeRegressionTests {
         var input = RuntimePolicyInput()
         #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: false, deadline: nil) == .stopped)
         input.shortcutEnabled = true
-        #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: false, deadline: nil) == .periodic)
+        #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: false, deadline: nil) == .stopped)
         input.secureInput = true
-        #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: false, deadline: nil) == .periodic)
+        #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: false, deadline: nil) == .stopped)
         input.paused = true
         #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: false, deadline: nil) == .stopped)
         #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: false, deadline: 1234) == .deadline(1234))
-        #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: true, deadline: nil) == .periodic)
+        #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: true, deadline: nil) == .stopped)
         input.paused = false; input.sessionActive = false
         #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: false, deadline: nil) == .stopped)
         input.sessionActive = true
-        #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: false, deadline: nil) == .periodic)
+        #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: false, deadline: nil) == .stopped)
     }
 }
 

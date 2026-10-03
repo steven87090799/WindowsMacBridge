@@ -7,10 +7,12 @@ public struct EngineConfiguration: Equatable, Sendable {
     public var context = ApplicationContext()
     public var enabled = false
     public var sessionActive = true
+    public var nativeMappingAwaitingNeutral = false
+    public var needsEventTap: Bool { sessionActive && (enabled || nativeMappingAwaitingNeutral) }
     public var layoutSupported = false
     public var diagnostics = false
     public var restartToken: UInt64 = 0
-    public var keyboardScope: KeyboardScope = .builtInAndApple834
+    public var keyboardScope: KeyboardScope = .allKeyboards
     public var finderEnabled = false
     public var finderPermanentDeleteEnabled = false
     public var textNavigationEnabled = true
@@ -120,7 +122,20 @@ public final class InputEngine: @unchecked Sendable {
     private var diagnosticDeadline: TimeInterval = 0
     private var actionEpoch: UInt64 = 0
     private var policyGeneration: UInt64 = 0
-    private var safetyTimer: Timer?
+    private var expiryTimer: Timer?
+    private var activityHandler: (@MainActor @Sendable () -> Void)?
+    private let activityMailbox = DeferredSignalMailbox()
+    private var observedProducers = [Int32]()
+    @MainActor public func setActivityHandler(_ handler: @escaping @MainActor @Sendable () -> Void) {
+        activityHandler = handler
+    }
+    private func notifyActivity() {
+        guard activityMailbox.offer(1) else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.activityMailbox.take() != 0 else { return }
+            MainActor.assumeIsolated { self.activityHandler?() }
+        }
+    }
     // Physical fallback + 16 remote ledgers, plus one app-switch modifier per remote.
     private var releases = [(UInt16, Modifiers, Int32)?](repeating: nil, count: 17 * 128 + 17)
     private var releaseCount = 0
@@ -194,7 +209,7 @@ public final class InputEngine: @unchecked Sendable {
         CFRunLoopAddSource(CFRunLoopGetCurrent(), idleSource, .commonModes)
         autoreleasepool { tick() }
         CFRunLoopRun()
-        safetyTimer?.invalidate(); safetyTimer = nil
+        expiryTimer?.invalidate(); expiryTimer = nil
         queueReleases(); deliverReleases()
         mailbox.lock.lock(); mailbox.runLoop = nil; mailbox.lock.unlock()
         CFRunLoopRemoveSource(CFRunLoopGetCurrent(), idleSource, .commonModes)
@@ -211,6 +226,7 @@ public final class InputEngine: @unchecked Sendable {
         if changed { configuration = mailbox.configuration; revision = mailbox.revision }
         mailbox.lock.unlock()
         if changed {
+            if configuration.restartToken != lastRestart || configuration.sessionActive != lastSessionActive { observedProducers.removeAll(keepingCapacity: true) }
             if deliveryChanged { needsRecreation = true; attemptedStart = false }
             if deviceChanged {
                 processor.drainTranslatedReleases { key, flags, pid in
@@ -263,6 +279,7 @@ public final class InputEngine: @unchecked Sendable {
         }
     }
     private func deliverReleases() {
+        guard releaseCount > 0 else { return }
         let allowed = configuration.sessionActive && !IsSecureEventInputEnabled() && CGPreflightPostEventAccess()
         for i in 0..<releaseCount {
             if allowed, let (key, flags, pid) = releases[i] {
@@ -283,7 +300,7 @@ public final class InputEngine: @unchecked Sendable {
             configuration.physicalBackend == .deviceHID && !configuration.destinationSemantics ?
             "混合 Native Mac／Windows 裝置無法從接收事件區分 UC 來源；Finder／AX 操作保持停用。" : nil
         let active = configuration.enabled && configuration.sessionActive &&
-            status.accessibility && status.postAccess && status.listenAccess && !status.secureInput &&
+            status.accessibility && status.postAccess && hasInputAuthorization && !status.secureInput &&
             status.fault == nil && !status.emergencyPaused && scopeSupported
         processor.configure(context: configuration.context,
                             enabled: active && (configuration.physicalBackend == .eventTap || configuration.destinationSemantics), layoutSupported: configuration.layoutSupported,
@@ -295,13 +312,13 @@ public final class InputEngine: @unchecked Sendable {
                             winRunEnabled: configuration.winRunEnabled,
                             winSettingsEnabled: configuration.winSettingsEnabled,
                             winTaskViewEnabled: configuration.winTaskViewEnabled,
-                            nativeAppSwitchEnabled: configuration.destinationSemantics,
-                            screenshotEnabled: configuration.destinationSemantics && configuration.screenshotEnabled,
+                            nativeAppSwitchEnabled: configuration.physicalBackend == .eventTap || configuration.destinationSemantics,
+                            screenshotEnabled: configuration.screenshotEnabled,
                             printScreen: configuration.printScreenBehavior,
                             preservingModifiersOnAppChange: preservingModifiersOnAppChange)
         var sourcePolicy = SourceTranslationConfiguration()
         sourcePolicy.context = configuration.context
-        sourcePolicy.enabled = configuration.enabled && configuration.sessionActive && status.accessibility && status.postAccess && status.listenAccess &&
+        sourcePolicy.enabled = configuration.enabled && configuration.sessionActive && status.accessibility && status.postAccess && hasInputAuthorization &&
             !status.secureInput && status.fault == nil && !status.emergencyPaused && !processor.manualPassThrough
         sourcePolicy.layoutSupported = configuration.layoutSupported
         sourcePolicy.finderEnabled = configuration.finderEnabled
@@ -336,15 +353,6 @@ public final class InputEngine: @unchecked Sendable {
         status.listenAccess = CGPreflightListenEventAccess()
         status.postAccess = CGPreflightPostEventAccess()
         status.secureInput = IsSecureEventInputEnabled()
-        let needsSafetyTimer = configuration.enabled && configuration.physicalBackend == .eventTap &&
-            status.accessibility && status.postAccess && status.listenAccess && !status.secureInput
-        if needsSafetyTimer && safetyTimer == nil {
-            safetyTimer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-                autoreleasepool { self?.tick() }
-            }
-            safetyTimer?.tolerance = 0.025
-            RunLoop.current.add(safetyTimer!, forMode: .common)
-        } else if !needsSafetyTimer { safetyTimer?.invalidate(); safetyTimer = nil }
         remote.expire(at: ProcessInfo.processInfo.systemUptime) { key, flags, pid in
             guard releaseCount < releases.count else { return }
             releases[releaseCount] = (key, flags, pid); releaseCount += 1
@@ -362,10 +370,10 @@ public final class InputEngine: @unchecked Sendable {
             lastSessionActive = configuration.sessionActive
         }
         deliverReleases()
-        if !configuration.enabled || !status.accessibility || !status.postAccess || !status.listenAccess || !configuration.sessionActive {
+        if !configuration.needsEventTap || !status.accessibility || !status.postAccess || !hasInputAuthorization {
             destroyTap()
             attemptedStart = false
-        } else if tap == nil && configuration.enabled && !attemptedStart && status.fault == nil {
+        } else if tap == nil && configuration.needsEventTap && !attemptedStart && status.fault == nil {
             attemptedStart = true
             createTap()
         }
@@ -390,7 +398,20 @@ public final class InputEngine: @unchecked Sendable {
             status.diagnostics = records.compactMap { $0 }.sorted { $0.id > $1.id }
             publishedDiagnosticRevision = diagnosticRevision
         }
-        mailbox.lock.lock(); mailbox.status = status; mailbox.lock.unlock()
+        mailbox.lock.lock(); let changed = mailbox.status != status; mailbox.status = status; mailbox.lock.unlock()
+        if changed { notifyActivity() }
+        scheduleRemoteExpiry()
+    }
+    private var hasInputAuthorization: Bool {
+        configuration.physicalBackend == .eventTap ? status.accessibility : status.listenAccess
+    }
+    private func scheduleRemoteExpiry() {
+        expiryTimer?.invalidate(); expiryTimer = nil
+        guard let deadline = remote.nextExpiry else { return }
+        let timer = Timer(timeInterval: max(0.05, deadline - ProcessInfo.processInfo.systemUptime), repeats: false) { [weak self] _ in
+            autoreleasepool { self?.tick() }
+        }
+        expiryTimer = timer; RunLoop.current.add(timer, forMode: .common)
     }
 
     private func hardwareIsNeutral() -> Bool {
@@ -424,7 +445,7 @@ public final class InputEngine: @unchecked Sendable {
         CGEvent.tapEnable(tap: created, enable: true)
         guard KeyboardEventTapCoverage.currentProcessIsVerified() else {
             destroyTap()
-            status.fault = "系統未提供完整按鍵事件；請核准 WindowsMacBridge 的輸入監控，再按恢復／重啟引擎。"
+            status.fault = "系統未提供完整按鍵事件；請核准輔助功能並重新開啟 App。"
             return
         }
         processor.invalidate()
@@ -452,14 +473,17 @@ public final class InputEngine: @unchecked Sendable {
             return Unmanaged.passUnretained(event)
         }
         if event.getIntegerValueField(.eventSourceUserData) == marker { return Unmanaged.passUnretained(event) }
-        if IsSecureEventInputEnabled() {
-            queueReleases(); processor.invalidate(); status.secureInput = true
+        // Secure Input can change without an App notification. Keep ONE native
+        // check per real input event; never cache it only on focus changes.
+        let secure = IsSecureEventInputEnabled()
+        if secure != status.secureInput {
+            queueReleases(); processor.invalidate(); status.secureInput = secure
             configureProcessor(); wake()
-            return Unmanaged.passUnretained(event)
         }
+        if secure { return Unmanaged.passUnretained(event) }
         readConfiguration()
         // Secure/session gaps must never perform delayed cleanup by rewriting input.
-        if status.secureInput || !configuration.sessionActive || !status.accessibility || !status.postAccess || !status.listenAccess {
+        if status.secureInput || !configuration.sessionActive || !status.accessibility || !status.postAccess || !hasInputAuthorization {
             return Unmanaged.passUnretained(event)
         }
         let evidence = InputOriginEvidence(processID: Int32(truncatingIfNeeded: event.getIntegerValueField(.eventSourceUnixProcessID)),
@@ -472,13 +496,19 @@ public final class InputEngine: @unchecked Sendable {
             foreground: configuration.context.processID)
         // HID's default profile transports raw keys. This second stage runs only after
         // WindowServer identifies a recipient on this Mac. Never infer it from source focus.
-        let destinationPhysical = configuration.destinationSemantics && !evidence.ownEvent &&
-            (evidence.processID == 0 && evidence.stateID == 1 || origin == .universalControl)
+        let destinationPhysical = !evidence.ownEvent &&
+            (configuration.destinationSemantics && evidence.processID == 0 && evidence.stateID == 1 || origin == .universalControl)
         let physical = origin == .physicalFallback || destinationPhysical
-        if evidence.processID > 0 && !evidence.ownEvent { producerInbox.observe(evidence.processID) }
+        if evidence.processID > 0 && !evidence.ownEvent &&
+            !configuration.inputRouting.producers.contains(where: { $0.processID == evidence.processID }) &&
+            !observedProducers.contains(evidence.processID) && observedProducers.count < 32 {
+            observedProducers.append(evidence.processID)
+            producerInbox.observe(evidence.processID); notifyActivity()
+        }
         guard physical || { if case .remote = origin { return true }; return false }() else {
             return Unmanaged.passUnretained(event)
         }
+        defer { wake() } // Coalesced work after callback, no recurring poll.
         let start = DispatchTime.now().uptimeNanoseconds
         let key = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
         let flags = Self.modifiers(event.flags)
@@ -500,7 +530,7 @@ public final class InputEngine: @unchecked Sendable {
         calibrationInbox.observe(processID: evidence.processID, key: key, phase: phase, flags: flags, repeatKey: normalized.isRepeat)
         if destinationPhysical { processor.reconcileIndependentSourceFlags(normalized.modifiers) }
         var routed = physical ? RoutedInputDecision(processor.process(normalized)) : remote.process(normalized, evidence: evidence, now: ProcessInfo.processInfo.systemUptime)
-        if destinationPhysical && configuration.windowsKeyModifier == .command {
+        if physical && configuration.windowsKeyModifier == .command {
             routed.decision = appSwitch.apply(routed.decision, event: normalized, state: processor.modifiers,
                                              target: configuration.context.processID)
         }
@@ -529,7 +559,7 @@ public final class InputEngine: @unchecked Sendable {
                 // and source validity are checked at the point of native dispatch.
                 if configuration.enabled && !status.emergencyPaused && status.fault == nil &&
                     !processor.manualPassThrough && routed.validity?.isCurrent != false &&
-                    !IsSecureEventInputEnabled(),
+                    !status.secureInput,
                    let output = NativeSessionEmitter.prepare(type: type, keyCode: outputKey, modifiers: outputModifiers, marker: marker) {
                     output.post(tap: .cgSessionEventTap); result = nil
                 }

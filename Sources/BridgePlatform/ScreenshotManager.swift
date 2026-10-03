@@ -167,7 +167,6 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private var nativeRecovery = RecoveryPolicy()
     private var nativeTapGeneration: UInt64 = 0
     private var nativeRecoveryQueued: UInt64?
-    private var checkTimer: Timer?
     private var capture = ScreenshotCaptureLifecycle()
     private var recovery = RecoveryPolicy()
     private var tapGeneration: UInt64 = 0
@@ -181,6 +180,8 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private var jobKind: ScreenshotKind = .region
     private let driver: any ScreenshotCaptureDriving
     private let validatesNativeContext: Bool
+    private var permissionRequested = false
+    private var nativeHeld = [(UInt16, Int32)?](repeating: nil, count: 4)
     private let captureDirectoryOverride: URL?
     private let authorization: @MainActor () -> Bool
     private let clipboard: NSPasteboard
@@ -189,7 +190,6 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private var processing: Task<Result<ScreenshotImagePayload, ScreenshotFailure>, Never>?
     private let prepareImage: @Sendable (URL) -> Result<ScreenshotImagePayload, ScreenshotFailure>
     private let captureTimeout: TimeInterval
-    private let nativeObserver = NativeScreenshotObserver()
     private var pendingNativeURL: URL?
     private var nativeFileJob = false
     private var nativeSelectionOutstanding = false
@@ -214,7 +214,6 @@ public struct ScreenshotStatus: Equatable, Sendable {
         logURL = fileManager.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/WindowsMacBridge/Screenshot.log")
         logger = BoundedDiagnosticLogger(url: logURL)
-        nativeObserver.onScreenshot = { [weak self] url in self?.acceptNativeScreenshot(url) }
     }
 
     public func start(enabled: Bool) {
@@ -222,8 +221,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         capture.configure(enabled: enabled, epoch: policyEpoch)
         guard enabled else { return }
         verifyAndRepair(reason: "App 啟動")
-        if defaults.object(forKey: lastCheckKey) == nil { defaults.set(Date(), forKey: lastCheckKey) }
-        scheduleNextCheck()
+
     }
 
     public func setEnabled(_ value: Bool) {
@@ -234,14 +232,12 @@ public struct ScreenshotStatus: Equatable, Sendable {
         nativeRecovery.reset()
         if value {
             verifyAndRepair(reason: "功能啟用")
-            defaults.set(Date(), forKey: lastCheckKey)
-            scheduleNextCheck()
+
         } else {
             if nativeSelectionOutstanding { nativeSelectionCancelled = true }
-            nativeObserver.stop(); pendingNativeURL = nil
+            pendingNativeURL = nil
             activeJob?.cancel(.policyCancelled)
             processing?.cancel(); jobTimer?.cancel(); jobTimer = nil
-            checkTimer?.invalidate(); checkTimer = nil
             destroyTap()
             destroyNativeTap(keepReleases: true)
             shortcut.reset()
@@ -269,7 +265,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
             }
         }
         runtimePolicy = policy; policyEpoch = policy.generation
-        if !nativeContinuity { nativeObserver.stop(); pendingNativeURL = nil }
+        if !nativeContinuity { pendingNativeURL = nil }
         if !preserveNativeJob {
             activeJob?.cancel(.policyCancelled)
             processing?.cancel(); jobTimer?.cancel(); jobTimer = nil
@@ -281,9 +277,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         if enabled && policy.input.backend == .eventTap && tap == nil { performVerification(reason: "執行政策變更") }
         awaitingNeutral = !InputEngine.modifiers(CGEventSource.flagsState(.hidSystemState)).isEmpty
         if policy.input.backend == .deviceHID { destroyTap() }
-        if enabled && validatesNativeContext && !nativeObserver.start(directory: nativeScreenshotDirectory()) {
-            setStatus(issue: "無法監看 macOS 截圖儲存位置；請重新檢查截圖功能。", result: "原生截圖自動複製未啟動")
-        }
+
     }
 
     /// HID dispatches the physical shortcut through versioned IPC, so its virtual reports
@@ -313,8 +307,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     public func stop() {
-        nativeObserver.stop(); pendingNativeURL = nil
-        checkTimer?.invalidate(); checkTimer = nil
+        pendingNativeURL = nil
         destroyTap()
         destroyNativeTap()
         shortcut.reset()
@@ -335,7 +328,6 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private func performVerification(reason: String) {
         guard enabled else { return }
         status.lastCheck = Date()
-        if validatesNativeContext { _ = nativeObserver.start(directory: nativeScreenshotDirectory()) }
         accessibilityTrusted = AXIsProcessTrusted()
         guard fileManager.isExecutableFile(atPath: "/usr/sbin/screencapture") else {
             destroyTap()
@@ -358,9 +350,9 @@ public struct ScreenshotStatus: Equatable, Sendable {
             log("\(reason)：輔助使用權限不可用")
             return
         }
-        if validatesNativeContext && (!CGPreflightListenEventAccess() || !CGPreflightPostEventAccess()) {
+        if validatesNativeContext && !CGPreflightPostEventAccess() {
             destroyTap(); destroyNativeTap()
-            setStatus(issue: "Windows 截圖快捷鍵需要鍵盤控制及主 App 輸入監控權限。", result: "截圖快捷鍵尚未就緒")
+            setStatus(issue: "截圖快捷鍵需要輔助功能授權。", result: "截圖快捷鍵尚未就緒")
             return
         }
         if validatesNativeContext {
@@ -378,12 +370,6 @@ public struct ScreenshotStatus: Equatable, Sendable {
                       result: ready ? "Win+Shift+S 使用 macOS 原生框選並複製" : "截圖快捷鍵尚未就緒")
             return
         }
-        if validatesNativeContext && !CGPreflightListenEventAccess() {
-            destroyTap()
-            setStatus(issue: "Windows 截圖快捷鍵需要 WindowsMacBridge 的輸入監控權限。", result: "等待輸入監控；macOS 原生截圖仍可自動複製")
-            log("\(reason)：主 App 輸入監控尚未取得")
-            return
-        }
         if tap == nil { createTap() }
         if let tap, CGEvent.tapIsEnabled(tap: tap), KeyboardEventTapCoverage.currentProcessIsVerified(),
            nativeTap.map({ CGEvent.tapIsEnabled(tap: $0) }) == true {
@@ -391,28 +377,9 @@ public struct ScreenshotStatus: Equatable, Sendable {
             log("\(reason)：截圖事件攔截已就緒")
         } else {
             destroyTap()
-            setStatus(issue: "未取得完整鍵盤事件；請確認鍵盤控制及主 App 輸入監控，授權後重新啟動 App。", result: "Windows 截圖快捷鍵尚未就緒")
+            setStatus(issue: "未取得完整鍵盤事件；請確認輔助功能，授權後重新啟動 App。", result: "Windows 截圖快捷鍵尚未就緒")
             log("\(reason)：截圖 Event Tap 未取得完整鍵盤事件")
         }
-    }
-
-    private func scheduleNextCheck() {
-        checkTimer?.invalidate()
-        guard enabled else { return }
-        let delay = ScreenshotCheckSchedule.delay(lastCheck: defaults.object(forKey: lastCheckKey) as? Date,
-                                                  now: Date())
-        checkTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self, self.enabled else { return }
-                self.verifyAndRepair(reason: "30 天定期檢查")
-                self.onPeriodicCheck?()
-                self.defaults.set(Date(), forKey: self.lastCheckKey)
-                self.status.lastCheck = Date()
-                self.onChange?(self.status)
-                self.scheduleNextCheck()
-            }
-        }
-        checkTimer?.tolerance = min(60, delay * 0.01)
     }
 
     public func reportConfigurationIssue(_ message: String) {
@@ -453,7 +420,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
             let manager = Unmanaged<ScreenshotManager>.fromOpaque(info).takeUnretainedValue()
             return MainActor.assumeIsolated { TapResult(event: manager.handleNativeShortcut(type, event: event)) }.event
         }
-        guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
+        guard let tap = CGEvent.tapCreate(tap: .cgAnnotatedSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
                 eventsOfInterest: KeyboardEventTapCoverage.requiredEvents, callback: callback,
                 userInfo: Unmanaged.passUnretained(self).toOpaque()),
               let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else { return }
@@ -461,11 +428,12 @@ public struct ScreenshotStatus: Equatable, Sendable {
         nativeTapGeneration &+= 1
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        if !KeyboardEventTapCoverage.currentProcessIsVerified(tapPoint: .cgSessionEventTap) { destroyNativeTap() }
+        if !KeyboardEventTapCoverage.currentProcessIsVerified() { destroyNativeTap() }
     }
     private func destroyNativeTap(keepReleases: Bool = false) {
-        if keepReleases && nativeMapping.hasHeldKeys { return }
+        if keepReleases && (nativeMapping.hasHeldKeys || nativeHeld.contains(where: { $0 != nil })) { return }
         nativeTapGeneration &+= 1
+        nativeHeld = [(UInt16, Int32)?](repeating: nil, count: 4)
         for key in nativeMapping.reset() where CGPreflightPostEventAccess() {
             if let event = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: false) {
                 event.setIntegerValueField(.eventSourceUserData, value: EventRewriter.generatedEventMarker)
@@ -517,22 +485,34 @@ public struct ScreenshotStatus: Equatable, Sendable {
         let scope = BackendCapabilities.eventTap.supports(runtimePolicy?.input.deviceScope ?? .allKeyboards, preferences: physicalPreferences)
         let allowed = enabled && captureAllowed && trusted && scope && !awaitingNeutral && !IsSecureEventInputEnabled()
         let flags = InputEngine.modifiers(event.flags)
-        if key == 20 || key == 21 {
-            if type == .keyDown && allowed && flags == [.command, .shift] { noteNativeScreenshotShortcut() }
-            return Unmanaged.passUnretained(event)
+        let localDelivery = DestinationSemanticPolicy.acceptsDelivery(
+            target: Int32(truncatingIfNeeded: event.getIntegerValueField(.eventTargetUnixProcessID)),
+            foreground: runtimePolicy?.input.foreground.processID ?? 0)
+        if let index = nativeHeld.firstIndex(where: { $0?.0 == key && $0?.1 == evidence.processID }) {
+            if type == .keyUp {
+                nativeHeld[index] = nil
+                if !enabled && !nativeHeld.contains(where: { $0 != nil }) {
+                    DispatchQueue.main.async { [weak self] in self?.destroyNativeTap() }
+                }
+            }
+            return nil // Only consume our own paired release/repeat.
         }
-        guard let output = nativeMapping.handle(key: key, down: type == .keyDown,
-                repeating: event.getIntegerValueField(.keyboardEventAutorepeat) != 0, modifiers: flags,
-                windowsKey: shortcut.windowsKeyModifier, printScreen: shortcut.printScreenBehavior,
-                allowed: allowed,
-                sourcePID: evidence.processID) else { return Unmanaged.passUnretained(event) }
-        if output.suppress { return nil }
-        if type == .keyDown { noteNativeScreenshotShortcut() }
-        EventRewriter.apply(to: event, keyCode: output.key, modifiers: output.modifiers, marker: EventRewriter.generatedEventMarker)
-        if !enabled && !nativeMapping.hasHeldKeys {
-            DispatchQueue.main.async { [weak self] in self?.destroyNativeTap(keepReleases: true) }
+        guard type == .keyDown, allowed, localDelivery,
+              event.getIntegerValueField(.keyboardEventAutorepeat) == 0 else { return Unmanaged.passUnretained(event) }
+        let kind: ScreenshotKind?
+        if (key == 20 || key == 21) && flags == [.command, .shift] {
+            kind = key == 20 ? .fullScreen : .region
+        } else if runtimePolicy?.input.backend == .deviceHID {
+            kind = WindowsScreenshotShortcuts.match(key: key, modifiers: flags,
+                windowsKey: shortcut.windowsKeyModifier, printScreen: shortcut.printScreenBehavior)
+        } else { kind = nil } // Windows chords have their own paired shortcut ledger.
+        guard let kind, let index = nativeHeld.firstIndex(where: { $0 == nil }) else { return Unmanaged.passUnretained(event) }
+        nativeHeld[index] = (key, evidence.processID)
+        if let token = capture.begin() {
+            sourceJob = nil; nativeFileJob = false
+            DispatchQueue.main.async { [weak self] in self?.beginCapture(token, kind: kind) }
         }
-        return Unmanaged.passUnretained(event)
+        return nil
     }
 
     private func destroyTap() {
@@ -607,7 +587,14 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     private func beginCapture(_ token: ScreenshotCaptureLifecycle.Token, kind: ScreenshotKind) {
-        guard sourceJob?.validForAsyncWork ?? true, capture.isCurrent(token), isAuthorized() else {
+        guard sourceJob?.validForAsyncWork ?? true, capture.isCurrent(token) else { _ = capture.complete(token); return }
+        jobKind = kind
+        // An explicit screenshot is the only general-mode action that may request
+        // screen recording. Never request it during startup or a status check.
+        if validatesNativeContext && !CGPreflightScreenCaptureAccess() && !permissionRequested {
+            permissionRequested = true; _ = CGRequestScreenCaptureAccess()
+        }
+        guard isAuthorized() else {
             if capture.complete(token) { setStatus(issue: "螢幕錄製權限不可用。", result: "permissionDenied") }
             return
         }
@@ -646,7 +633,9 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     private func finishCapture(exitCode: Int32, failure: ScreenshotFailure?, url: URL, token: ScreenshotCaptureLifecycle.Token) async {
+        let temporary = url.deletingLastPathComponent().standardizedFileURL == fileManager.temporaryDirectory.standardizedFileURL
         defer {
+            if temporary { try? fileManager.removeItem(at: url) }
             if let pending = pendingNativeURL {
                 pendingNativeURL = nil
                 acceptNativeScreenshot(pending)
@@ -702,7 +691,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
             return
         case .success: break
         }
-        setStatus(issue: nil, result: "截圖已儲存並複製，可直接按 ⌘V")
+        setStatus(issue: nil, result: "截圖已複製，可直接貼上")
         log("截圖已儲存並複製：\(url.path)")
     }
 
@@ -748,8 +737,9 @@ public struct ScreenshotStatus: Equatable, Sendable {
 
     private func captureDirectory() -> URL {
         if let captureDirectoryOverride { return captureDirectoryOverride }
-        let requested = nativeScreenshotDirectory()
-        return fileManager.isWritableFile(atPath: requested.path) ? requested : desktopDirectory()
+        // Save-to-disk is explicit (Win+PrintScreen). Region/native shortcuts
+        // use a private temporary file; no Desktop watch or folder TCC at launch.
+        return jobKind == .fullScreenSave ? desktopDirectory() : fileManager.temporaryDirectory
     }
 
     private func desktopDirectory() -> URL {

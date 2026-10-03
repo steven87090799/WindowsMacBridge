@@ -1,143 +1,45 @@
-> 0.6.0（build 42）安裝回歸：DMG 拖進應用程式、首次自動準備、輸入監控只列 WindowsMacBridge。逐項授權後檢查原生結果；第 6 項鍵盤驅動與第 7 項截圖資料夾。同一 App 的背景執行模式也必須通過原生 IOHID 檢查，未確認不得亮綠。以下 UC、實體 HID、授權重開與記憶體峰值仍待實機驗收。
+# WindowsMacBridge build 43：人工驗收指南
 
-# WindowsMacBridge：實機驗收
+程序碼回歸／CI、Release 封裝、Installed GUI 授權、實體鍵盤、跨機與資源量測是不同證據。以下尚未實機驗收。用可丟棄文字與檔案，勿在重要文件做故障測試。
 
-這份流程用於確認你實際的鍵盤、輸入法與遠端環境。請使用可丟棄的測試文字與檔案，
-不要在密碼欄、重要文件或正在工作的遠端桌面上做故障測試。
-原始碼測試通過不等於以下項目通過；沒有操作過的格子請留白。
+## 最短開始
 
-## 準備（約兩分鐘）
+DMG 拖入 Applications → 一般模式 → 權限頁輔助功能 → 原生確認綠燈 → TextEdit Ctrl+C/V。啟動不應要求 Root／Driver／輸入監控，也不應自動註冊登入。首次截圖可能要求螢幕錄製；核准后重開 App 再試。不用安裝 Finder 擴充。
 
-0.5.16（build 28）：新安裝使用裝置 HID／Command Win 鍵位、保留 Control 與 Fn／Globe。兩台 Mac 完成 HID／Driver 授權後開啟 Windows Experience；UC 不選 Sender／Receiver。既有 EventTap／鍵位／Fn 交換設定保留，先記錄再對照。截圖／modifier／Remote 都必須實際操作，純核心測試不替代它。
+## 1. 快捷鍵與持鍵
 
-1. 從 Applications 啟動 App；HID 應 Ready 且接管數大於零；EventTap 備援則確認 tap Active。不要為了驗收關閉真正的 Secure Input。
-2. 記下 App 版本、macOS 版本、鍵盤型號、輸入來源。先關掉 Karabiner 中重複的規則。
-3. 如果系統曾交換 Control／Command，先記下該鍵盤的設定。不要一次還原全部鍵盤；
-   實體 Windows Ctrl 行為應在預設鍵位下另外做對照。
-4. 在 TextEdit 新建不需保存的純文字文件，輸入三行測試文字：`Bridge test 123`。
-5. 開啟 App 的「5 分鐘診斷」可查看命中的規則及時間；只記規則，不記輸入文字。
-   測完關閉。請實際按鍵盤；自動化送鍵可能不經過 EventTap。
+TextEdit、Safari 各測 Ctrl+A/C/X/V/Z/Y/F/S/P、Ctrl+Tab、Ctrl+Shift+Tab、Ctrl+T/W／Shift+T、Ctrl+Arrow／Shift+Arrow、Home/End/Delete。先复制后按住 Ctrl 再 Tab，确认仍是分頁切换，没有残留 Command。左右 Ctrl／Shift／Alt 重叠，字母先放／修饰键先放各测一次。按住 Ctrl 在两个普通 App 来回，重复 Ctrl+C；进入 Remote、Pause、Secure Input、session锁定后放开键，回来新快捷键恢复。不要关闭系统的真正安全输入。
 
-## 本機快捷鍵
+一般模式无法可靠按键盘 ID 分流；若另接第二把测试，两把同按相同按键时记录 aggregate flags 的限制。使用者实际环境是 Mac mini 外接＋MacBook 内建，双机按下一节。
 
-| 操作 | 通過條件 |
-| --- | --- |
-| Ctrl+A、C、V | 全選、複製，再貼上得到相同測試文字 |
-| Ctrl+X、V | 選取的測試文字移走，再貼回；不是產生 X／V 字母 |
-| Ctrl+Z、Y | 復原與重做各一次，文件結果符合預期 |
-| Ctrl+F、S、P | 顯示尋找、儲存與列印介面；用取消離開，無需真的列印 |
-| 原生 Command+C／V | Native Mac 裝置與 EventTap 備援保留原生行為；HID Windows 裝置依 Win 鍵位做 Option／Command 正規化，另記錄鍵帽與輸出，不把兩種配置混作同一測試 |
-| 左右 Ctrl／Shift | 分別測試；放開一邊但仍按著另一邊時狀態正確 |
-| Ctrl+Y 先放 Ctrl、Y 暫時不放 | 不應連續輸入 Z，也不應在重按 Ctrl 後復活連發；放開全部後新快捷鍵正常 |
-| Ctrl 按住切 App | 在新 App 先放開全部按鍵，再按新快捷鍵才開始翻譯；不重播前個 App 的動作 |
-| 本機視窗切換 | Tab 始終由 macOS 處理；按 `⌘Tab` 應顯示原生逐 App 切換器，`⌘\`` 切換同一 App 的視窗。若實體 Alt 送出 Command，再確認 Alt+Tab 顯示相同原生介面。HID 模式須另外驗證其修飾鍵映射。 |
-| 框選截圖 | 在一般設定確認截圖自動複製已開、Win 鍵位置選對，實際按 `Shift+Win+S`，框選 App 視窗中一小塊非敏感區域；確認圖片照常存檔，且直接按 `⌘V` 能貼上圖片。另按 `Shift+Alt+S` 和 `Ctrl+Shift+S`，確認都沒有進入截圖；再按 `⇧⌘4`，確認維持 macOS 原本行為。取消框選時剪貼簿不變。 |
-| Win+R／I／Tab | 各自開啟設定後，依序應顯示 Spotlight／系統設定／Mission Control；關閉開關則不攔截，Remote／VM／Terminal Profile 也應原樣通過。 |
+## 2. UC／Remote／HID 分流
 
-再到 Codex 的**未送出聊天文字框**用相同測試文字做 Ctrl+A/C/X/V/Z；不要送出。
-Codex 的預設 Profile 適合聊天；若使用它的內建 Terminal，需改成 IDE 保護模式。
+按 [TwoMacAcceptance.md](TwoMacAcceptance.md) 测两方向，特别是来源 Terminal→目的 TextEdit 的 Ctrl+C、两端都装 App、持键跨屏。Windows→Google Chrome Remote Desktop Host→Mac mini：在 Mac TextEdit 试 Ctrl+C/V/X/Z/A/S，已是 Command 不再翻译。Mac→Windows viewer／VM：同样组合应保持 Windows Ctrl，Alt+Tab 按客户端转发设置处理。隐藏 PID、未知复合 HID、混合 Native Mac 装置与 Remote 手动 profile 各自记录，未经操作保持「未验收」。
 
-## Safari／YouTube 與原生視窗
+## 3. Finder 与窗口
 
-- 先處理 Safari 的待確認對話框；分別用視窗綠色按鈕、顯示方式選單進入／離開全螢幕。
-- 在 YouTube 播放器按全螢幕按鈕，再用 Escape 離開；確認搜尋欄沒有焦點後測 F、K、空白與方向鍵。
-- 測原生 Control+Command+F、Command+M、Command+Tab，再測一次 Ctrl+C／V 後重做全螢幕。
-- 各在 Bridge 完全結束與 EventTap Active 下測一次。記錄是否只有啟用才出錯；UI 自動化結果不能代替實體快捷鍵驗收。
+两個测试文件：Ctrl+X→进新目录→Ctrl+V，应该移动一次，clipboard改变／超过5分钟不能继续旧move。F2改名、Delete垃圾桶。文件名文字编辑中的Delete应删字，未知焦点不盲删。Shift+Delete確認取消不删除；確認删除只用可丢弃文件。Alt+F4只关当前窗口，保留未储存对话，不退出整个App。一般App亮度键不能变Enter。打开多目录检查Finder延迟；没有全磁碟 FinderSync 监控，但流畅度仍须实测。
 
-## Terminal 與中文
+## 4. 截图与记忆体
 
-- Terminal.app 開啟新的本機視窗，輸入 `sleep 30`，按 Ctrl+C 應立即回到 shell 提示。
-  不應執行 Copy；App 應判定 Terminal。再於未執行的測試命令檢查 Ctrl+A／E／U。
-- 唯音輸入三個測試詞，檢查組字、選字、Backspace、Enter、Shift 與 Caps Lock 切換。
-  完成組字後測 Ctrl+A/C/V；另測候選選單開啟時，避免跳字、重複字或選字中斷。
-- 在 ABC 重複同一組快捷鍵。若唯音不正常而 ABC 正常，先關閉「中文／唯音實體鍵位快捷鍵」，
-  再記錄發生問題的 App、鍵盤與操作，不需提供實際文件文字。
-- 真正的密碼輸入期間，Secure Input 若啟用，App 應停止翻譯。不要為了測試關閉安全輸入。
-  離開敏感欄位並放開所有按鍵後恢復。若唯音發出 Safari 警告，先離開 Safari 密碼欄或正常結束 Safari。
+Win+Shift+S／PrintScreen框选、Alt+PrintScreen当前窗口、Win+PrintScreen全屏存档，完成后直接 Ctrl+V／Cmd+V。CmdShift3全屏、CmdShift4选区也复制；暂停或关闭功能后恢复系统原生行为。Esc取消保持原clipboard。框选尚未结束→Pause／换backend／锁屏／切App／关功能再开，旧结果不得写入。核准／撤销 ScreenCapture 后结果不得显示伪成功；磁碟／程序／解码／编码失败各有错误。
 
-## 遠端與 VM（由你選擇測試時機）
+图片预算覆盖PNG／TIFF／PDF、PDF嵌图与inline image，压缩文件小不表示可无限解码。记录5K／4K多屏截图时 **App＋screencapture＋WindowServer＋clipboard** 的峰值，分开 RSS 与 footprint；现有预算不是整体峰值保证。不要用自动化读取使用者当前clipboard或屏幕作为测试素材。
 
-每個 Client 分開驗收，記錄 Client／遠端 Windows 版本與它自己的鍵盤轉送設定。
-先暫停 Bridge 做一次基準，再開啟 Bridge 重做；結果應相同。
+## 5. 进阶权限与Driver／安装
 
-| 操作 | 要確認的結果 |
-| --- | --- |
-| 前景切到 Client | Menu Bar 顯示 Remote Windows／Virtual Machine；本機不翻譯 |
-| 遠端記事本 Ctrl+A/C/X/V/Z/Y | Windows 收到原按鍵；資料結果與暫停 Bridge 時相同 |
-| Alt+Tab | 由 Client 的轉送／全螢幕設定決定；與 Bridge 暫停時一致 |
-| Ctrl+Alt+Delete | 優先用 Client 的「傳送 Ctrl+Alt+Delete」功能；Bridge 不代替它 |
-| 本機／遠端 Clipboard | 使用 `Bridge test 123` 測雙向文字；功能由 Client 的同步設定控制 |
-| 視窗／全螢幕、多螢幕 | 各測一次快捷鍵，再切回本機；不留住 Ctrl／Shift／Option |
-| Ctrl 按住進出 Client | 切換後先放開全部按鍵再測；本機快捷鍵不應在遠端延遲重播 |
+只有明确勾进阶才安装／连XPC。逐项授权输入监控、官方Driver；原生IOHID／driver核对才能绿灯。首装、与Karabiner共用、更新中断、timeout、需要用户批准／重开机、回滚须实机测，fixture通过不算硬件验收。切回一般应关闭自己的runtime，不停止／删除其他软件的共享Driver。权限只改本App，不重设全部TCC；ad-hoc更新重新授权属于现有签章限制。
 
-建議先測你實際使用的 AweSun、Parsec 或 Parallels；沒有使用的 Client 不必勾選通過。
-Microsoft Windows App、Jump、AnyDesk、RustDesk、VMware、UTM 等需另做同樣對照。
-Chrome Remote Desktop 等瀏覽器分頁無法單靠 App ID 自動辨識；使用專用瀏覽器並指定 Remote Profile。
+## 6. MacBook 原生映射
 
-## 六個核心路徑（全部尚未實機驗收）
+仅builtIn=true的本机Apple键盘交换Fn／左Ctrl；Mac mini、USB／Bluetooth、UC／virtual不交换。正常退出还原；与他人工具Fn／Ctrl冲突要显示问题且不覆盖其他pair。强制退出后下次启动／登入应处理journal；重开机服务映射清除。睡眠／唤醒、服务重建、持键切换与restorePending都实测，不能用property setter返回true就判定成功。
 
-兩台 Mac 使用此候選版的裝置 HID、Windows Experience ON；記錄鍵盤／Client／macOS／Driver 版本。一般驗收不切 Sender／Receiver。用可丟棄的 TextEdit 和瀏覽器測 Ctrl+C/V/X/A/Z/Y/F/S/P/W/T、Ctrl+Shift+T、Ctrl+N、Ctrl+Arrow、Ctrl+Shift+Arrow、Ctrl+Backspace、Home/End/Delete、Alt+Tab；啟用 Alt+F4 後測未儲存提示。
+## 7. 输入法与App模式
 
-| Case | 路徑 | 通過條件 | 實機 |
-|---|---|---|---|
-| A | Mac 外接 → Mac | Control 規則、原生 App switch、Fn／media 保留 | 未驗收 |
-| B | Mac 外接 → UC → MacBook | 與 A 相同、接收端依自己的 App 翻譯原始 Ctrl，來源端不得執行 AX／Finder 動作 | 未驗收 |
-| C | MacBook 內建 → MacBook | 真正 Control+C 複製、Fn／Globe 保留 | 未驗收 |
-| D | MacBook 內建 → UC → Mac | 與 C 相同、不殘留 Ctrl／Shift／Alt | 未驗收 |
-| E | Windows → Chrome Remote Desktop → Mac | raw Ctrl 正規化、已是 Command 通過 | 未驗收 |
-| F | Windows → Chrome Remote Desktop → MacBook | 與 E 相同，本機鍵盤同時正常 | 未驗收 |
+ABC与唯音各测组字、选字、Enter／Backspace／Shift／CapsLock，再测试复制。终端运行 `sleep 30` 后 Ctrl+C 应中断，IDE内嵌Terminal同样。手动App规则、快速切换、Pause应同步取消旧输入法／AX／截图任务。守护／切换热键默认关闭，手动选择不自动抢回。多个工具同时控制来源时观察冲突冷却。
 
-E/F 先暫停接收端 Bridge 記錄基準，再啟用。Remote Advanced 必須顯示「已觀察來源事件」，不能把「僅偵測程序身份」當成 Verified。一般 Chrome 不應被當成 Google host；Command+C 不再改。其他 Remote 軟體逐一測試，未知 producer 可以校準一次 Ctrl+C。PID 隱藏／未知 virtual HID 必須記錄未支援。
+## 8. 资源／封装
 
-本機與遠端同時按不同 Ctrl／Shift、同時有 UC、修改一個遠端的偏好，其他來源與本機持鍵應保持獨立。測 host 關閉、連線中斷、focus loss、PID／session 變動，以及 60 秒靜止遠端持鍵失效；不能清掉本機真正按住的修飾鍵。Client／來源 OS 若先吃掉 Alt+Tab／Win+Shift+S，使用 Client 的傳送按鍵功能再測。
+一般模式、关闭诊断、设置窗口关闭，开机等待两分钟，Activity Monitor观察5分钟，目标平均0.0–0.1%，不能只看一张瞬间截图。主App没有固定250ms／1s闲置timer；按键、App/session通知和明确deadline会产生正常短暂活动。记录同PID累计CPU增量、RSS与physical footprint；PID/version改变重新建baseline。自己的HID root process应无client后结束，共享Karabiner进程可能因其他软件继续运行。
 
-UC 必須另外測來源 Terminal／目的端文字 App，以及來源 Finder／目的端其他 App。來源端鍵盤處理 已禁止執行 App-sensitive action。必須確認 WindowServer 在接收端提供正確 recipient，來源 Mac 沒有改動 Finder、Clipboard 或關閉視窗；不能用純模型測試推定 UC 路由正確。加入 Win+Tab／Win+L／Win+R 與 native Cmd+Tab 的 WindowServer 順序驗收，未知 recipient 必須保留輸入。
-
-## 暫停、恢復與裝置
-
-1. Menu Bar 暫停 5 分鐘，應恢復 macOS 原按鍵；等待時間到後，放開全部按鍵再試 Ctrl+C。
-2. 按 Control+Option+Command+P，確認暫停；用 Menu Bar「恢復／重啟引擎」恢復。
-3. 保存工作後，讓 Mac 正常睡眠，再喚醒；確認 App 仍在、EventTap Active、普通打字正常。
-4. USB／Bluetooth 分別測試斷線重連。重連後先放開全部按鍵，再測快捷鍵。
-5. 正常結束 App，普通 macOS 按鍵應立即恢復；重新開啟只應有一個 Menu Bar 圖示。
-6. 權限撤銷／Fast User Switching／登出重登入只在保存工作後驗收；未授權時應停止翻譯，
-   不反覆彈窗、不高 CPU。重新授權後按「恢復／重啟引擎」。
-
-強制終止、真實 EventTap timeout 與 HID 接管測試需要專用測試時段及可用滑鼠／第二把鍵盤。
-裝置 HID 需要整合 ZIP 的明確安裝與 macOS 核准；本文件不會自行安裝或改權限。EventTap 備援的通過不能代替 HID／UC 驗收。
-
-## MacBook Fn／Ctrl 與通用控制
-
-先放開所有按鍵，用可丟棄文件測試。新安裝 Fn／Ctrl 交換關閉，MacBook 的實體 Control+C 應執行複製，Fn／Globe 維持原功能。舊版明確交換設定保留，另外測試開／關與 journal 還原。交替使用內建與外接鍵盤，不應因 Apple 品牌停掉 Windows Experience。
-
-| 鍵盤來源 → 操作目標 | 必須確認 |
-| --- | --- |
-| MacBook 內建 → MacBook | 真正的 Control+C／V 執行複製／貼上；Fn／Globe、Touch ID、亮度／音量維持原功能 |
-| MacBook 內建 → Mac mini（通用控制） | 相同按鍵結果；不重複交換，切回來源端不留下 Ctrl hold |
-| Mac mini 外接 → MacBook（通用控制） | Ctrl+C／V 仍使用外接 Ctrl，外接 Fn 不因接收端模式被交換 |
-| MacBook 外接 → 任一臺 | 保留外接配置；兩把鍵盤交替使用時沒有卡住的修飾鍵 |
-| 來源／接收端 Terminal、Remote、VM、Game | 交換後的 Ctrl 仍依既有 Profile 原樣通過，不發出本機 Windows 動作 |
-| 內建鍵盤模式關閉／正常退出／重開／睡眠／重新登入 | 關閉與退出還原；重開依保存選項套用；睡眠與登入恢復無按鍵殘留 |
-
-若任何跨機組合不一致，記錄來源與接收端版本、鍵盤、Profile 及開關狀態。原生 API 的讀回與虛擬服務排除不證明 Universal Control 實際轉送結果。
-
-## 回報方式
-
-提供「版本、鍵盤、App／Profile、操作步驟、預期與實際結果、暫停 Bridge 後是否仍發生」。
-可以附 App 診斷頁的狀態／計數，不需貼上密碼、文件、Clipboard 或完整按鍵歷史。
-
-## 本次修復必測矩陣
-
-以下測試先在 EventTap，再在 HID 做；HID 需保留第二把鍵盤及滑鼠。每次記錄是否完全釋放：
-
-- Ctrl↓ C↓ C↑ Tab↓ Tab↑ Ctrl↑；Ctrl↓ C↓ Right↓（C 尚未放開）；左右 modifier、不同釋放順序與快速重複。
-- 兩把鍵盤同時操作；按住 Ctrl／Shift／Alt 時切 App、backend、Pause／Resume、Secure Input、session 或斷線。後端交接逾時應保持新後端停用。
-- Finder 各顯示方式：Ctrl+X → 開子資料夾／上一層／Ctrl+L → Ctrl+V；rename／搜尋／前往路徑欄 Delete 不移動檔案；只有確認 file selection 才移到垃圾桶。
-- Alt+F4 在多視窗、最後視窗、未儲存文件、沒有 AX close button 的 App；不能退出 App 或關錯分頁。
-- 四組截圖快捷鍵與 PrintScreen 兩個設定；取消、拒絕 Screen Recording、磁碟不可寫、巨大圖與 120 秒 timeout。框選／processing 中 Pause、切 backend、session 或 Secure Input 後不得更新 Clipboard。
-- Windows→Mac、Mac→Mac、兩端已有 Bridge：逐來源 Automatic／校準只作用於來源；Universal Control 用內建及外接鍵盤按住 modifier 跨裝置，往返後不殘留；沒有 Sender／Receiver 切換。
-- 管理員專用測試：全新 Driver、相同版 Driver、不同版 fail-closed、helper／driver bootstrap failure、更新中止與備份復原；force quit 後重新啟動 Fn journal recovery、重開機與讀回失敗。
-
-離線通過不代表以上實機項目通過。本次來源架構、實際結果與限制見原始碼的 Docs/UnifiedInput-2026-10-01.md；前批修復另見 Docs/PreReleaseRepair-2026-09-30.md。
-
-本版授權回歸：從 Finder 開啟 /Applications 的同一份 App，記錄鍵盤控制狀態，按該列「開啟設定」，完成系統提示後回到 App 重新檢查。不得用 Terminal 啟動 CLI 的 TCC 結果替代目前 GUI process；測 App 更新、撤權、重新加入與重新登入。主 App 與背景鍵盤處理必須同屬 WindowsMacBridge 的單一輸入監控身分；確認沒有新增 HID Helper 權限列。
+分别从Git clone和无.git ZIP做Release arm64 build，核对Info版本／commit、资源allowlist、签章与DMG App→Applications拖入；登入开关只改本App。停止／移除进阶runtime保留共享Driver。没有自制MRU、thumbnail、窗口遍历切换器；AltTab只使用macOS native path。
