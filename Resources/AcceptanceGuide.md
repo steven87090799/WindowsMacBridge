@@ -4,42 +4,42 @@
 
 ## 最短開始
 
-DMG 拖入 Applications → 一般模式 → 權限頁輔助功能 → 原生確認綠燈 → TextEdit Ctrl+C/V。啟動不應要求 Root／Driver／輸入監控，也不應自動註冊登入。首次截圖可能要求螢幕錄製；核准后重開 App 再試。不用安裝 Finder 擴充。
+DMG 拖入 Applications → 一般模式 → 權限頁輔助功能 → 原生確認綠燈 → TextEdit Ctrl+C/V。啟動不應要求 Root／Driver／輸入監控，也不應自動註冊登入。首次截圖可能要求螢幕錄製；核准後重開 App 再試。不用安裝 Finder 擴充。
 
 ## 1. 快捷鍵與持鍵
 
-TextEdit、Safari 各測 Ctrl+A/C/X/V/Z/Y/F/S/P、Ctrl+Tab、Ctrl+Shift+Tab、Ctrl+T/W／Shift+T、Ctrl+Arrow／Shift+Arrow、Home/End/Delete。先复制后按住 Ctrl 再 Tab，确认仍是分頁切换，没有残留 Command。左右 Ctrl／Shift／Alt 重叠，字母先放／修饰键先放各测一次。按住 Ctrl 在两个普通 App 来回，重复 Ctrl+C；进入 Remote、Pause、Secure Input、session锁定后放开键，回来新快捷键恢复。不要关闭系统的真正安全输入。
+TextEdit、Safari 各測 Ctrl+A/C/X/V/Z/Y/F/S/P、Ctrl+Tab、Ctrl+Shift+Tab、Ctrl+T/W／Shift+T、Ctrl+Arrow／Shift+Arrow、Home/End/Delete。先複製後按住 Ctrl 再 Tab，確認仍是分頁切換，沒有殘留 Command。左右 Ctrl／Shift／Alt 重疊，字母先放／修飾鍵先放各測一次。按住 Ctrl 在兩個普通 App 來回，重復 Ctrl+C；進入 Remote、Pause、Secure Input、session鎖定後放開鍵，回來新快捷鍵恢復。不要關閉系統的真正安全輸入。
 
-一般模式无法可靠按键盘 ID 分流；若另接第二把测试，两把同按相同按键时记录 aggregate flags 的限制。使用者实际环境是 Mac mini 外接＋MacBook 内建，双机按下一节。
+一般模式無法可靠按鍵盤 ID 分流；若另接第二把測試，兩把同按相同按鍵時記錄 aggregate flags 的限制。使用者實際環境是 Mac mini 外接＋MacBook 內建，雙機按下一節。
 
 ## 2. UC／Remote／HID 分流
 
-按 [TwoMacAcceptance.md](TwoMacAcceptance.md) 测两方向，特别是来源 Terminal→目的 TextEdit 的 Ctrl+C、两端都装 App、持键跨屏。Windows→Google Chrome Remote Desktop Host→Mac mini：在 Mac TextEdit 试 Ctrl+C/V/X/Z/A/S，已是 Command 不再翻译。Mac→Windows viewer／VM：同样组合应保持 Windows Ctrl，Alt+Tab 按客户端转发设置处理。隐藏 PID、未知复合 HID、混合 Native Mac 装置与 Remote 手动 profile 各自记录，未经操作保持「未验收」。
+按 [TwoMacAcceptance.md](TwoMacAcceptance.md) 測兩方向，特別是來源 Terminal→目的 TextEdit 的 Ctrl+C、兩端都裝 App、持鍵跨屏。Windows→Google Chrome Remote Desktop Host→Mac mini：在 Mac TextEdit 試 Ctrl+C/V/X/Z/A/S，已是 Command 不再翻譯。Mac→Windows viewer／VM：同樣組合應保持 Windows Ctrl，Alt+Tab 按客戶端轉發設置處理。隱藏 PID、未知復合 HID、混合 Native Mac 裝置與 Remote 手動 profile 各自記錄，未經操作保持「未驗收」。
 
-## 3. Finder 与窗口
+## 3. Finder 與窗口
 
-两個测试文件：Ctrl+X→进新目录→Ctrl+V，应该移动一次，clipboard改变／超过5分钟不能继续旧move。F2改名、Delete垃圾桶。文件名文字编辑中的Delete应删字，未知焦点不盲删。Shift+Delete確認取消不删除；確認删除只用可丢弃文件。Alt+F4只关当前窗口，保留未储存对话，不退出整个App。一般App亮度键不能变Enter。打开多目录检查Finder延迟；没有全磁碟 FinderSync 监控，但流畅度仍须实测。
+兩個測試文件：Ctrl+X→進新目錄→Ctrl+V，應該移動一次，clipboard改變／超過5分鐘不能繼續舊move。F2改名、Delete垃圾桶。文件名文字編輯中的Delete應刪字，未知焦點不盲刪。Shift+Delete確認取消不刪除；確認刪除只用可丟棄文件。Alt+F4只關當前窗口，保留未儲存對話，不退出整個App。一般App亮度鍵不能變Enter。打開多目錄檢查Finder延遲；沒有全磁碟 FinderSync 監控，但流暢度仍須實測。
 
-## 4. 截图与记忆体
+## 4. 截圖與記憶體
 
-Win+Shift+S／PrintScreen框选、Alt+PrintScreen当前窗口、Win+PrintScreen全屏存档，完成后直接 Ctrl+V／Cmd+V。CmdShift3全屏、CmdShift4选区也复制；暂停或关闭功能后恢复系统原生行为。Esc取消保持原clipboard。框选尚未结束→Pause／换backend／锁屏／切App／关功能再开，旧结果不得写入。核准／撤销 ScreenCapture 后结果不得显示伪成功；磁碟／程序／解码／编码失败各有错误。
+Win+Shift+S／PrintScreen框選、Alt+PrintScreen當前窗口、Win+PrintScreen全屏存檔，完成後直接 Ctrl+V／Cmd+V。CmdShift3全屏、CmdShift4選區也複製；暫停或關閉功能後恢復系統原生行為。Esc取消保持原clipboard。框選尚未結束→Pause／換backend／鎖屏／切App／關功能再開，舊結果不得寫入。核准／撤銷 ScreenCapture 後結果不得顯示偽成功；磁碟／程序／解碼／編碼失敗各有錯誤。
 
-图片预算覆盖PNG／TIFF／PDF、PDF嵌图与inline image，压缩文件小不表示可无限解码。记录5K／4K多屏截图时 **App＋screencapture＋WindowServer＋clipboard** 的峰值，分开 RSS 与 footprint；现有预算不是整体峰值保证。不要用自动化读取使用者当前clipboard或屏幕作为测试素材。
+圖片預算覆蓋PNG／TIFF／PDF、PDF嵌圖與inline image，壓縮文件小不表示可無限解碼。記錄5K／4K多屏截圖時 **App＋screencapture＋WindowServer＋clipboard** 的峰值，分開 RSS 與 footprint；現有預算不是整體峰值保證。不要用自動化讀取使用者當前clipboard或屏幕作為測試素材。
 
-## 5. 进阶权限与Driver／安装
+## 5. 進階權限與Driver／安裝
 
-只有明确勾进阶才安装／连XPC。逐项授权输入监控、官方Driver；原生IOHID／driver核对才能绿灯。首装、与Karabiner共用、更新中断、timeout、需要用户批准／重开机、回滚须实机测，fixture通过不算硬件验收。切回一般应关闭自己的runtime，不停止／删除其他软件的共享Driver。权限只改本App，不重设全部TCC；ad-hoc更新重新授权属于现有签章限制。
+只有明確勾進階才安裝／連XPC。逐項授權輸入監控、官方Driver；原生IOHID／driver核對才能綠燈。首裝、與Karabiner共用、更新中斷、timeout、需要用戶批准／重開機、回滾須實機測，fixture通過不算硬件驗收。切回一般應關閉自己的runtime，不停止／刪除其他軟件的共享Driver。權限只改本App，不重設全部TCC；ad-hoc更新重新授權屬於現有簽章限制。
 
 ## 6. MacBook 原生映射
 
-仅builtIn=true的本机Apple键盘交换Fn／左Ctrl；Mac mini、USB／Bluetooth、UC／virtual不交换。正常退出还原；与他人工具Fn／Ctrl冲突要显示问题且不覆盖其他pair。强制退出后下次启动／登入应处理journal；重开机服务映射清除。睡眠／唤醒、服务重建、持键切换与restorePending都实测，不能用property setter返回true就判定成功。
+僅builtIn=true的本機Apple鍵盤交換Fn／左Ctrl；Mac mini、USB／Bluetooth、UC／virtual不交換。正常退出還原；與他人工具Fn／Ctrl衝突要顯示問題且不覆蓋其他pair。強制退出後下次啓動／登入應處理journal；重開機服務映射清除。睡眠／喚醒、服務重建、持鍵切換與restorePending都實測，不能用property setter返回true就判定成功。
 
-## 7. 输入法与App模式
+## 7. 輸入法與App模式
 
-ABC与唯音各测组字、选字、Enter／Backspace／Shift／CapsLock，再测试复制。终端运行 `sleep 30` 后 Ctrl+C 应中断，IDE内嵌Terminal同样。手动App规则、快速切换、Pause应同步取消旧输入法／AX／截图任务。守护／切换热键默认关闭，手动选择不自动抢回。多个工具同时控制来源时观察冲突冷却。
+ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再測試複製。終端運行 `sleep 30` 後 Ctrl+C 應中斷，IDE內嵌Terminal同樣。手動App規則、快速切換、Pause應同步取消舊輸入法／AX／截圖任務。守護／切換熱鍵默認關閉，手動選擇不自動搶回。多個工具同時控制來源時觀察衝突冷卻。
 
-## 8. 资源／封装
+## 8. 資源／封裝
 
-一般模式、关闭诊断、设置窗口关闭，开机等待两分钟，Activity Monitor观察5分钟，目标平均0.0–0.1%，不能只看一张瞬间截图。主App没有固定250ms／1s闲置timer；按键、App/session通知和明确deadline会产生正常短暂活动。记录同PID累计CPU增量、RSS与physical footprint；PID/version改变重新建baseline。自己的HID root process应无client后结束，共享Karabiner进程可能因其他软件继续运行。
+一般模式、關閉診斷、設置窗口關閉，開機等待兩分鐘，Activity Monitor觀察5分鐘，目標平均0.0–0.1%，不能只看一張瞬間截圖。主App沒有固定250ms／1s閒置timer；按鍵、App/session通知和明確deadline會產生正常短暫活動。記錄同PID累計CPU增量、RSS與physical footprint；PID/version改變重新建baseline。自己的HID root process應無client後結束，共享Karabiner進程可能因其他軟件繼續運行。
 
-分别从Git clone和无.git ZIP做Release arm64 build，核对Info版本／commit、资源allowlist、签章与DMG App→Applications拖入；登入开关只改本App。停止／移除进阶runtime保留共享Driver。没有自制MRU、thumbnail、窗口遍历切换器；AltTab只使用macOS native path。
+分別從Git clone和無.git ZIP做Release arm64 build，核對Info版本／commit、資源allowlist、簽章與DMG App→Applications拖入；登入開關只改本App。停止／移除進階runtime保留共享Driver。沒有自制MRU、thumbnail、窗口遍歷切換器；AltTab只使用macOS native path。

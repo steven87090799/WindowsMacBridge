@@ -1,42 +1,42 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的选单列键盘工具，整合 Windows 快捷键、MacBook 内建 Fn／Ctrl、Finder 操作、截图与选配唯音／ABC 管理。原始码版本 **0.6.0（build 43）双模式修复候选版**；[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已发布资产与原始码合并是不同阶段。
+Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 43）雙模式修復候選版**；[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與原始碼合併是不同階段。
 
-## 安装
+## 安裝
 
-点两下DMG，把WindowsMacBridge.app拖进Applications，正常退出旧版后替换。一般模式只引导辅助功能，回到App由AX／posting原生检查验证。没有自动Root安装、HID/XPC连接、Input Monitoring或Driver提示；登录启动需用户明确开启。截图第一次明确使用可能需要ScreenCapture授权。
+點兩下DMG，把WindowsMacBridge.app拖進Applications，正常退出舊版後替換。一般模式只引導輔助功能，回到App由AX／posting原生檢查驗證。沒有自動Root安裝、HID/XPC連接、Input Monitoring或Driver提示；登錄啓動需用戶明確開啓。截圖第一次明確使用可能需要ScreenCapture授權。
 
-App使用ad-hoc签章、尚无Apple公证；更新可能需要重新核准本版App，不能以同名旧授权项视为已通过。不要关闭SIP／Gatekeeper或重设其他App权限。
+App使用ad-hoc簽章、尚無Apple公證；更新可能需要重新核准本版App，不能以同名舊授權項視為已通過。不要關閉SIP／Gatekeeper或重設其他App權限。
 
-## 功能与默认
+## 功能與默認
 
-| 功能 | 一般模式默认 |
+| 功能 | 一般模式默認 |
 |---|---|
-| Ctrl复制／贴上／复原／全选／储存、文字导览、浏览器分頁 | 开 |
-| Alt+Tab、Alt+F4 | macOS原生切换／当前窗口关闭，保留未储存提示 |
-| Finder Ctrl+X→V移动、F2、Delete、确认式ShiftDelete | 开；不需FinderSync，根目录监控已移除 |
-| Windows截图与CmdShift3／4 | 开；完成直接写PNG clipboard，取消／旧session不写入 |
-| MacBook Fn／左Ctrl | 关，明确开关只改本机builtIn键盘 |
-| Windows键位置 | Command，可选Option |
-| 唯音守护／Carbon切换热键 | 各自关，保留手动输入来源 |
-| Terminal／IDE／Remote viewer／VM／Game | 依App profile保护Ctrl语意 |
-| HID／VirtualHID／root runtime | 进阶选配，默认关 |
+| Ctrl複製／貼上／復原／全選／儲存、文字導覽、瀏覽器分頁 | 開 |
+| Alt+Tab、Alt+F4 | macOS原生切換／當前窗口關閉，保留未儲存提示 |
+| Finder Ctrl+X→V移動、F2、Delete、確認式ShiftDelete | 開；不需FinderSync，根目錄監控已移除 |
+| Windows截圖與CmdShift3／4 | 開；完成直接寫PNG clipboard，取消／舊session不寫入 |
+| MacBook Fn／左Ctrl | 關，明確開關只改本機builtIn鍵盤 |
+| Windows鍵位置 | Command，可選Option |
+| 唯音守護／Carbon切換熱鍵 | 各自關，保留手動輸入來源 |
+| Terminal／IDE／Remote viewer／VM／Game | 依App profile保護Ctrl語意 |
+| HID／VirtualHID／root runtime | 進階選配，默認關 |
 
-一般模式EventTap使用全部键盘，没有可靠逐装置ID。旧HID选择不自动解锁新进阶模式，已有App规则、键位与明确功能选择保留。Settings schema 6，损坏设置安全停用。
+一般模式EventTap使用全部鍵盤，沒有可靠逐裝置ID。舊HID選擇不自動解鎖新進階模式，已有App規則、鍵位與明確功能選擇保留。Settings schema 6，損壞設置安全停用。
 
-进阶抽屉勾选后才显示后端、安装／移除、Driver、装置偏好与诊断。所有材料封装在同一App；root模式用root-owned签章镜像，不让root执行用户可替换的Applications文件。共享官方Karabiner Driver不改签章名称、不因切一般或卸载本App的runtime被删除。支持的Driver版本有checksum／签章／交易恢复限制，不宣称任意升级与降级都已验收。
+進階抽屜勾選後才顯示後端、安裝／移除、Driver、裝置偏好與診斷。所有材料封裝在同一App；root模式用root-owned簽章鏡像，不讓root執行用戶可替換的Applications文件。共享官方Karabiner Driver不改簽章名稱、不因切一般或卸載本App的runtime被刪除。支持的Driver版本有checksum／簽章／交易恢復限制，不宣稱任意升級與降級都已驗收。
 
-## 双机与远端
+## 雙機與遠端
 
-Mac mini固定外接键盘、MacBook内建键盘，只有MacBook开启Fn交换。两端都装同版、先用一般模式；[双机步骤](Resources/TwoMacAcceptance.md)涵盖UC两个方向及来源Terminal／目的TextEdit。CRD incoming host用Google签章身份辨识，raw Ctrl在Mac目的端翻译，已是Command通过；远端Windows viewer保持Windows Ctrl。UC隐藏metadata与不同Remote组合仍需实机验收，不承诺100%。
+Mac mini固定外接鍵盤、MacBook內建鍵盤，只有MacBook開啓Fn交換。兩端都裝同版、先用一般模式；[雙機步驟](Resources/TwoMacAcceptance.md)涵蓋UC兩個方向及來源Terminal／目的TextEdit。CRD incoming host用Google簽章身份辨識，raw Ctrl在Mac目的端翻譯，已是Command通過；遠端Windows viewer保持Windows Ctrl。UC隱藏metadata與不同Remote組合仍需實機驗收，不承諾100%。
 
-## 资源与验证
+## 資源與驗證
 
-一般模式没有250ms／1s固定闲置轮询，只有按键、系统通知及明确deadline。HID使用XPC ownership lease和Driver回报，放开所有键后不轮询；尚有held output时保留单次安全检查。截图单轮、临时PNG直接clipboard，TIFF／PDF按预算处理。代码审查或CI不证明CPU稳定0.0–0.1%、完整App记忆体峰值、硬件交接或Driver恢复已通过。
+一般模式沒有250ms／1s固定閒置輪詢，只有按鍵、系統通知及明確deadline。HID使用XPC ownership lease和Driver回報，放開所有鍵後不輪詢；尚有held output時保留單次安全檢查。截圖單輪、臨時PNG直接clipboard，TIFF／PDF按預算處理。代碼審查或CI不證明CPU穩定0.0–0.1%、完整App記憶體峰值、硬件交接或Driver恢復已通過。
 
-- [操作说明](Resources/UserGuide.md)
-- [人工验收八类功能](Resources/AcceptanceGuide.md)
-- [外部审查逐项核对、修复与支援缺口](Docs/DualModeReview-2026-10-03.md)
+- [操作說明](Resources/UserGuide.md)
+- [人工驗收八類功能](Resources/AcceptanceGuide.md)
+- [外部審查逐項核對、修復與支援缺口](Docs/DualModeReview-2026-10-03.md)
 
 ## 建置
 
@@ -46,6 +46,6 @@ bash scripts/package-single-app.sh
 bash scripts/package-app-dmg.sh
 ```
 
-产出arm64 Release App与可拖入Applications的DMG，进阶payload封装于App内。Pinned SDK准备不需要安装系统Driver；GitHub无.git ZIP仍可建置，来源会明确标记为archive，不冒用其他目录的Git revision。`bash scripts/test.sh`是开发／Hosted CI测试入口，不执行权限授予或实际硬件验收。
+產出arm64 Release App與可拖入Applications的DMG，進階payload封裝於App內。Pinned SDK準備不需要安裝系統Driver；GitHub無.git ZIP仍可建置，來源會明確標記為archive，不冒用其他目錄的Git revision。`bash scripts/test.sh`是開發／Hosted CI測試入口，不執行權限授予或實際硬件驗收。
 
-第三方MIT资源及官方Driver许可证保留在Resources/Licenses。未经Apple Developer／DriverKit资格，不能把官方签章dext冒充为自制WindowsMacBridge Driver。
+第三方MIT資源及官方Driver許可證保留在Resources/Licenses。未經Apple Developer／DriverKit資格，不能把官方簽章dext冒充為自制WindowsMacBridge Driver。

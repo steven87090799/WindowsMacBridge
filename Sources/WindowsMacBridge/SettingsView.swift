@@ -174,7 +174,7 @@ struct SettingsView: View {
     private var general: some View {
         Form {
             Section("WindowsMacBridge · \(AppBuildInfo.current.versionLabel)") {
-                Text(controller.settings.enabled && !controller.paused && controller.status.tapActive ? "🟢 運作中" : controller.summary)
+                Text(controller.isOperating ? "🟢 運作中" : controller.summary)
                     .font(.headline)
                 if controller.status.fault != nil { Button("重新啟動引擎") { controller.resume() } }
                 Toggle("Windows 核心快捷鍵", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
@@ -218,6 +218,7 @@ struct SettingsView: View {
                             Button("移除本 App 的背景元件") { controller.uninstallAdvancedBackend() }
                         }
                         explanation("安裝需要管理員驗證；移除只處理 WindowsMacBridge，保留共用 Driver 與 Karabiner。")
+                        if let notice = controller.driverApprovalNotice { Text(notice).font(.caption).foregroundStyle(.secondary) }
                         if controller.settings.usesHID {
                             Text(controller.hidStatus.state)
                             Text("Driver：\(controller.hidStatus.driverReady ? "Ready" : "尚未就緒")；接管鍵盤：\(controller.hidStatus.capturedDevices)")

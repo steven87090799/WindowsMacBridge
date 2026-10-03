@@ -125,6 +125,12 @@ import IOKit.hid
     private var debugUntil: Date?
     var onStatusChange: (() -> Void)?
 
+    var isOperating: Bool {
+        guard settings.enabled, !paused, !status.emergencyPaused, permissions.keyboardControlGranted,
+              sessionActive, !status.secureInput, !status.manualPassThrough else { return false }
+        if settings.usesHID { return hidStatus.permissions && hidStatus.driverReady && hidStatus.capturedDevices > 0 }
+        return status.tapActive && status.fault == nil && status.backendIssue == nil && !status.awaitingNeutral
+    }
     var paused: Bool { pausedUntilRestart || (pauseUntil.map { $0 > Date() } ?? false) }
     var summary: String {
         if settings.isAdvancedModeEnabled && installationRecoveryPending { return "安裝尚未完成，請依系統提示核准或重新開機後再開啟 App。" }
