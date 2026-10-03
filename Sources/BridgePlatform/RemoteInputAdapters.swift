@@ -61,10 +61,14 @@ public enum RemoteAdapterCatalog {
         }
         return .init()
     }
+    private static let discoveryMarkers = [
+        "ChromeRemoteDesktopHost.app/", "UniversalControl.app/", "remoting_me2me_host", "AnyDesk.app/",
+        "TeamViewer", "RustDesk.app/", "Jump Desktop", "Microsoft Remote Desktop", "Windows App.app/",
+        "Parsec.app/", "Splashtop", "NoMachine", "VNC"]
+    /// Runs for every process path in a discovery scan; executable paths are
+    /// not localized text, so a plain case-insensitive match avoids ICU per path.
     static func discoveryCandidate(_ path: String) -> Bool {
-        ["ChromeRemoteDesktopHost.app/", "UniversalControl.app/", "remoting_me2me_host", "AnyDesk.app/",
-         "TeamViewer", "RustDesk.app/", "Jump Desktop", "Microsoft Remote Desktop", "Windows App.app/",
-         "Parsec.app/", "Splashtop", "NoMachine", "VNC"].contains { path.localizedCaseInsensitiveContains($0) }
+        discoveryMarkers.contains { path.range(of: $0, options: .caseInsensitive) != nil }
     }
 }
 public enum RemoteProcessResolver {
@@ -77,8 +81,9 @@ public enum RemoteProcessResolver {
     private static func path(_ pid: Int32) -> String? {
         // PROC_PIDPATHINFO_MAXSIZE is 4 * MAXPATHLEN; that C expression is not imported by Swift.
         var buffer = [CChar](repeating: 0, count: 4096)
-        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
-        return String(cString: buffer)
+        let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        guard length > 0 else { return nil }
+        return String(decoding: buffer.prefix(Int(length)).map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
     public static func identity(_ pid: Int32) -> RemoteProcessIdentity? {
         guard let start = birth(pid), let executable = path(pid) else { return nil }
@@ -142,16 +147,20 @@ public final class RemoteCalibrationInbox: @unchecked Sendable {
         lock.lock(); armed = (identity, processID, session); result = nil; lock.unlock()
     }
     public func cancel() { lock.lock(); armed = nil; result = nil; lock.unlock() }
-    public func observe(processID: Int32, key: UInt16, phase: KeyPhase, flags: Modifiers, repeatKey: Bool) {
-        guard phase == .down && key == 8 && !repeatKey, lock.try() else { return }
+    /// Returns true when this event completed the armed calibration, so the
+    /// host is woken for that result rather than by every key edge.
+    @discardableResult
+    public func observe(processID: Int32, key: UInt16, phase: KeyPhase, flags: Modifiers, repeatKey: Bool) -> Bool {
+        guard phase == .down && key == 8 && !repeatKey, lock.try() else { return false }
         defer { lock.unlock() }
-        guard let (identity, pid, session) = armed, pid == processID else { return }
+        guard let (identity, pid, session) = armed, pid == processID else { return false }
         let semantics: RemoteSemantics
         if flags == .control { semantics = .windows }
         else if flags == .command { semantics = .alreadyTranslated }
-        else { return }
+        else { return false }
         result = .init(identity: identity, processID: pid, session: session, semantics: semantics)
         armed = nil
+        return true
     }
     public func take() -> RemoteCalibrationResult? {
         lock.lock(); defer { lock.unlock() }; let value = result; result = nil; return value
@@ -177,6 +186,11 @@ public struct RemoteSourceStatus: Equatable, Identifiable, Sendable {
         var observed = false
     }
     private var entries: [Entry] = []
+    /// One kqueue exit source per tracked producer (bounded by `entries`).
+    /// Producer death revokes its work gate and releases its held keys at once,
+    /// instead of waiting for an unrelated key edge or App notification; Chrome
+    /// Remote Desktop's host is a daemon that NSWorkspace never reports.
+    private var exitSources: [Int32: any DispatchSourceProcess] = [:]
     private var preferences: [RemoteSourcePreference] = []
     private var pending = [Int32]()
     private var active = false, resolving = false
@@ -193,6 +207,8 @@ public struct RemoteSourceStatus: Equatable, Identifiable, Sendable {
             epoch &+= 1; self.active = active
             for entry in entries { entry.producer.work.invalidate() }
             entries.removeAll(); pending.removeAll(); snapshot = .init(); statuses = []
+            for source in exitSources.values { source.cancel() }
+            exitSources.removeAll()
             discoveryRequested = active; onChange?()
             if active { maintain([]) }
         }
@@ -213,7 +229,9 @@ public struct RemoteSourceStatus: Equatable, Identifiable, Sendable {
     public func maintain(_ observedPIDs: [Int32]) {
         guard active else { return }
         var changed = false
+        // Fallback for a missed exit event; the exit sources are the primary signal.
         for i in entries.indices.reversed() where RemoteProcessResolver.birth(entries[i].identity.pid) != entries[i].identity.birth {
+            unwatch(entries[i].identity.pid)
             entries[i].producer.work.invalidate(); entries.remove(at: i); changed = true
         }
         for pid in observedPIDs.prefix(16) where pid != ProcessInfo.processInfo.processIdentifier {
@@ -238,12 +256,40 @@ public struct RemoteSourceStatus: Equatable, Identifiable, Sendable {
             for identity in result where RemoteProcessResolver.birth(identity.pid) == identity.birth {
                 guard !self.entries.contains(where: { $0.identity.pid == identity.pid }), self.entries.count < 32 else { continue }
                 let adapter = RemoteAdapterCatalog.classify(identity)
+                let producer = self.producer(identity, adapter: adapter)
+                // Armed before publication; a producer that already exited (or whose
+                // PID was reused) is rejected rather than tracked without a signal.
+                guard self.watch(identity) else { producer.work.invalidate(); continue }
                 self.entries.append(.init(identity: identity, adapter: adapter,
-                                          producer: self.producer(identity, adapter: adapter), observed: requested.contains(identity.pid)))
+                                          producer: producer, observed: requested.contains(identity.pid)))
             }
             self.publish(); self.maintain([])
         }
     }
+    private func watch(_ identity: RemoteProcessIdentity) -> Bool {
+        let pid = identity.pid, birth = identity.birth
+        unwatch(pid)
+        let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .main)
+        source.setEventHandler { [weak self] in
+            MainActor.assumeIsolated { self?.producerExited(pid: pid, birth: birth) }
+        }
+        exitSources[pid] = source
+        source.resume()
+        // An exit before registration produces no event; recheck after arming.
+        guard RemoteProcessResolver.birth(pid) == birth else { unwatch(pid); return false }
+        return true
+    }
+    private func unwatch(_ pid: Int32) {
+        exitSources.removeValue(forKey: pid)?.cancel()
+    }
+    private func producerExited(pid: Int32, birth: UInt64) {
+        unwatch(pid)
+        guard let index = entries.firstIndex(where: { $0.identity.pid == pid && $0.identity.birth == birth }) else { return }
+        entries[index].producer.work.invalidate()
+        entries.remove(at: index)
+        publish()
+    }
+    var watchedProducerCount: Int { exitSources.count }
     private func producer(_ identity: RemoteProcessIdentity, adapter: RemoteAdapterDescriptor) -> RemoteProducer {
         let pref = preferences.first { $0.identity == identity.stableID }
         return .init(processID: identity.pid, identity: identity.stableID, session: identity.birth, revision: revision,

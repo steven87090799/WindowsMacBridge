@@ -235,7 +235,11 @@ import IOKit.hid
     }
     private func updateRuntimeTimer() {
         guard running, let snapshot = policy.current else { return }
-        let deadline = [pauseUntil, debugUntil].compactMap { $0?.timeIntervalSince1970 }.min()
+        // Calibration expiry is uptime-based; convert it so one one-shot timer covers all deadlines.
+        let calibration = calibrationDeadline.map {
+            ((Date().timeIntervalSince1970 + max(0, $0 - ProcessInfo.processInfo.systemUptime)) * 100).rounded(.up) / 100
+        }
+        let deadline = ([pauseUntil, debugUntil].compactMap { $0?.timeIntervalSince1970 } + [calibration].compactMap { $0 }).min()
         let plan = RuntimeWakePlan.make(input: snapshot.input,
                                         awaitingMappingNeutral: macBookKeyboardStatus.awaitingNeutral,
                                         deadline: deadline)
@@ -536,16 +540,27 @@ import IOKit.hid
         remoteRegistry.configure(active: snapshot.permitsShortcuts, preferences: settings.remoteSources)
         updateRuntimeTimer()
         if previous == snapshot {
-            if var config = lastEngineConfiguration, config.inputRouting != remoteRegistry.snapshot || config.deviceInputs != settings.effectiveDeviceInputs {
-                let deviceChanged = config.deviceInputs != settings.effectiveDeviceInputs
-                config.inputRouting = remoteRegistry.snapshot; config.deviceInputs = settings.effectiveDeviceInputs; lastEngineConfiguration = config
-                if deviceChanged { hid?.update(config, active: settings.usesHID && !macBookKeyboardStatus.restorePending) }
+            guard var config = lastEngineConfiguration else { return }
+            let deviceChanged = config.deviceInputs != settings.effectiveDeviceInputs
+            let routingChanged = config.inputRouting != remoteRegistry.snapshot
+            // restorePending can mask an awaitingNeutral flip in the policy input.
+            // The engine needs the exact flag: it decides whether key edges wake us.
+            let neutralChanged = config.nativeMappingAwaitingNeutral != macBookKeyboardStatus.awaitingNeutral
+            guard deviceChanged || routingChanged || neutralChanged else { return }
+            config.inputRouting = remoteRegistry.snapshot; config.deviceInputs = settings.effectiveDeviceInputs
+            config.nativeMappingAwaitingNeutral = macBookKeyboardStatus.awaitingNeutral
+            lastEngineConfiguration = config
+            if deviceChanged { hid?.update(config, active: settings.usesHID && !macBookKeyboardStatus.restorePending) }
+            if deviceChanged || routingChanged {
                 screenshot.applyPhysicalPreferences(config.deviceInputs)
-                screenshot.applyInputRouting(config.inputRouting); engine.update(config)
+                screenshot.applyInputRouting(config.inputRouting)
             }
+            engine.update(config)
             return
         }
-        engine.calibrationInbox.cancel(); calibrationDeadline = nil
+        if calibrationDeadline != nil {
+            engine.calibrationInbox.cancel(); calibrationDeadline = nil; updateRuntimeTimer()
+        }
         var config = EngineConfiguration()
         config.context = context
         config.enabled = snapshot.permitsInput
@@ -717,6 +732,7 @@ import IOKit.hid
         engine.calibrationInbox.arm(identity: source.identity, processID: source.processID, session: source.session)
         calibrationDeadline = ProcessInfo.processInfo.systemUptime + 60
         calibrationNotice = "請在此遠端電腦按一次 Ctrl+C。只辨識這個測試組合，60 秒內有效。"
+        updateRuntimeTimer()
     }
     func setDeviceExperience(_ experience: DeviceExperience, identity: String) {
         guard (settings.deviceInputs.first { $0.identity == identity }?.experience ?? .windows) != experience else { return }

@@ -128,7 +128,11 @@ public final class InputEngine: @unchecked Sendable {
     private var expiryTimer: Timer?
     private var activityHandler: (@MainActor @Sendable () -> Void)?
     private let activityMailbox = DeferredSignalMailbox()
-    private var observedProducers = [Int32]()
+    /// Fixed ring of recently reported synthetic producers. An append-only list
+    /// filled after 32 short-lived posters and then hid new remote hosts until
+    /// a restart or session change.
+    private var observedProducers = [Int32](repeating: 0, count: 32)
+    private var observedProducerNext = 0
     @MainActor public func setActivityHandler(_ handler: @escaping @MainActor @Sendable () -> Void) {
         activityHandler = handler
     }
@@ -229,7 +233,9 @@ public final class InputEngine: @unchecked Sendable {
         if changed { configuration = mailbox.configuration; revision = mailbox.revision }
         mailbox.lock.unlock()
         if changed {
-            if configuration.restartToken != lastRestart || configuration.sessionActive != lastSessionActive { observedProducers.removeAll(keepingCapacity: true) }
+            if configuration.restartToken != lastRestart || configuration.sessionActive != lastSessionActive {
+                for i in observedProducers.indices { observedProducers[i] = 0 }
+            }
             if deliveryChanged { needsRecreation = true; attemptedStart = false }
             if deviceChanged {
                 processor.drainTranslatedReleases { key, flags, pid in
@@ -406,9 +412,23 @@ public final class InputEngine: @unchecked Sendable {
             status.diagnostics = records.compactMap { $0 }.sorted { $0.id > $1.id }
             publishedDiagnosticRevision = diagnosticRevision
         }
-        mailbox.lock.lock(); let changed = mailbox.status != status; mailbox.status = status; mailbox.lock.unlock()
-        if changed { notifyActivity() }
+        mailbox.lock.lock(); let previous = mailbox.status; mailbox.status = status; mailbox.lock.unlock()
+        if Self.requiresHostWake(previous: previous, next: status,
+                                 everyChange: configuration.diagnostics || configuration.nativeMappingAwaitingNeutral) {
+            notifyActivity()
+        }
         scheduleRemoteExpiry()
+    }
+    /// Counters advance on every key edge. Waking the host for them ran a full
+    /// MainActor tick (TCC reads, policy, registry, SwiftUI publish) per keystroke.
+    /// They are still published with the next material change or on request.
+    /// Live diagnostics and a pending Fn/Ctrl neutral check still need key edges.
+    static func requiresHostWake(previous: EngineStatus, next: EngineStatus, everyChange: Bool) -> Bool {
+        if everyChange { return previous != next }
+        var before = previous, after = next
+        before.processed = 0; before.translated = 0; before.maxMicroseconds = 0
+        after.processed = 0; after.translated = 0; after.maxMicroseconds = 0
+        return before != after
     }
     private var hasInputAuthorization: Bool {
         status.listenAccess
@@ -511,8 +531,9 @@ public final class InputEngine: @unchecked Sendable {
         let physical = origin == .physicalFallback || destinationPhysical
         if evidence.processID > 0 && !evidence.ownEvent &&
             !configuration.inputRouting.producers.contains(where: { $0.processID == evidence.processID }) &&
-            !observedProducers.contains(evidence.processID) && observedProducers.count < 32 {
-            observedProducers.append(evidence.processID)
+            !observedProducers.contains(evidence.processID) {
+            observedProducers[observedProducerNext] = evidence.processID
+            observedProducerNext = (observedProducerNext + 1) % observedProducers.count
             producerInbox.observe(evidence.processID); notifyActivity()
         }
         guard physical || { if case .remote = origin { return true }; return false }() else {
@@ -537,7 +558,9 @@ public final class InputEngine: @unchecked Sendable {
         let normalized = KeyboardEvent(phase, keyCode: key, modifiers: flags,
                                        isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
                                        modifierSide: side, modifierDown: down)
-        calibrationInbox.observe(processID: evidence.processID, key: key, phase: phase, flags: flags, repeatKey: normalized.isRepeat)
+        if calibrationInbox.observe(processID: evidence.processID, key: key, phase: phase, flags: flags, repeatKey: normalized.isRepeat) {
+            notifyActivity()
+        }
         if destinationPhysical { processor.reconcileIndependentSourceFlags(normalized.modifiers) }
         var routed = physical ? RoutedInputDecision(processor.process(normalized)) : remote.process(normalized, evidence: evidence, now: ProcessInfo.processInfo.systemUptime)
         if physical && configuration.windowsKeyModifier == .command {
