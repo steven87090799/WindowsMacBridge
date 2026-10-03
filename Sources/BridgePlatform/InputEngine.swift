@@ -8,7 +8,9 @@ public struct EngineConfiguration: Equatable, Sendable {
     public var enabled = false
     public var sessionActive = true
     public var nativeMappingAwaitingNeutral = false
-    public var needsEventTap: Bool { sessionActive && (enabled || nativeMappingAwaitingNeutral) }
+    /// Policy is blocked only by Secure Input; keep the tap to observe its end.
+    public var observesSecureInputEnd = false
+    public var needsEventTap: Bool { sessionActive && (enabled || nativeMappingAwaitingNeutral || observesSecureInputEnd) }
     public var layoutSupported = false
     public var diagnostics = false
     public var restartToken: UInt64 = 0

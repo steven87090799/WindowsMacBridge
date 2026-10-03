@@ -74,7 +74,7 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         for _ in 0..<100 where released != nil { try await Task.sleep(for: .milliseconds(2)) }
         #expect(released == nil)
     }
-    @Test func realIPCStopTimeoutInvalidatesOldLeaseWithoutBlockingEventTap() async throws {
+    @Test func realIPCStopTimeoutInvalidatesTheLeaseAndLatchesUnconfirmedRelease() async throws {
         let helper = OfflineHelper()
         let listener = NSXPCListener.anonymous(); listener.delegate = helper; listener.resume()
         defer { listener.invalidate() }
@@ -95,11 +95,62 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         #expect(helper.hasStop)
         try await Task.sleep(for: .milliseconds(250))
         #expect(!client.releasePending && !client.hasOwnership)
-        #expect(client.status.state.contains("未獲確認"))
+        #expect(client.status.state.contains("未獲確認") && client.releaseUnconfirmed)
+        // A late reply belongs to a retired stop and cannot prove release.
         helper.acknowledge()
-        for _ in 0..<100 where client.releasePending { try await Task.sleep(for: .milliseconds(2)) }
-        #expect(!client.releasePending && !client.hasOwnership)
+        for _ in 0..<20 { await Task.yield() }
+        #expect(!client.releasePending && !client.hasOwnership && client.releaseUnconfirmed)
+        client.clearUnconfirmedRelease()
+        #expect(!client.releaseUnconfirmed)
         client.stop()
+    }
+    @Test func leavingHIDKeepsTheRetiringLeaseUntilItsStopIsAcknowledged() async throws {
+        let helper = OfflineHelper()
+        let listener = NSXPCListener.anonymous(); listener.delegate = helper; listener.resume()
+        defer { helper.acknowledge(); listener.invalidate() }
+        let slot = HIDBackendSlot(factory: {
+            HIDBackendClient(connectionFactory: { NSXPCConnection(listenerEndpoint: listener.endpoint) })
+        })
+        var changes = 0; slot.onOwnershipChange = { changes += 1 }
+        slot.synchronize(wanted: true)
+        var config = EngineConfiguration(); config.enabled = true; config.generation = 1
+        config.context = .init(processID: .max, bundleID: "test", mode: .macOS)
+        slot.active?.update(config, active: true)
+        #expect(slot.active?.hasOwnership == true)
+        // HID -> EventTap: the old client must survive and keep gating new owners.
+        slot.synchronize(wanted: false)
+        #expect(slot.active == nil && slot.releasePending && slot.retiringCount == 1)
+        for _ in 0..<200 where !helper.hasStop { try await Task.sleep(for: .milliseconds(2)) }
+        #expect(helper.hasStop && slot.releasePending)
+        helper.acknowledge()
+        for _ in 0..<200 where slot.releasePending { try await Task.sleep(for: .milliseconds(2)) }
+        #expect(!slot.releasePending && slot.retiringCount == 0 && changes > 0)
+        slot.stopAll()
+    }
+    @Test func unacknowledgedStopFailsClosedUntilExplicitRestart() async throws {
+        let helper = OfflineHelper()
+        let listener = NSXPCListener.anonymous(); listener.delegate = helper; listener.resume()
+        defer { helper.acknowledge(); listener.invalidate() }
+        let slot = HIDBackendSlot(factory: {
+            HIDBackendClient(connectionFactory: { NSXPCConnection(listenerEndpoint: listener.endpoint) },
+                             stopAcknowledgementTimeout: 0.05)
+        })
+        slot.synchronize(wanted: true)
+        var config = EngineConfiguration(); config.enabled = true; config.generation = 1
+        config.context = .init(processID: .max, bundleID: "test", mode: .macOS)
+        slot.active?.update(config, active: true)
+        slot.synchronize(wanted: false)
+        #expect(slot.releasePending)
+        // No acknowledgement: the deadline invalidates the lease and retires the
+        // client, but the gate stays closed until the user restarts the engine.
+        for _ in 0..<200 where slot.retiringCount > 0 { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(slot.retiringCount == 0 && slot.releaseUnconfirmed && slot.releasePending)
+        slot.clearUnconfirmedRelease()
+        #expect(!slot.releasePending && !slot.releaseUnconfirmed)
+        // A client that never connected has nothing to release.
+        slot.synchronize(wanted: true); slot.synchronize(wanted: false)
+        #expect(!slot.releasePending && slot.retiringCount == 0)
+        slot.stopAll()
     }
     @Test func helperActionCannotUseCurrentOrOldEpochAsDestinationDeliveryEvidence() async throws {
         let helper = OfflineHelper()

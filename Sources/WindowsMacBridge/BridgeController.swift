@@ -99,7 +99,9 @@ import IOKit.hid
     private let remoteRegistry = RemoteSourceRegistry()
     private var lastEngineConfiguration: EngineConfiguration?
     private var calibrationDeadline: Double?
-    private var hid: HIDBackendClient?
+    /// Active HID client plus any client still retiring its capture lease.
+    private let hidSlot = HIDBackendSlot()
+    private var hid: HIDBackendClient? { hidSlot.active }
     private let store = SettingsStore()
     let installationRecoveryPending: Bool
     private let screenshot = ScreenshotManager()
@@ -137,7 +139,8 @@ import IOKit.hid
         if let configurationError { return configurationError }
         if !settings.enabled { return "已停用" }
         if paused || status.emergencyPaused { return "已暫停" }
-        if settings.usesHID && hid?.releasePending == true { return "等待 Helper 安全釋放；新後端尚未啟動" }
+        if hidSlot.releaseUnconfirmed { return "Helper 未確認釋放鍵盤；確認鍵盤正常後按「恢復／重啟引擎」" }
+        if hidSlot.releasePending { return "等待 Helper 安全釋放；新後端尚未啟動" }
         if !permissions.keyboardControlGranted { return "等待鍵盤控制授權（\(KeyboardPermissionRequest.settingsTitle)）" }
         if !permissions.listening { return "等待輸入監控授權" }
         if settings.usesHID {
@@ -225,6 +228,7 @@ import IOKit.hid
         observe(center, NSWorkspace.didTerminateApplicationNotification) { $0.remoteRegistry.maintain([]) }
         refreshPermissions()
         engine.setActivityHandler { [weak self] in self?.tick() }
+        hidSlot.onOwnershipChange = { [weak self] in self?.tick() }
         engine.start()
         publish()
         updateRuntimeTimer()
@@ -275,10 +279,12 @@ import IOKit.hid
         macBookKeyboard.onChange = nil
         macBookKeyboard.stop()
         engine.stop()
-        hid?.onOwnershipChange = nil
-        hid?.stop(); hid = nil
+        hidSlot.onOwnershipChange = nil
+        hidSlot.stopAll()
         inputSources.stop()
     }
+    /// Engine counters are pulled on demand; key edges no longer wake the host.
+    func refreshEngineStatus() { tick() }
     private func tick() {
         engine.maintain()
         remoteRegistry.maintain(engine.producerInbox.take())
@@ -522,7 +528,8 @@ import IOKit.hid
         input.loginItemEnabled = permissions.loginItem
         input.layoutIdentity = layoutID
         input.layoutSupported = layoutSupported; input.diagnosticsEnabled = diagnosticsEnabled
-        input.hidReleasePending = settings.usesHID && hid?.releasePending == true
+        // Any client still retiring a lease gates BOTH backends until its bounded stop resolves.
+        input.hidReleasePending = hidSlot.releasePending
         input.nativeRestorePending = macBookKeyboardStatus.restorePending || macBookKeyboardStatus.awaitingNeutral
         let previous = policy.current
         let snapshot = policy.transition(input)
@@ -542,6 +549,9 @@ import IOKit.hid
         var config = EngineConfiguration()
         config.context = context
         config.enabled = snapshot.permitsInput
+        // Without this the tap is destroyed and Secure Input ending inside the same
+        // App was never observed: translation stayed off until the next App switch.
+        config.observesSecureInputEnd = snapshot.awaitsSecureInputEnd
         config.generation = snapshot.generation
         config.runtimePolicy = snapshot
         config.physicalBackend = settings.effectiveInputBackend
@@ -588,17 +598,10 @@ import IOKit.hid
         inputSources.updateRuntimePolicy(snapshot, protection: sourceSuspension(for: context))
     }
     private func synchronizeHIDMode() {
-        if settings.usesHID && !backgroundInstallationNeeded {
-            if hid == nil {
-                let client = HIDBackendClient()
-                client.onOwnershipChange = { [weak self] in self?.tick() }
-                hid = client; client.start()
-            }
-        } else if let client = hid {
-            client.onOwnershipChange = nil
-            client.releaseOwnership(); client.stop(); hid = nil
-            hidStatus = HIDStatus()
-        }
+        let wanted = settings.usesHID && !backgroundInstallationNeeded
+        let retired = !wanted && hidSlot.active != nil
+        hidSlot.synchronize(wanted: wanted)
+        if retired { hidStatus = HIDStatus() }
     }
     func setAdvancedModeEnabled(_ value: Bool) {
         store.update { $0.isAdvancedModeEnabled = value }
@@ -764,6 +767,8 @@ import IOKit.hid
         publish(); onStatusChange?()
     }
     func resume() {
+        // The explicit restart is the user's confirmation after an unacknowledged HID stop.
+        hidSlot.clearUnconfirmedRelease()
         pauseUntil = nil; pausedUntilRestart = false; status.emergencyPaused = false
         restartToken &+= 1; publish(); onStatusChange?()
     }
