@@ -184,7 +184,7 @@ struct SettingsView: View {
                     explanation("只交換這臺 MacBook 的內建鍵盤；外接鍵盤不變。關閉或正常退出後還原，切換時請放開所有按鍵。")
                 }
                 Toggle("Finder 檔案操作加強", isOn: Binding(get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
-                explanation("Ctrl+X → Ctrl+V 移動檔案，F2 改名，Delete 移到垃圾桶。Shift+Delete 由確認視窗保護；不需要 Finder 擴充功能。")
+                explanation("Ctrl+X → Ctrl+V 移動檔案，F2 改名，Delete 移到垃圾桶。Shift+Delete 交由 Finder 的「立即刪除」確認視窗保護；不需要 Finder 擴充功能。")
                 Toggle("Windows 快捷截圖（截圖後自動複製）", isOn: Binding(get: { controller.settings.screenshotAutoCopy }, set: { controller.setScreenshotAutoCopy($0) }))
                 explanation("Win+Shift+S／PrintScreen 框選，Alt+PrintScreen 擷取視窗，Win+PrintScreen 儲存全螢幕並複製。⌘⇧3／⌘⇧4 也直接複製；第一次擷取可能由 macOS 要求螢幕錄製授權。")
                 if let issue = controller.screenshotStatus.issue {

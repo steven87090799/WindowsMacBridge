@@ -37,6 +37,30 @@ private final class NativeJobProbe: @unchecked Sendable {
             #expect(probe.state.2 && probe.state.3 == expected)
         }
     }
+    @Test func escapeNoteOnlyClassifiesFailedExitsAndNeverDiscardsACapture() async throws {
+        for (status, expected): (Int, ScreenshotFailure?) in [(0, nil), (1, .userCancelled)] {
+            let probe = NativeJobProbe()
+            let job = NativeScreenshotJob(executable: URL(fileURLWithPath: "/bin/sh"),
+                prepareArguments: { ["-c", "sleep 0.2; exit \(status)"] },
+                completion: { _, failure in probe.complete(failure) })
+            job.start()
+            job.noteUserCancellation()
+            for _ in 0..<200 where !probe.state.2 { try await Task.sleep(for: .milliseconds(5)) }
+            #expect(probe.state.2 && probe.state.3 == expected)
+        }
+    }
+    @Test func inheritedDiagnosticPipeCannotStallCompletionAndTheCaptureSlot() async throws {
+        // A descendant keeps the stderr write end open after the capture process exits.
+        let probe = NativeJobProbe()
+        let job = NativeScreenshotJob(executable: URL(fileURLWithPath: "/bin/sh"),
+            prepareArguments: { ["-c", "(sleep 3) >&2 & exit 0"] },
+            completion: { _, failure in probe.complete(failure) })
+        let started = ProcessInfo.processInfo.systemUptime
+        job.start()
+        for _ in 0..<300 where !probe.state.2 { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(probe.state.2 && probe.state.3 == nil)
+        #expect(ProcessInfo.processInfo.systemUptime - started < 2.5)
+    }
     @Test func slowPreparationRunsOutsideMainActorAndCancellationPreventsProcessLaunch() async throws {
         let probe = NativeJobProbe()
         let job = NativeScreenshotJob(executable: URL(fileURLWithPath: "/usr/bin/true"), prepareArguments: { probe.prepare() }, completion: { _, failure in probe.complete(failure) })

@@ -79,7 +79,9 @@ public enum ScreenshotImagePreparation {
             }
             guard !Task.isCancelled else { return .failure(.policyCancelled) }
             if url.pathExtension.lowercased() == "png",
-               let original = try? Data(contentsOf: url, options: .mappedIfSafe),
+               // Not mapped: a synced Desktop save can be replaced underneath a
+               // mapping (SIGBUS). The file size was bounded above.
+               let original = try? Data(contentsOf: url),
                original.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]) {
                 return .success(ScreenshotImagePayload(png: original))
             }
@@ -174,6 +176,11 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private var runtimePolicy: RuntimePolicySnapshot?
     private var policyEpoch: UInt64 = 0
     private var activeJob: (any ScreenshotCaptureJob)?
+    /// The job's token and private output path. Only the matching completion
+    /// may clear the job, and stop() removes an abandoned temporary capture.
+    private var activeJobToken: ScreenshotCaptureLifecycle.Token?
+    private var activeDestination: URL?
+    static let temporaryCapturePrefix = "WindowsMacBridge Screenshot "
     private var sourceJob: SourceWorkToken?
     private var inputRouting = InputRoutingSnapshot()
     private var physicalPreferences: [DeviceInputPreference] = []
@@ -217,6 +224,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     public func start(enabled: Bool) {
+        removeAbandonedTemporaryCaptures()
         self.enabled = enabled
         capture.configure(enabled: enabled, epoch: policyEpoch)
         guard enabled else { return }
@@ -317,6 +325,22 @@ public struct ScreenshotStatus: Equatable, Sendable {
         capture.configure(enabled: false, epoch: policyEpoch)
         recovery.reset()
         accessibilityTrusted = false
+        // A quit during capture never reaches finishCapture's cleanup; screen
+        // contents must not stay in the temporary directory.
+        if let destination = activeDestination, isTemporary(destination) { try? fileManager.removeItem(at: destination) }
+        activeDestination = nil
+    }
+    private func isTemporary(_ url: URL) -> Bool {
+        url.deletingLastPathComponent().standardizedFileURL == fileManager.temporaryDirectory.standardizedFileURL
+    }
+    /// A crash can still leave a private capture behind. Only this App's own
+    /// temporary capture names are removed; Desktop saves are never touched.
+    private func removeAbandonedTemporaryCaptures() {
+        guard validatesNativeContext, captureDirectoryOverride == nil,
+              let names = try? fileManager.contentsOfDirectory(atPath: fileManager.temporaryDirectory.path) else { return }
+        for name in names.prefix(4096) where name.hasPrefix(Self.temporaryCapturePrefix) && name.hasSuffix(".png") {
+            try? fileManager.removeItem(at: fileManager.temporaryDirectory.appendingPathComponent(name))
+        }
     }
 
     public func verifyAndRepair(reason: String) {
@@ -604,10 +628,12 @@ public struct ScreenshotStatus: Equatable, Sendable {
             return
         }
         let destination = captureURL()
+        activeDestination = destination
         scheduleCaptureTimeout(token)
         jobKind = kind
         setStatus(issue: nil, result: kind == .region ? "正在框選截圖" : "正在截圖")
         do {
+            activeJobToken = token
             activeJob = try driver.launch(to: destination, kind: kind,
                 processID: runtimePolicy?.input.foreground.processID ?? 0) { [weak self] code, failure in
                 Task { @MainActor [weak self] in
@@ -638,15 +664,17 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     private func finishCapture(exitCode: Int32, failure: ScreenshotFailure?, url: URL, token: ScreenshotCaptureLifecycle.Token) async {
-        let temporary = url.deletingLastPathComponent().standardizedFileURL == fileManager.temporaryDirectory.standardizedFileURL
+        let temporary = isTemporary(url)
         defer {
             if temporary { try? fileManager.removeItem(at: url) }
+            if activeDestination == url { activeDestination = nil }
             if let pending = pendingNativeURL {
                 pendingNativeURL = nil
                 acceptNativeScreenshot(pending)
             }
         }
-        activeJob = nil
+        // A late completion of an older job must not drop the current job's handle.
+        if activeJobToken == token { activeJob = nil; activeJobToken = nil }
         guard capture.isCurrent(token), sourceJob?.validForAsyncWork ?? true else {
             jobTimer?.cancel(); jobTimer = nil
             _ = capture.complete(token); return
@@ -688,16 +716,17 @@ public struct ScreenshotStatus: Equatable, Sendable {
         switch result {
         case .unreadableImage:
             setStatus(issue: "圖片已儲存，但無法讀取以複製到剪貼簿。", result: "儲存成功、複製失敗")
-            log("圖片已儲存，但無法讀取：\(url.path)")
+            log("截圖無法讀取以複製（\(jobKind)）")
             return
         case .writeFailed:
             setStatus(issue: "圖片已儲存，但無法寫入剪貼簿。", result: "儲存成功、複製失敗")
-            log("圖片已儲存，但剪貼簿寫入失敗：\(url.path)")
+            log("截圖剪貼簿寫入失敗（\(jobKind)）")
             return
         case .success: break
         }
         setStatus(issue: nil, result: "截圖已複製，可直接貼上")
-        log("截圖已儲存並複製：\(url.path)")
+        // Paths contain the account name; log only the outcome and kind.
+        log(temporary ? "截圖已複製（\(jobKind)）" : "截圖已儲存並複製（\(jobKind)）")
     }
 
     private func isAuthorized() -> Bool {
@@ -718,7 +747,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         let directory = captureDirectory()
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        let name = "WindowsMacBridge Screenshot \(formatter.string(from: Date()))-\(UUID().uuidString.prefix(8)).png"
+        let name = Self.temporaryCapturePrefix + "\(formatter.string(from: Date()))-\(UUID().uuidString.prefix(8)).png"
         return directory.appendingPathComponent(name)
     }
 
