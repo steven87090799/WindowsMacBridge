@@ -202,7 +202,7 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
             let count = pasteboard.changeCount
             // A destination folder may have no selection. The armed file clipboard and
             // Finder PID are the move authority; text editing always gets ordinary paste.
-            let move = focus != .text && pasteboard.types?.contains(.fileURL) == true &&
+            let move = FinderActionPolicy.allowsMove(focus: focus) && pasteboard.types?.contains(.fileURL) == true &&
                 cut.consume(changeCount: count, finderPID: pid, now: now)
             cut.cancel()
             guard pasteboard.changeCount == count else { report("剪貼簿已改變，取消本次貼上。"); return }
@@ -222,18 +222,19 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
             guard finderPermanentDeleteEnabled, focus == .files else {
                 report("永久刪除略過：設定未啟用或焦點不是檔案列表。"); return
             }
-            let alert = NSAlert()
-            alert.messageText = "永久刪除 Finder 選取項目？"
-            alert.informativeText = "此操作無法從垃圾桶還原。Finder 可能會再次要求確認。"
-            alert.addButton(withTitle: "永久刪除")
-            alert.addButton(withTitle: "取消")
-            guard alert.runModal() == .alertFirstButtonReturn, allowed(request, ignoreDeadline: true) else { return }
-            _ = emit(51, [.command, .option], request: request, ignoreDeadline: true)
+            // Finder's own Delete Immediately (Option-Command-Delete) always asks
+            // for confirmation. An in-App modal could not work here: clicking it
+            // activated this App, so the Finder-frontmost check then dropped the
+            // confirmed request, and the modal blocked every queued action.
+            if emit(51, [.command, .option], request: request) {
+                report("已請 Finder 永久刪除；請在 Finder 的確認視窗中決定。")
+            }
         case .parentFolder:
-            if focus == .files { _ = emit(126, .command, request: request) }
+            if FinderActionPolicy.inFileView(focus) { _ = emit(126, .command, request: request) }
             else { _ = emit(51, [], request: request) }
         case .newFolder:
-            if focus == .files { _ = emit(45, [.command, .shift], request: request) }
+            if FinderActionPolicy.inFileView(focus) { _ = emit(45, [.command, .shift], request: request) }
+            else { report("新增資料夾略過：焦點不是可確認的 Finder 視窗。") }
         case .goToFolder:
             _ = emit(5, [.command, .shift], request: request)
         }
@@ -289,7 +290,8 @@ enum FinderFocusReader {
             guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &value) == .success,
                   let role = value as? String else { return .unknown }
             if classify(role: role, fileSelection: false, sidebar: false) == .text { return .text }
-            if role == kAXWindowRole { return fileSelection ? .files : .unknown }
+            // Reaching the window without text or sidebar is positive file-view evidence.
+            if role == kAXWindowRole { return fileSelection ? .files : .folder }
             var identifier: CFTypeRef?
             _ = AXUIElementCopyAttributeValue(element, kAXIdentifierAttribute as CFString, &identifier)
             if (identifier as? String)?.localizedCaseInsensitiveContains("sidebar") == true { return .unknown }

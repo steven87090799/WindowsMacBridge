@@ -73,11 +73,13 @@ struct WMBVirtualHID {
     std::atomic<bool> needs_full_report{true};
     std::atomic<unsigned> outstanding{0};
     std::atomic<int64_t> progress{0};
-    std::unique_ptr<service::client> client;
     // Caller owns serialization; the official service callbacks only touch status.
     WMBHIDState last{};
     bool has_last = false;
     std::atomic<bool> pointing_enabled{false};
+    // Declared last so it is destroyed first: ~client() waits for a running
+    // service callback while every member that callback reads is still alive.
+    std::unique_ptr<service::client> client;
 };
 
 extern "C" size_t wmb_plan_pointing_motion(uint32_t buttons, int16_t x, int16_t y, int16_t wheel, int16_t pan,
@@ -167,17 +169,20 @@ extern "C" WMBVirtualHID* wmb_virtual_hid_create() {
         result = std::make_unique<WMBVirtualHID>();
         auto* state = result.get();
         state->client = std::make_unique<service::client>();
+        // libc++ nulls unique_ptr storage before running ~client(); a callback
+        // still executing during teardown must not reload state->client.
+        auto* service_client = state->client.get();
         state->client->output_request_completed.connect([state] {
             state->outstanding.fetch_sub(1);
             state->progress.store(now_ns());
         });
-        state->client->connected.connect([state] {
+        state->client->connected.connect([state, service_client] {
             state->needs_full_report.store(true);
             state->status.fetch_and(~WMB_CONNECTION_FAULT);
             service::virtual_hid_keyboard_parameters parameters;
             parameters.set_country_code(pqrs::hid::country_code::us);
-            state->client->async_virtual_hid_keyboard_initialize(parameters);
-            if (state->pointing_enabled) state->client->async_virtual_hid_pointing_initialize();
+            service_client->async_virtual_hid_keyboard_initialize(parameters);
+            if (state->pointing_enabled) service_client->async_virtual_hid_pointing_initialize();
         });
         state->client->driver_connected.connect([state](bool ready) {
             if (ready) state->status.fetch_or(WMB_DRIVER_CONNECTED);
@@ -225,6 +230,9 @@ extern "C" uint32_t wmb_virtual_hid_status(const WMBVirtualHID* client) {
     // Never keep a physical keyboard seized while output service replies are stalled.
     if (client->outstanding.load() > 0 && now_ns() - client->progress.load() > 500000000) return WMB_CONNECTION_FAULT;
     return client->status.load();
+}
+extern "C" uint32_t wmb_virtual_hid_outstanding(const WMBVirtualHID* client) {
+    return client ? client->outstanding.load() : 0;
 }
 extern "C" void wmb_virtual_hid_enable_pointing(WMBVirtualHID* client) {
     if (!client || client->pointing_enabled.exchange(true)) return;

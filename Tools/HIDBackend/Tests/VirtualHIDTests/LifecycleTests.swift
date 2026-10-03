@@ -60,6 +60,18 @@ struct LifecycleTests {
         #expect(lifecycle.update(requirements, now: 10) == [.openPhysicalDevices])
         #expect(lifecycle.stop() == [.releaseVirtualOutputs, .closePhysicalDevices])
     }
+    @Test func keyPressedDuringSeizeAbortsWithoutRequiringRestart() {
+        var lifecycle = CaptureLifecycle()
+        let requirements = valid()
+        #expect(lifecycle.update(requirements, now: 10) == [.openPhysicalDevices])
+        #expect(lifecycle.captureAborted() == [.releaseVirtualOutputs, .closePhysicalDevices])
+        #expect(lifecycle.phase == .waitingForNeutral)
+        // No explicit restart is needed once the keys are neutral again.
+        #expect(lifecycle.update(requirements, now: 10) == [.openPhysicalDevices])
+        #expect(lifecycle.captureCompleted(success: true) == [] && lifecycle.phase == .capturing)
+        // Only a pending open can be aborted.
+        #expect(lifecycle.captureAborted() == [] && lifecycle.phase == .capturing)
+    }
     @Test func oneKeyboardDisconnectDoesNotStopAnotherCapturedKeyboard() {
         var lifecycle = CaptureLifecycle()
         _ = lifecycle.update(valid(), now: 10); _ = lifecycle.captureCompleted(success: true)

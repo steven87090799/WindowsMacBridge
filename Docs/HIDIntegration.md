@@ -31,9 +31,9 @@ WindowsMacBridge Menu Bar / 唯音協調器 (console user)
 | --- | --- |
 | BridgeCore/HIDTranslationEngine | 16 個 device ID、256 個 press slots；physical/consumed/output 分離；compiled rules；固定 32 usage/report；上下事件配對 |
 | BridgeCore/HIDKeyMap | USB HID usage 與 Carbon virtual key position 表；不解碼文字／Unicode |
-| HIDProtocol | config ≤8192 bytes／status ≤16384 bytes；版本、context、generation、actionGeneration、restart、enable、heartbeat；最多16裝置偏好／狀態，固定 Finder/System action ID；明確權限 request |
-| BridgePlatform/HIDBackendClient | main actor NSXPC；最多一筆 in-flight configure；每 250 ms heartbeat；超時／拒绝斷線；generation/PID 驗證動作 |
-| HelperService | console UID + runtime SecCode validity + bundle identifier + root-owned CDHash pin；單一 controller；無 shell/key-stream endpoint |
+| HIDProtocol | config ≤8192 bytes／status ≤16384 bytes；版本（目前 IPC protocolVersion 7）、context、generation、actionGeneration、restart、enable；最多16裝置偏好／狀態，固定 Finder/System action ID；明確權限 request |
+| BridgePlatform/HIDBackendClient | main actor NSXPC；最多一筆 in-flight configure；沒有 heartbeat，連線本身就是 ownership lease；超時／拒絕斷線；generation/PID 驗證動作；stop 逾時鎖定 releaseUnconfirmed |
+| HelperService | console UID + runtime SecCode validity + bundle identifier + root-owned CDHash pin；另以 `setCodeSigningRequirement` 對每則訊息驗 audit token；單一 controller；無 shell/key-stream endpoint |
 | DeviceCapture | 單 CFRunLoop 的 IOHID callbacks、descriptor 篩選、neutral probe、seize、watchdog、report queue、context transition |
 | HIDLifecycle | driver ready / lease / permissions / session / secure / neutral 狀態契約；partial open 也必定 cleanup |
 | VirtualHID C ABI | SDK 的 keyboard/Fn/consumer/vendor/desktop report；只在 ready 時發送；256 outstanding、500 ms 無回覆失效 |
@@ -59,7 +59,7 @@ Context/PID/mode/layout/finder 或 restart 改變時先 invalidation；所有已
 
 ## 停止路徑
 
-Lease 最多1秒、enabled-only timer 250 ms，connection invalidation、session、secure、撤權、driver not ready、output response 停滯500 ms、隊列 overflow 或 emergency 都觸發 reset outputs → close seized devices。close 不依賴 reset 成功。send/report fault 與 partial seize 要求 UI 明確 restart；不無限重試擷取。SIGTERM 先 stop/reset 再退出。SIGKILL/崩潰仰賴 OS 關閉 IOHID handle 與官方服務移除 client；實際 release timing 未驗收，不保證瞬時無卡鍵。
+Ownership 由已驗證的 XPC 連線維持（沒有 heartbeat 或固定 timer；持鍵時才有單次 1 秒安全檢查）。connection invalidation、console 使用者改變（configd 通知）、session、secure、撤權、driver not ready、output response 停滯500 ms、隊列 overflow 或 emergency 都觸發 reset outputs → close seized devices，並立即發布狀態。close 不依賴 reset 成功。Secure Input／session 屬暫時狀態，釋放後可重新擷取；send/report fault 與 open 失敗要求 UI 明確 restart；observe→seize 之間按鍵最多重試 3 次。不無限重試擷取。SIGTERM 先 stop/reset 再退出。SIGKILL/崩潰仰賴 OS 關閉 IOHID handle 與官方服務移除 client；實際 release timing 未驗收，不保證瞬時無卡鍵。
 
 `Stop.command` bootout helper；`Uninstall.command` 只移除此工具的 helper/pin/launchd，保留 App、設定、備份與官方共用 Driver。Installer 本身未在開發機以管理員執行。
 

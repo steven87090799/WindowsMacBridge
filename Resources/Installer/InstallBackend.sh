@@ -25,13 +25,15 @@ bridge_driver_changed=0
 bridge_restore_application() {
     local bridge_restore="$bridge_stage/retired-application.app" bridge_rejected
     if [[ "$bridge_app_saved" == 1 ]]; then
-        if [[ ! -d "$bridge_restore" ]]; then
-            # Older interrupted transactions may only have the verified backup.
-            # Reconstruct outside /Applications before publishing a complete App.
+        # mv keeps Finder tags (com.apple.FinderInfo), which fail strict
+        # verification and used to wedge every later recovery. Older interrupted
+        # transactions may only have the backup. Rebuild an attribute-free copy
+        # outside /Applications before publishing a complete App.
+        if [[ ! -d "$bridge_restore" ]] || ! /usr/bin/codesign --verify --strict "$bridge_restore"; then
             bridge_restore="$(/usr/bin/mktemp -d "$bridge_stage/restore.XXXXXX")/WindowsMacBridge.app" || return 1
-            /usr/bin/ditto "$bridge_stage/previous/WindowsMacBridge.app" "$bridge_restore" || return 1
+            /usr/bin/ditto --noextattr --norsrc "$bridge_stage/previous/WindowsMacBridge.app" "$bridge_restore" || return 1
         fi
-        /usr/bin/codesign --verify --strict "$bridge_restore" || return 1
+        /usr/bin/codesign --verify --strict "$bridge_restore" || { echo 'Previous App snapshot failed verification.' >&2; return 1; }
     fi
     if [[ -e "$bridge_app" ]]; then
         bridge_rejected="$(/usr/bin/mktemp -d "$bridge_stage/rejected.XXXXXX")" || return 1
@@ -112,10 +114,11 @@ bridge_recover_interrupted() {
     [[ -f "$bridge_recovery" && ! -L "$bridge_recovery" &&
        "$(/usr/bin/stat -f '%u' "$bridge_recovery")" == 0 ]] || { echo 'Untrusted recovery journal.' >&2; return 1; }
     local bridge_mode bridge_header bridge_saved_stage bridge_saved_pid bridge_saved_boot
-    local bridge_saved_root bridge_saved_app bridge_saved_helper bridge_saved_driver bridge_new_stage
+    local bridge_saved_root bridge_saved_app bridge_saved_helper bridge_saved_driver bridge_new_stage bridge_check
     local bridge_saved_driver_kind=reuse bridge_saved_driver_version='' bridge_saved_driver_active=0 bridge_saved_phase
     bridge_mode="$(/usr/bin/stat -f '%Lp' "$bridge_recovery")"
-    [[ "$((8#$bridge_mode & 077))" == 0 && "$(/usr/bin/wc -c < "$bridge_recovery")" -le 1024 ]] || return 1
+    [[ "$((8#$bridge_mode & 077))" == 0 && "$(/usr/bin/wc -c < "$bridge_recovery")" -le 1024 ]] || {
+        echo 'Recovery journal has unsafe permissions or size; nothing was changed.' >&2; return 1; }
     {
         IFS= read -r bridge_header
         IFS= read -r bridge_saved_stage
@@ -136,19 +139,27 @@ bridge_recover_interrupted() {
        "$bridge_saved_root$bridge_saved_app$bridge_saved_helper$bridge_saved_driver" =~ ^[01]{4}$ &&
        -d "$bridge_saved_stage/previous" && ! -L "$bridge_saved_stage" &&
        "$(/usr/bin/stat -f '%u' "$bridge_saved_stage")" == 0 ]] || { echo 'Invalid recovery snapshot.' >&2; return 1; }
-    [[ "$bridge_saved_driver_active" =~ ^[01]$ ]] || return 1
+    [[ "$bridge_saved_driver_active" =~ ^[01]$ ]] || { echo 'Invalid Driver recovery state.' >&2; return 1; }
     case "$bridge_saved_driver_kind:$bridge_saved_driver_version" in
         reuse:*|fresh:|upgrade:7.3.0) ;;
         *) echo 'Invalid Driver recovery policy.' >&2; return 1 ;;
     esac
     bridge_mode="$(/usr/bin/stat -f '%Lp' "$bridge_saved_stage")"
-    [[ "$((8#$bridge_mode & 077))" == 0 && -z "$(/usr/bin/find "$bridge_saved_stage" -type l -print -quit)" ]] || return 1
+    [[ "$((8#$bridge_mode & 077))" == 0 && -z "$(/usr/bin/find "$bridge_saved_stage" -type l -print -quit)" ]] || {
+        echo 'Recovery snapshot has unsafe permissions or symlinks; nothing was changed.' >&2; return 1; }
     if [[ "$bridge_saved_boot" == "$(/usr/sbin/sysctl -n kern.bootsessionuuid)" ]] && kill -0 "$bridge_saved_pid" 2>/dev/null; then
         echo 'Another installer may still be running; recovery refused.' >&2; return 1
     fi
     if [[ "$bridge_saved_app" == 1 ]]; then
-        [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bridge_saved_stage/previous/WindowsMacBridge.app/Contents/Info.plist")" == local.WindowsMacBridge ]] || return 1
-        /usr/bin/codesign --verify --strict "$bridge_saved_stage/previous/WindowsMacBridge.app"
+        [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bridge_saved_stage/previous/WindowsMacBridge.app/Contents/Info.plist")" == local.WindowsMacBridge ]] || {
+            echo 'Recovery snapshot is not this App; nothing was changed.' >&2; return 1; }
+        # Snapshots from older installers may carry Finder detritus; verify the
+        # same attribute-free copy that restoration publishes.
+        bridge_check="$(/usr/bin/mktemp -d "$bridge_stage/check.XXXXXX")"
+        /usr/bin/ditto --noextattr --norsrc "$bridge_saved_stage/previous/WindowsMacBridge.app" "$bridge_check/WindowsMacBridge.app"
+        /usr/bin/codesign --verify --strict "$bridge_check/WindowsMacBridge.app" || {
+            echo 'Recovery snapshot App failed verification; nothing was changed.' >&2; return 1; }
+        /bin/rm -rf "$bridge_check"
     fi
     bridge_preserve_stage=1
     bridge_new_stage="$bridge_stage"; bridge_stage="$bridge_saved_stage"
@@ -158,9 +169,11 @@ bridge_recover_interrupted() {
     bridge_driver_old_active="$bridge_saved_driver_active"; bridge_driver_changed=0
     if [[ "$bridge_header" == WMB-INSTALL-2 ]]; then
         [[ -f "$bridge_stage/driver.phase" && ! -L "$bridge_stage/driver.phase" &&
-           "$(/usr/bin/wc -c < "$bridge_stage/driver.phase")" -le 16 ]] || return 1
+           "$(/usr/bin/wc -c < "$bridge_stage/driver.phase")" -le 16 ]] || {
+            echo 'Recovery snapshot has no valid Driver phase; nothing was changed.' >&2; return 1; }
         bridge_saved_phase="$(/bin/cat "$bridge_stage/driver.phase")"
-        case "$bridge_saved_phase" in prepared|restored) ;; changed) bridge_driver_changed=1 ;; *) return 1 ;; esac
+        case "$bridge_saved_phase" in prepared|restored) ;; changed) bridge_driver_changed=1 ;;
+            *) echo 'Invalid Driver phase in recovery snapshot.' >&2; return 1 ;; esac
     fi
     bridge_rollback || return 1
     /bin/rm -f "$bridge_recovery"
@@ -281,7 +294,11 @@ done
 if /bin/launchctl print system/local.WindowsMacBridge.HIDHelper >/dev/null 2>&1; then bridge_helper_running=1; fi
 if /bin/launchctl print system/local.WindowsMacBridge.VirtualHIDService >/dev/null 2>&1; then bridge_driver_running=1; fi
 if [[ -d "$bridge_app" ]]; then
-    /usr/bin/ditto "$bridge_app" "$bridge_stage/previous/WindowsMacBridge.app"
+    # Attribute-free and verified before anything is switched, so rollback can
+    # always publish it (a Finder tag on the installed App fails --strict).
+    /usr/bin/ditto --noextattr --norsrc "$bridge_app" "$bridge_stage/previous/WindowsMacBridge.app"
+    /usr/bin/codesign --verify --strict "$bridge_stage/previous/WindowsMacBridge.app" || {
+        echo 'The installed App cannot be snapshotted for rollback; nothing was switched.' >&2; exit 1; }
     bridge_app_saved=1
 fi
 bridge_driver_prepare
@@ -311,7 +328,10 @@ if [[ -d "$bridge_app" ]]; then
     /bin/mv "$bridge_app" "$bridge_stage/retired-application.app"
 fi
 bridge_app_changed=1
-/bin/mv "$bridge_stage/next/WindowsMacBridge.app" "$bridge_app"
+# /Applications is admin-group writable: re-check immediately before publishing,
+# and never let mv move the bundle INTO a directory or symlink at that path.
+[[ ! -e "$bridge_app" && ! -L "$bridge_app" ]] || { echo 'Install destination reappeared; not publishing.' >&2; exit 1; }
+/bin/mv -h "$bridge_stage/next/WindowsMacBridge.app" "$bridge_app"
 for bridge_name in WindowsMacBridge.app BridgeHIDHelper.app; do
     if [[ -e "$bridge_root/$bridge_name" ]]; then
         /bin/mv "$bridge_root/$bridge_name" "$bridge_stage/retired-$bridge_name"

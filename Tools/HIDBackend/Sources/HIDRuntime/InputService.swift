@@ -25,33 +25,59 @@ final class InputService: NSObject, NSXPCListenerDelegate {
         return capture
     }
     private let pinnedHash: Data
+    /// Enforced by XPC for every message, not only when the connection is accepted.
+    private let clientRequirement: String
     private var connection: NSXPCConnection?
     private let acceptedConnections = ConnectionRetainer<NSXPCConnection>()
+    /// Owners replaced by a newer configure. A request already queued from a
+    /// displaced owner must not take the lease back (main queue only, bounded
+    /// by acceptedConnections).
+    private var displaced = Set<ObjectIdentifier>()
     private let listener = NSXPCListener(machServiceName: HIDService.name)
     private var termination: DispatchSourceSignal?
     private var idleExit: DispatchWorkItem?
+    /// The pin is read from the same descriptor that was validated: no symlink,
+    /// root-owned, regular, not group/world-writable, bounded.
+    static func readPin(_ path: String) -> Data? {
+        let descriptor = open(path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        guard descriptor >= 0 else { return nil }
+        let file = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        var info = stat()
+        guard fstat(descriptor, &info) == 0, info.st_uid == 0, info.st_mode & S_IFMT == S_IFREG,
+              info.st_mode & 0o022 == 0, info.st_nlink == 1, info.st_size > 0, info.st_size < 4096,
+              let data = try? file.read(upToCount: 4096), data.count < 4096 else { return nil }
+        return data
+    }
     init?(pinPath: String = HIDService.root + "/controller.plist") {
         guard geteuid() == 0,
-              let attrs = try? FileManager.default.attributesOfItem(atPath: pinPath),
-              (attrs[.ownerAccountID] as? NSNumber)?.intValue == 0,
-              ((attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0) & 0o022 == 0,
-              attrs[.type] as? FileAttributeType == .typeRegular,
-              let data = try? Data(contentsOf: URL(fileURLWithPath: pinPath)), data.count < 4096,
+              let data = Self.readPin(pinPath),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-              let hash = plist["CDHash"] as? Data, hash.count == 20 else { return nil }
+              let hash = plist["CDHash"] as? Data, hash.count == 20,
+              let requirement = ControllerCodeRequirement.make(identifier: "local.WindowsMacBridge", cdhash: hash) else { return nil }
         self.pinnedHash = hash
+        self.clientRequirement = requirement
         super.init(); listener.delegate = self
     }
     func run() {
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-        source.setEventHandler { [weak self] in self?.captureStorage?.stop(); exit(0) }
+        // stop() closes seized devices synchronously. _exit avoids running C++
+        // static destructors while the VirtualHID teardown worker may be active.
+        source.setEventHandler { [weak self] in self?.captureStorage?.stop(); _exit(0) }
         source.resume(); termination = source
         guard let lifetime = PassiveRunLoopLifetime() else { exit(70) }
-        withExtendedLifetime((self, lifetime)) { listener.resume(); RunLoop.main.run() }
+        withExtendedLifetime((self, lifetime)) {
+            listener.resume()
+            // A launch by a lookup that is then rejected must not leave a resident root process.
+            scheduleIdleExit()
+            RunLoop.main.run()
+        }
     }
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection candidate: NSXPCConnection) -> Bool {
-        guard authenticated(candidate), acceptedConnections.insert(candidate) else { return false }
+        guard authenticated(candidate), acceptedConnections.insert(candidate) else {
+            DispatchQueue.main.async { [weak self] in self?.scheduleIdleExit() }
+            return false
+        }
         DispatchQueue.main.async { [weak self] in self?.idleExit?.cancel(); self?.idleExit = nil }
         let api = Endpoint(service: self, connection: candidate)
         candidate.exportedInterface = NSXPCInterface(with: HIDHelperProtocol.self)
@@ -61,6 +87,7 @@ final class InputService: NSObject, NSXPCListenerDelegate {
             DispatchQueue.main.async {
                 guard let self, let candidate else { return }
                 self.acceptedConnections.remove(candidate)
+                self.displaced.remove(ObjectIdentifier(candidate))
                 if self.connection === candidate {
                     self.captureStorage?.stop(); self.connection = nil
                 }
@@ -68,6 +95,9 @@ final class InputService: NSObject, NSXPCListenerDelegate {
             }
         }
         candidate.interruptionHandler = candidate.invalidationHandler
+        // The accept-time check above resolves the peer by PID. Bind every later
+        // message to the pinned code via the sender's audit token as well.
+        candidate.setCodeSigningRequirement(clientRequirement)
         // Permission-only connections never take keyboard ownership. The
         // authenticated configure request acquires the single capture lease.
         candidate.resume(); return true
@@ -77,8 +107,13 @@ final class InputService: NSObject, NSXPCListenerDelegate {
         guard acceptedConnections.isEmpty, connection == nil else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.acceptedConnections.isEmpty, self.connection == nil else { return }
-            if let capture = self.captureStorage { capture.stop { exit(0) } }
-            else { exit(0) }
+            // Teardown can finish after a new controller connected; only exit if still idle.
+            if let capture = self.captureStorage {
+                capture.stop { [weak self] in
+                    guard let self, self.acceptedConnections.isEmpty, self.connection == nil else { return }
+                    exit(0)
+                }
+            } else { exit(0) }
         }
         idleExit = work; DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
     }
@@ -107,8 +142,10 @@ final class InputService: NSObject, NSXPCListenerDelegate {
             }
             DispatchQueue.main.async { [weak self] in
                 guard let self, let service, let connection,
+                      !service.displaced.contains(ObjectIdentifier(connection)),
                       connection.effectiveUserIdentifier == DeviceCapture.consoleUID() else { reply(Data()); return }
                 if service.connection !== connection {
+                    if let previous = service.connection { service.displaced.insert(ObjectIdentifier(previous)) }
                     service.capture.stop(); service.connection?.invalidate(); service.connection = connection
                 }
                 service.capture.configure(config, uid: connection.effectiveUserIdentifier)

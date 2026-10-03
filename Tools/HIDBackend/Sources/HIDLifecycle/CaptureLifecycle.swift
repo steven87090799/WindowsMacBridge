@@ -49,6 +49,14 @@ public struct CaptureLifecycle: Sendable {
         faulted = true; phase = .faulted
         return release()
     }
+    /// A key pressed in the observation/seize gap is not a device fault: release
+    /// and wait for neutral again. The adapter bounds consecutive aborts and
+    /// reports a fault after that, so a flapping element cannot spin.
+    public mutating func captureAborted() -> [CaptureCommand] {
+        guard phase == .readyToCapture else { return [] }
+        phase = .waitingForNeutral
+        return release()
+    }
     public mutating func stop() -> [CaptureCommand] {
         phase = .inactive
         return release()

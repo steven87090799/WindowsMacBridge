@@ -7,10 +7,16 @@ struct ReleasePlatformRegressionTests {
     @Test func finderDeleteUsesTextDeletionForTextAndUnknownFocus() {
         #expect(FinderActionPolicy.deleteOutput(focus: .files).keyCode == 51)
         #expect(FinderActionPolicy.deleteOutput(focus: .files).modifiers == .command)
-        for focus: FinderFocus in [.text, .unknown] {
+        for focus: FinderFocus in [.text, .unknown, .folder] {
             let output = FinderActionPolicy.deleteOutput(focus: focus)
             #expect(output.keyCode == 117 && output.modifiers.isEmpty)
         }
+    }
+    @Test func armedCutMovesOnlyOnPositiveFileViewEvidence() {
+        // An empty destination folder still moves; an AX failure or text field pastes.
+        #expect(FinderActionPolicy.allowsMove(focus: .files) && FinderActionPolicy.allowsMove(focus: .folder))
+        #expect(!FinderActionPolicy.allowsMove(focus: .unknown) && !FinderActionPolicy.allowsMove(focus: .text))
+        #expect(FinderActionPolicy.inFileView(.folder) && !FinderActionPolicy.inFileView(.unknown))
     }
     @Test func filenameAndSidebarAreNotInferredAsFileSelectionFromRoleAlone() {
         #expect(FinderFocusReader.classify(role: kAXTextFieldRole, fileSelection: true, sidebar: false) == .text)

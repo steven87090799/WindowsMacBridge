@@ -19,13 +19,17 @@ import BridgePlatform
         #expect(settings.finderEnabled && settings.screenshotAutoCopy)
         #expect(!settings.macBookFnControlSwap)
     }
-    @Test func lateHIDReleaseCannotDisableEventTap() {
+    @Test func pendingHIDReleaseGatesEitherBackendUntilItResolves() {
+        // VirtualHID output can re-enter a session tap as HID-state input while
+        // the old lease is retiring; neither backend may translate until then.
         var input = RuntimePolicyInput()
         input.shortcutEnabled = true; input.hidReleasePending = true
         var policy = RuntimePolicyCoordinator()
-        #expect(policy.transition(input).permitsInput)
+        #expect(!policy.transition(input).permitsInput)
         input.backend = .deviceHID
         #expect(!policy.transition(input).permitsInput)
+        input.backend = .eventTap; input.hidReleasePending = false
+        #expect(policy.transition(input).permitsInput)
     }
     @Test func pauseWhileRestoringFnKeepsOnlyTheReleaseObservationAlive() {
         var config = EngineConfiguration()
@@ -35,6 +39,23 @@ import BridgePlatform
         #expect(!config.needsEventTap)
         config.nativeMappingAwaitingNeutral = true; config.sessionActive = false
         #expect(!config.needsEventTap)
+    }
+    @Test func secureInputKeepsTheTapSoItsEndIsObservedWithoutAnAppSwitch() {
+        var input = RuntimePolicyInput(); input.shortcutEnabled = true; input.secureInput = true
+        var policy = RuntimePolicyCoordinator()
+        let secure = policy.transition(input)
+        #expect(!secure.permitsInput && secure.awaitsSecureInputEnd)
+        var config = EngineConfiguration()
+        config.enabled = secure.permitsInput; config.observesSecureInputEnd = secure.awaitsSecureInputEnd
+        #expect(config.needsEventTap)
+        // Another blocker (pause, permissions, disabled) never keeps a tap for Secure Input.
+        for mutation: (inout RuntimePolicyInput) -> Void in [{ $0.paused = true }, { $0.listening = false },
+                                                           { $0.shortcutEnabled = false }, { $0.sessionActive = false }] {
+            var blocked = input; mutation(&blocked)
+            #expect(!policy.transition(blocked).awaitsSecureInputEnd)
+        }
+        input.secureInput = false
+        #expect(!policy.transition(input).awaitsSecureInputEnd && policy.transition(input).permitsInput)
     }
     @Test func normalIdleHasNoWakeTimer() {
         var input = RuntimePolicyInput(); input.shortcutEnabled = true

@@ -34,6 +34,11 @@ private final class HIDConnectionLifetime: @unchecked Sendable {
     public private(set) var status = HIDStatus()
     public var onOwnershipChange: (() -> Void)?
     public private(set) var releasePending = false
+    /// A stop request timed out: the lease was invalidated, but the helper never
+    /// confirmed that the keyboard was released. Never inferred from a timeout;
+    /// cleared by an acknowledgement or an explicit engine restart only.
+    public private(set) var releaseUnconfirmed = false
+    public func clearUnconfirmedRelease() { releaseUnconfirmed = false }
     private var verifiedStatusAt: TimeInterval?
     private var permissionProbeID: UUID?
     private var permissionConnection: NSXPCConnection? { get { lifetime.permissionConnection } set { lifetime.permissionConnection = newValue } }
@@ -195,8 +200,9 @@ private final class HIDConnectionLifetime: @unchecked Sendable {
                 guard let self, self.stopID == id else { return }
                 self.stopTimeout?.cancel(); self.stopTimeout = nil
                 // Invalidation retires the authenticated ownership lease at the
-                // service. Never keep a stale stop flag blocking EventTap forever.
-                self.finishStop(id, acknowledged: false)
+                // service, but a stalled helper may still hold the keyboard. The
+                // pending flag ends here; the owner fails closed on releaseUnconfirmed.
+                self.finishStop(id, acknowledged: false, timedOut: true)
             }
         }
         stopTimeout = timeout; timeout.resume()
@@ -211,13 +217,20 @@ private final class HIDConnectionLifetime: @unchecked Sendable {
             }
         }
     }
-    private func finishStop(_ id: UUID, acknowledged: Bool) {
+    private func finishStop(_ id: UUID, acknowledged: Bool, timedOut: Bool = false) {
         guard stopID == id else { return }
         stopTimeout?.cancel(); stopTimeout = nil; stopID = nil
         let old = stoppingConnection; stoppingConnection = nil
         old?.invalidationHandler = nil; old?.interruptionHandler = nil; old?.invalidate()
         releasePending = false; status = HIDStatus()
-        if !acknowledged { status.state = "停止未獲確認；已銷毀舊連線，EventTap 不受阻擋。" }
+        if acknowledged { releaseUnconfirmed = false }
+        // Invalidation/transport loss means the helper connection is gone; the
+        // service stops capture on invalidation. Only a live, silent helper latches.
+        if timedOut { releaseUnconfirmed = true }
+        if !acknowledged {
+            status.state = timedOut ? "停止未獲確認；已銷毀舊連線。確認鍵盤正常後按「恢復／重啟引擎」。"
+                                    : "背景元件連線已結束；擷取已交還系統。"
+        }
         onOwnershipChange?()
     }
     fileprivate func acceptStatus(_ data: Data, generation: UInt64, identity: UUID) {

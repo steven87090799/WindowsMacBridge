@@ -49,6 +49,8 @@ WMBVirtualHID *wmb_virtual_hid_create(void);
 uint32_t wmb_virtual_hid_status(const WMBVirtualHID *client);
 void wmb_virtual_hid_enable_pointing(WMBVirtualHID *client);
 bool wmb_virtual_hid_post_pointing(WMBVirtualHID *client, uint32_t buttons, int16_t x, int16_t y, int16_t wheel, int16_t pan);
+// Reports enqueued but not yet completed by the official service.
+uint32_t wmb_virtual_hid_outstanding(const WMBVirtualHID *client);
 // Posting is accepted only after the official service reports keyboard ready.
 bool wmb_virtual_hid_post(WMBVirtualHID *client, const WMBHIDState *state);
 void wmb_virtual_hid_reset(WMBVirtualHID *client);
