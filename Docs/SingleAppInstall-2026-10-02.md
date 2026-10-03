@@ -1,5 +1,7 @@
 # 單一 App 安裝結果
 
+此文件記錄 2026-10-02 的舊安裝架構，版本與權限清單已被 build 43 雙模式取代。現在的一般模式不自動安裝 HID 或要求管理員認證；最新流程見 [使用指南](../Resources/UserGuide.md) 與 [雙模式審查](DualModeReview-2026-10-03.md)。以下保留歷史診斷證據，不作為目前操作步驟。
+
 2026-10-02：依使用者要求，將安裝入口、helper、官方 Driver 套件與既有交易／回復流程收進一個 App。沒有執行測試套件或鍵盤／跨機驗收，只做必要 Release 建置、簽章／封裝檢查與實際安裝。
 
 最終候選：WindowsMacBridge 0.5.17（32），preview.4。ZIP 解壓後只有 WindowsMacBridge.app；不需要另外執行外部 Install.command。

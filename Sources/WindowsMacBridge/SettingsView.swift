@@ -75,7 +75,7 @@ struct SettingsView: View {
                         Text(notice).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
                     }
                     if usesHID {
-                    permissionRow("2. 輸入監控：WindowsMacBridge",
+                    permissionRow("輸入監控：WindowsMacBridge",
                                   verification: controller.inputMonitoringVerification,
                                   required: controller.settings.enabled || controller.settings.screenshotAutoCopy,
                                   location: "隱私權與安全性 → 輸入監控 → WindowsMacBridge",
@@ -88,24 +88,24 @@ struct SettingsView: View {
                     }
                     }
                     if controller.settings.isAdvancedModeEnabled {
-                    permissionRow("3. 螢幕錄製",
+                    permissionRow("螢幕錄製",
                                   verification: controller.permissionChecklist.verification(for: [.screenRecording]),
                                   required: controller.settings.screenshotAutoCopy,
                                   location: "隱私權與安全性 → 螢幕與系統音訊錄製 → WindowsMacBridge",
-                                  detail: "Windows 框選、視窗及全螢幕截圖需要；macOS 已存檔截圖的自動複製不另擷取螢幕。",
+                                  detail: "Windows 與 ⌘⇧3／⌘⇧4 的自動複製截圖需要；只在明確使用截圖時申請。",
                                   actionLabel: "開啟設定") {
                         controller.requestScreenRecording()
                         controller.openPermissionSettings(.screenRecording)
                     }
-                    permissionRow("4. 登入時啟動",
+                    permissionRow("登入時啟動",
                                   verification: controller.permissionChecklist.verification(for: [.loginItem]),
-                                  required: controller.settings.screenshotAutoCopy || controller.settings.macBookFnControlSwap,
+                                  required: false,
                                   location: "一般 → 登入項目與延伸功能 → WindowsMacBridge",
                                   detail: "登入後自動啟動，並在需要時還原內建鍵盤設定；只有按本列才提出申請。",
                                   enabledLabel: "已核准", disabledLabel: "未核准") {
                         controller.requestLoginItem()
                     }
-                    permissionRow("6. WindowsMacBridge 鍵盤驅動",
+                    permissionRow("WindowsMacBridge 鍵盤驅動",
                                   verification: controller.driverVerification, required: usesHID,
                                   location: "一般 → 登入項目與延伸功能 → 驅動程式延伸功能 → .Karabiner‑VirtualHIDDevice‑Manager",
                                   detail: "按本列即可申請並開啟驅動設定。系統中的名稱為 .Karabiner‑VirtualHIDDevice‑Manager；開啟該開關，若要求重開機請依提示完成。",
