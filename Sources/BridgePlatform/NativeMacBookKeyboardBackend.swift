@@ -37,12 +37,21 @@ import ApplicationServices
                 String(decoding: bytes.prefix(while: { $0 != 0 }).map { UInt8(bitPattern: $0) }, as: UTF8.self) : ""
         } else { bootID = "" }
     }
+    /// Apple Silicon portables publish well over 100 non-keyboard event services
+    /// (sensors, buttons, lid). Bound the scan and the keyboard rows separately;
+    /// counting every service against the keyboard bound disabled the swap there.
+    static let serviceScanLimit = 4096
+    static let keyboardServiceLimit = 128
     public func services() -> [MacBookKeyboardService]? {
         handles.removeAll(keepingCapacity: true)
-        guard let all = IOHIDEventSystemClientCopyServices(client) as? [IOHIDServiceClient], all.count <= 128 else { return nil }
-        return all.prefix(128).compactMap { service in
-            guard IOHIDServiceClientConformsTo(service, UInt32(kHIDPage_GenericDesktop), UInt32(kHIDUsage_GD_Keyboard)) != 0,
-                  let id = IOHIDServiceClientGetRegistryID(service) as? NSNumber else { return nil }
+        guard let all = IOHIDEventSystemClientCopyServices(client) as? [IOHIDServiceClient],
+              all.count <= Self.serviceScanLimit else { return nil }
+        let keyboards = all.filter {
+            IOHIDServiceClientConformsTo($0, UInt32(kHIDPage_GenericDesktop), UInt32(kHIDUsage_GD_Keyboard)) != 0
+        }
+        guard keyboards.count <= Self.keyboardServiceLimit else { return nil }
+        return keyboards.compactMap { service in
+            guard let id = IOHIDServiceClientGetRegistryID(service) as? NSNumber else { return nil }
             func property(_ key: String) -> Any? { IOHIDServiceClientCopyProperty(service, key as CFString) }
             handles[id.uint64Value] = service
             let identity = MacBookKeyboardIdentity(registryID: id.uint64Value,

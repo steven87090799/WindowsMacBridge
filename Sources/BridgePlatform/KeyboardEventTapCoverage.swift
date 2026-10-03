@@ -29,15 +29,35 @@ public enum KeyboardEventTapCoverage {
         return !relevant.isEmpty && relevant.allSatisfy { includesKeyboardEvents($0.eventsOfInterest) }
     }
 
+    /// CGGetEventTapList fills at most the supplied capacity and reports only the
+    /// filled count, so a fixed buffer silently truncates a busy registry and can
+    /// omit this process's own tap. Size from the live total, within a hard bound.
+    static let registryLimit: UInt32 = 4096
+    static func registryCapacity(total: UInt32) -> Int? {
+        guard total > 0, total <= registryLimit else { return nil }
+        // Slack for taps registered by other processes between the two queries.
+        return Int(total) + 16
+    }
+    static func isComplete(count: UInt32, capacity: Int) -> Bool {
+        count > 0 && Int(count) < capacity
+    }
+
     public static func currentProcessIsVerified(tap: CFMachPort,
                                                 tapPoint: CGEventTapLocation = .cgAnnotatedSessionEventTap) -> Bool {
         // A ready sibling must never stand in for the caller's disabled tap.
         guard CFMachPortIsValid(tap), CGEvent.tapIsEnabled(tap: tap) else { return false }
-        // One bounded query only when creating a tap; no polling or input reads.
-        var entries = [CGEventTapInformation](repeating: .init(), count: 128)
+        // Two bounded queries only when creating a tap; no polling or input reads.
+        var total: UInt32 = 0
+        let totalResult = CGGetEventTapList(0, nil, &total)
+        guard totalResult == .success, let capacity = registryCapacity(total: total) else {
+            logger.log("Tap registry unavailable: result=\(totalResult.rawValue), total=\(total)")
+            return false
+        }
+        var entries = [CGEventTapInformation](repeating: .init(), count: capacity)
         var count: UInt32 = 0
         let result = CGGetEventTapList(UInt32(entries.count), &entries, &count)
-        guard result == .success, count > 0, Int(count) <= entries.count else {
+        // A completely filled buffer may still be truncated; never verify from it.
+        guard result == .success, isComplete(count: count, capacity: entries.count) else {
             logger.log("Tap registry unavailable: result=\(result.rawValue), count=\(count)")
             return false
         }

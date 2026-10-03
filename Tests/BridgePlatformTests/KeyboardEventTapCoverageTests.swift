@@ -44,4 +44,15 @@ struct KeyboardEventTapCoverageTests {
         retiring.enabled = true
         #expect(!KeyboardEventTapCoverage.isVerified([replacement, retiring], processID: 123))
     }
+
+    @Test func registryQueryIsSizedFromTheLiveTotalAndRejectsTruncation() {
+        // CGGetEventTapList reports the FILLED count for a fixed buffer, so a
+        // registry with more than 128 taps could omit this process's own tap.
+        #expect(KeyboardEventTapCoverage.registryCapacity(total: 0) == nil)
+        #expect(KeyboardEventTapCoverage.registryCapacity(total: 200).map { $0 > 200 } == true)
+        #expect(KeyboardEventTapCoverage.registryCapacity(total: KeyboardEventTapCoverage.registryLimit + 1) == nil)
+        #expect(KeyboardEventTapCoverage.isComplete(count: 7, capacity: 23))
+        #expect(!KeyboardEventTapCoverage.isComplete(count: 23, capacity: 23))
+        #expect(!KeyboardEventTapCoverage.isComplete(count: 0, capacity: 23))
+    }
 }
