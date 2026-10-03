@@ -1,4 +1,4 @@
-# WindowsMacBridge build 43：人工驗收指南
+# WindowsMacBridge：人工驗收指南
 
 程序碼回歸／CI、Release 封裝、Installed GUI 授權、實體鍵盤、跨機與資源量測是不同證據。以下尚未實機驗收。用可丟棄文字與檔案，勿在重要文件做故障測試。
 

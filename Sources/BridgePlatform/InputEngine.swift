@@ -450,7 +450,7 @@ public final class InputEngine: @unchecked Sendable {
         tap = created; source = runSource
         CFRunLoopAddSource(CFRunLoopGetCurrent(), runSource, .commonModes)
         CGEvent.tapEnable(tap: created, enable: true)
-        guard KeyboardEventTapCoverage.currentProcessIsVerified() else {
+        guard KeyboardEventTapCoverage.currentProcessIsVerified(tap: created) else {
             destroyTap()
             tapAuthorizationFault = true
             status.fault = "鍵盤事件尚未就緒；請確認輔助功能與輸入監控。"

@@ -21,12 +21,18 @@ public enum KeyboardEventTapCoverage {
                                   tapPoint: CGEventTapLocation = .cgAnnotatedSessionEventTap) -> Bool {
         let relevant = entries.filter {
             $0.tappingProcess == processID && $0.tapPoint == tapPoint &&
-            $0.options == .defaultTap && $0.eventsOfInterest & requiredEvents != 0
+            $0.options == .defaultTap && $0.enabled && $0.eventsOfInterest & requiredEvents != 0
         }
-        return !relevant.isEmpty && relevant.allSatisfy { $0.enabled && includesKeyboardEvents($0.eventsOfInterest) }
+        // WindowServer can retain disabled predecessors during replacement. They
+        // cannot receive input and must not reject an enabled, complete new tap.
+        // Every enabled sibling must still have the full keyboard mask.
+        return !relevant.isEmpty && relevant.allSatisfy { includesKeyboardEvents($0.eventsOfInterest) }
     }
 
-    public static func currentProcessIsVerified(tapPoint: CGEventTapLocation = .cgAnnotatedSessionEventTap) -> Bool {
+    public static func currentProcessIsVerified(tap: CFMachPort,
+                                                tapPoint: CGEventTapLocation = .cgAnnotatedSessionEventTap) -> Bool {
+        // A ready sibling must never stand in for the caller's disabled tap.
+        guard CFMachPortIsValid(tap), CGEvent.tapIsEnabled(tap: tap) else { return false }
         // One bounded query only when creating a tap; no polling or input reads.
         var entries = [CGEventTapInformation](repeating: .init(), count: 128)
         var count: UInt32 = 0
