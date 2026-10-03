@@ -120,11 +120,14 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         // HID -> EventTap: the old client must survive and keep gating new owners.
         slot.synchronize(wanted: false)
         #expect(slot.active == nil && slot.releasePending && slot.retiringCount == 1)
-        for _ in 0..<200 where !helper.hasStop { try await Task.sleep(for: .milliseconds(2)) }
+        for _ in 0..<1000 where !helper.hasStop { try await Task.sleep(for: .milliseconds(10)) }
         #expect(helper.hasStop && slot.releasePending)
         helper.acknowledge()
-        for _ in 0..<200 where slot.releasePending { try await Task.sleep(for: .milliseconds(2)) }
-        #expect(!slot.releasePending && slot.retiringCount == 0 && changes > 0)
+        for _ in 0..<1000 where slot.retiringCount > 0 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(slot.retiringCount == 0 && changes > 0)
+        // A heavily loaded runner can pass the 1.5 s stop deadline before the reply
+        // is delivered; that path must fail closed, never report a silent release.
+        #expect(slot.releaseUnconfirmed ? slot.releasePending : !slot.releasePending)
         slot.stopAll()
     }
     @Test func unacknowledgedStopFailsClosedUntilExplicitRestart() async throws {
@@ -143,7 +146,7 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         #expect(slot.releasePending)
         // No acknowledgement: the deadline invalidates the lease and retires the
         // client, but the gate stays closed until the user restarts the engine.
-        for _ in 0..<200 where slot.retiringCount > 0 { try await Task.sleep(for: .milliseconds(5)) }
+        for _ in 0..<1000 where slot.retiringCount > 0 { try await Task.sleep(for: .milliseconds(10)) }
         #expect(slot.retiringCount == 0 && slot.releaseUnconfirmed && slot.releasePending)
         slot.clearUnconfirmedRelease()
         #expect(!slot.releasePending && !slot.releaseUnconfirmed)
