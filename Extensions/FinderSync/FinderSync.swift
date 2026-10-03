@@ -63,7 +63,7 @@ final class FinderSync: FIFinderSync {
     @objc private func modeChanged(_ notification: Notification) {
         guard let value = FinderModeChannel.enabled(from: notification.object) else { return }
         modeEnabled = value
-        FIFinderSyncController.default().directoryURLs = value ? [URL(fileURLWithPath: "/", isDirectory: true)] : []
+        FIFinderSyncController.default().directoryURLs = [] // Never monitor the whole filesystem for keyboard shortcuts.
     }
 
     private func item(_ title: String, _ action: Selector) -> NSMenuItem {

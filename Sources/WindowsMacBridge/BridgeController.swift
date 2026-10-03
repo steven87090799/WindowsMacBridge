@@ -28,7 +28,7 @@ import IOKit.hid
     @Published var configurationError: String?
     @Published var presetNotice: String?
     var bundledInstallerAvailable: Bool { BundledBackendInstaller.available }
-    var backgroundInstallationNeeded: Bool { BundledBackendInstaller.needsInstallation }
+    var backgroundInstallationNeeded: Bool { settings.usesHID && BundledBackendInstaller.needsInstallation }
     @Published private(set) var driverApprovalNotice: String?
     @Published private(set) var driverApprovalLaunched = false
     private let driverActivation = DriverActivationLauncher()
@@ -39,7 +39,7 @@ import IOKit.hid
         openDriverSettings()
     }
     private func prepareDriverActivation() {
-        guard !driverApprovalLaunched, !backgroundInstallationNeeded else { return }
+        guard settings.isAdvancedModeEnabled, !driverApprovalLaunched, !backgroundInstallationNeeded else { return }
         driverApprovalLaunched = true
         driverVerification = .awaitingVerification
         driverNeedsVerification = true
@@ -84,8 +84,8 @@ import IOKit.hid
     }
     var inputMonitoringVerification: PermissionVerification {
         let main = permissionChecklist.verification(for: [.listening])
-        guard main == .granted, settings.inputBackend == .deviceHID else { return main }
-        return hid.hasFreshVerifiedStatus ? PermissionVerification(verifiedGrant: hid.status.permissions) : backgroundInputVerification
+        guard main == .granted, settings.usesHID else { return main }
+        return hid?.hasFreshVerifiedStatus == true ? PermissionVerification(verifiedGrant: hid?.status.permissions) : backgroundInputVerification
     }
     @Published private(set) var backgroundInputVerification = PermissionVerification.unchecked
     @Published private(set) var backgroundInputNotice: String?
@@ -93,24 +93,18 @@ import IOKit.hid
     @Published private(set) var driverVerification = PermissionVerification.unchecked
     private var driverCheckTask: Task<Void, Never>?
     private var driverNeedsVerification = true
-    @Published private(set) var screenshotFolderVerification = PermissionVerification.unchecked
-    @Published private(set) var screenshotFolderPath = ScreenshotFolderAccess.currentDirectory().path
-    @Published private(set) var screenshotFolderNotice: String?
-    private var screenshotFolderCheckTask: Task<Void, Never>?
-    private var screenshotFolderCheckID: UUID?
     @Published private(set) var permissionsCheckedAt: Date?
     var finderExtensionEnabled: Bool { permissions.finderExtension }
     private let engine = InputEngine()
     private let remoteRegistry = RemoteSourceRegistry()
     private var lastEngineConfiguration: EngineConfiguration?
     private var calibrationDeadline: Double?
-    private let hid = HIDBackendClient()
+    private var hid: HIDBackendClient?
     private let store = SettingsStore()
     let installationRecoveryPending: Bool
     private let screenshot = ScreenshotManager()
     private let macBookKeyboard = MacBookKeyboardMapper()
     private let finderPublisher = FinderModePublisher()
-    private let screenshotFolderRequestKey = "permissions.screenshotFolderRequest.v1"
     private var registry: ApplicationRegistry?
     private var timer: Timer?
     private var timerPlan: RuntimeWakePlan = .stopped
@@ -131,16 +125,22 @@ import IOKit.hid
     private var debugUntil: Date?
     var onStatusChange: (() -> Void)?
 
+    var isOperating: Bool {
+        guard settings.enabled, !paused, !status.emergencyPaused, permissions.keyboardControlGranted,
+              sessionActive, !status.secureInput, !status.manualPassThrough else { return false }
+        if settings.usesHID { return hidStatus.permissions && hidStatus.driverReady && hidStatus.capturedDevices > 0 }
+        return status.tapActive && status.fault == nil && status.backendIssue == nil && !status.awaitingNeutral
+    }
     var paused: Bool { pausedUntilRestart || (pauseUntil.map { $0 > Date() } ?? false) }
     var summary: String {
-        if installationRecoveryPending { return "安裝尚未完成，請依系統提示核准或重新開機後再開啟 App。" }
+        if settings.isAdvancedModeEnabled && installationRecoveryPending { return "安裝尚未完成，請依系統提示核准或重新開機後再開啟 App。" }
         if let configurationError { return configurationError }
         if !settings.enabled { return "已停用" }
         if paused || status.emergencyPaused { return "已暫停" }
-        if hid.releasePending { return "等待 Helper 安全釋放；新後端尚未啟動" }
+        if settings.usesHID && hid?.releasePending == true { return "等待 Helper 安全釋放；新後端尚未啟動" }
         if !permissions.keyboardControlGranted { return "等待鍵盤控制授權（\(KeyboardPermissionRequest.settingsTitle)）" }
-        if !permissions.listening { return "等待輸入監控授權（WindowsMacBridge 主 App）" }
-        if settings.inputBackend == .deviceHID {
+        if settings.usesHID && !permissions.listening { return "等待輸入監控授權（WindowsMacBridge 主 App）" }
+        if settings.usesHID {
             if macBookKeyboardStatus.restorePending { return "等待 Fn／Ctrl 原生交換還原；HID 尚未啟動" }
             if hidStatus.manualPassThrough { return "右 Option+P 穿透：ON" }
             if hidStatus.capturedDevices == 0 { return hidStatus.state }
@@ -171,26 +171,16 @@ import IOKit.hid
     }
     func start() {
         guard !running else { return }
-        if !backgroundInstallationNeeded && !installationRecoveryPending && store.errorMessage == nil &&
-            !UserDefaults.standard.bool(forKey: "setup.oneClickPrepared.v1") {
-            let builtIn = HIDDeviceInventory.keyboards().contains { $0.builtIn && $0.vendorID == 1452 }
-            store.prepareOneClickSetup(hasBuiltInAppleKeyboard: builtIn)
-            settings = store.settings; configurationError = store.errorMessage
-            if store.errorMessage == nil {
-                UserDefaults.standard.set(true, forKey: "setup.oneClickPrepared.v1")
-                preparedSetupThisLaunch = true
-            }
-        }
         running = true
         macBookKeyboard.onChange = { [weak self] status in
             guard let self else { return }
             let wasPending = macBookKeyboardStatus.restorePending
+            let wasAwaiting = macBookKeyboardStatus.awaitingNeutral
             macBookKeyboardStatus = status
             updateRuntimeTimer()
-            if wasPending != status.restorePending { publish() }
+            if wasPending != status.restorePending || wasAwaiting != status.awaitingNeutral { publish() }
         }
         macBookKeyboard.onDiagnostic = { KeyboardMappingDiagnostics.append($0) }
-        finderPublisher.start(enabled: false)
         inputSources.onChange = { [weak self] status in
             guard let self, running else { return }
             let loginChanged = sourceStatus.loginStatus != status.loginStatus
@@ -217,14 +207,13 @@ import IOKit.hid
         }
         observe(center, NSWorkspace.didTerminateApplicationNotification) { $0.refreshApplication() }
         observe(center, NSWorkspace.willSleepNotification) { $0.setSuspended(.systemSleep, true) }
-        observe(center, NSWorkspace.didWakeNotification) { $0.setSuspended(.systemSleep, false); $0.refreshApplication() }
+        observe(center, NSWorkspace.didWakeNotification) { $0.setSuspended(.systemSleep, false); $0.refreshMacBookKeyboard(); $0.refreshApplication() }
         observe(center, NSWorkspace.screensDidSleepNotification) { $0.setSuspended(.screensSleep, true) }
         observe(center, NSWorkspace.screensDidWakeNotification) { $0.setSuspended(.screensSleep, false) }
         observe(center, NSWorkspace.sessionDidResignActiveNotification) { $0.setSuspended(.inactiveSession, true) }
         observe(center, NSWorkspace.sessionDidBecomeActiveNotification) { $0.setSuspended(.inactiveSession, false); $0.refreshApplication() }
         inputSources.start()
         screenshot.onChange = { [weak self] status in self?.screenshotStatus = status }
-        screenshot.onPeriodicCheck = { [weak self] in self?.verifyScreenshotConfiguration() }
         screenshot.start(enabled: false)
         engine.setScreenshotHandler { [weak self] kind, source in self?.screenshot.requestCapture(kind, source: source) }
         remoteRegistry.onChange = { [weak self] in
@@ -234,18 +223,9 @@ import IOKit.hid
         }
         observe(center, NSWorkspace.didLaunchApplicationNotification) { $0.remoteRegistry.discover() }
         observe(center, NSWorkspace.didTerminateApplicationNotification) { $0.remoteRegistry.maintain([]) }
-        hid.onOwnershipChange = { [weak self] in self?.publish() }
-        if settings.screenshotAutoCopy { checkScreenshotLogin() }
         refreshPermissions()
-        let directory = ScreenshotFolderAccess.currentDirectory()
-        if let scope = screenshotFolderRequestScope(directory),
-           UserDefaults.standard.string(forKey: screenshotFolderRequestKey) == scope {
-            // A previous row-7 operation permits a fresh native check for this
-            // exact App/path, so normal launches don't require setup every time.
-            verifyScreenshotFolder(directory)
-        }
+        engine.setActivityHandler { [weak self] in self?.tick() }
         engine.start()
-        hid.start()
         publish()
         updateRuntimeTimer()
     }
@@ -260,17 +240,16 @@ import IOKit.hid
         let interval: Double
         switch plan {
         case .stopped: return
-        case .periodic: interval = 1
         case .deadline(let time): interval = max(0.01, time - Date().timeIntervalSince1970)
         }
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: plan == .periodic) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, self.running else { return }
-                if self.timerPlan != .periodic { self.timer = nil; self.timerPlan = .stopped }
+                self.timer = nil; self.timerPlan = .stopped
                 self.tick(); self.updateRuntimeTimer()
             }
         }
-        timer?.tolerance = plan == .periodic ? 0.1 : 0.01
+        timer?.tolerance = 0.01
     }
     private func observe(_ center: NotificationCenter, _ name: Notification.Name,
                          _ action: @escaping @MainActor (BridgeController) -> Void) {
@@ -282,8 +261,6 @@ import IOKit.hid
         running = false
         driverActivation.stop()
         driverCheckTask?.cancel(); driverCheckTask = nil
-        screenshotFolderCheckTask?.cancel(); screenshotFolderCheckTask = nil
-        screenshotFolderCheckID = nil
         remoteRegistry.configure(active: false, preferences: settings.remoteSources)
         remoteRegistry.onChange = nil
         engine.calibrationInbox.cancel()
@@ -298,8 +275,8 @@ import IOKit.hid
         macBookKeyboard.onChange = nil
         macBookKeyboard.stop()
         engine.stop()
-        hid.onOwnershipChange = nil
-        hid.stop()
+        hid?.onOwnershipChange = nil
+        hid?.stop(); hid = nil
         inputSources.stop()
     }
     private func tick() {
@@ -322,8 +299,8 @@ import IOKit.hid
         let previousPosting = status.postAccess
         let previousListening = status.listenAccess
         var next = engine.snapshot()
-        if settings.inputBackend == .deviceHID {
-            if hidStatus != hid.status { hidStatus = hid.status }
+        if settings.usesHID {
+            if let hid, hidStatus != hid.status { hidStatus = hid.status }
             next.manualPassThrough = hidStatus.manualPassThrough
             next.emergencyPaused = hidStatus.emergencyPaused
             next.secureInput = hidStatus.secureInput
@@ -375,12 +352,8 @@ import IOKit.hid
     }
     private func refreshApplication() {
         context = currentApplicationContext()
-        if context.processID == ProcessInfo.processInfo.processIdentifier {
-            refreshPermissions()
-            if screenshotFolderVerification == .granted || screenshotFolderVerification == .denied {
-                verifyScreenshotFolder(ScreenshotFolderAccess.currentDirectory())
-            }
-        }
+        if context.processID == ProcessInfo.processInfo.processIdentifier { refreshPermissions() }
+        refreshMacBookKeyboard()
         if context.processID != ProcessInfo.processInfo.processIdentifier { targetApp = context }
         refreshLayout()
         publish()
@@ -390,30 +363,16 @@ import IOKit.hid
         // settings link. Verify once the user returns, or explicitly rechecks.
         if !userInitiated && !permissionChecklist.awaitingVerification.isEmpty && !NSApp.isActive { return }
         let previous = permissionChecklist.verified
-        let current = PermissionStatus.current()
+        let current = PermissionStatus.current(advanced: settings.isAdvancedModeEnabled)
         var next = permissionChecklist
         next.verify(current)
         if permissionChecklist != next { permissionChecklist = next }
         permissionsCheckedAt = Date()
-        let directory = ScreenshotFolderAccess.currentDirectory()
-        let folderChanged = screenshotFolderPath != directory.path
-        if folderChanged {
-            screenshotFolderPath = directory.path
-            screenshotFolderVerification = .unchecked
-            screenshotFolderNotice = nil
-            UserDefaults.standard.removeObject(forKey: screenshotFolderRequestKey)
-        }
-        // Folder reads can themselves prompt for access. Opening an unrelated
-        // permission row must not request Desktop/Documents/Downloads access.
-        // Only row 7 starts that I/O; later foreground checks can recheck it.
-        if recheckScreenshotFolder && (screenshotFolderVerification == .granted || screenshotFolderVerification == .denied) {
-            verifyScreenshotFolder(directory)
-        }
-        if userInitiated || driverNeedsVerification || (NSApp.isActive && settingsPage == .permissions) {
+        if settings.isAdvancedModeEnabled && (userInitiated || driverNeedsVerification || (NSApp.isActive && settingsPage == .permissions)) {
             refreshDriverPermission()
-            if settings.inputBackend == .deviceHID && !backgroundInstallationNeeded { refreshBackgroundInputPermission() }
+            if settings.usesHID && !backgroundInstallationNeeded { refreshBackgroundInputPermission() }
         }
-        if running && (previous != current || folderChanged) {
+        if running && previous != current {
             publish()
             engine.maintain()
             if settings.screenshotAutoCopy {
@@ -422,6 +381,7 @@ import IOKit.hid
         }
     }
     private func refreshDriverPermission() {
+        guard settings.isAdvancedModeEnabled else { return }
         guard driverCheckTask == nil else { driverNeedsVerification = true; return }
         driverNeedsVerification = false
         driverVerification = .awaitingVerification
@@ -444,48 +404,6 @@ import IOKit.hid
            NSWorkspace.shared.open(url) { return }
         inputSources.openLoginSettings()
     }
-    func openScreenshotFolderSettings() {
-        // Request the configured folder through native I/O. No path selection.
-        verifyScreenshotFolder(ScreenshotFolderAccess.currentDirectory())
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders") {
-            NSWorkspace.shared.open(url)
-        }
-    }
-    private func screenshotFolderRequestScope(_ directory: URL) -> String? {
-        PermissionStatus.codeIdentity.map { $0 + "\n" + directory.resolvingSymlinksInPath().standardizedFileURL.path }
-    }
-    private func verifyScreenshotFolder(_ directory: URL) {
-        // Directory I/O can wait on a volume. Keep at most one worker even if
-        // the user repeatedly checks, cancels, or changes the screenshot path.
-        guard screenshotFolderCheckTask == nil else { return }
-        let id = UUID(); screenshotFolderCheckID = id
-        screenshotFolderVerification = .awaitingVerification
-        screenshotFolderNotice = nil
-        publish()
-        screenshotFolderCheckTask = Task { [weak self] in
-            let readable = await Task.detached(priority: .utility) {
-                return ScreenshotFolderAccess.canRead(directory)
-            }.value
-            guard !Task.isCancelled, let self, self.screenshotFolderCheckID == id else { return }
-            self.screenshotFolderCheckTask = nil
-            guard directory.resolvingSymlinksInPath().standardizedFileURL == ScreenshotFolderAccess.currentDirectory() else {
-                self.screenshotFolderVerification = .unchecked
-                self.publish()
-                return
-            }
-            self.screenshotFolderPath = directory.resolvingSymlinksInPath().standardizedFileURL.path
-            self.screenshotFolderVerification = PermissionVerification(verifiedGrant: readable)
-            if readable, let scope = self.screenshotFolderRequestScope(directory) {
-                UserDefaults.standard.set(scope, forKey: self.screenshotFolderRequestKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: self.screenshotFolderRequestKey)
-            }
-            self.publish()
-            if readable, self.settings.screenshotAutoCopy {
-                self.screenshot.verifyAndRepair(reason: "截圖資料夾存取已確認")
-            }
-        }
-    }
     func openPermissionSettings(_ kind: PermissionKind) {
         var next = permissionChecklist
         next.beginNavigation(to: kind)
@@ -506,7 +424,7 @@ import IOKit.hid
         openPermissionSettings(.loginItem)
     }
     private func sourceSuspension(for app: ApplicationContext) -> InputSourceSuspension? {
-        if installationRecoveryPending { return .protectedApplication }
+        if settings.isAdvancedModeEnabled && installationRecoveryPending { return .protectedApplication }
         if IsSecureEventInputEnabled() { return .protectedApplication }
         return InputSourcePolicy.suspension(context: app,
             isHostApp: app.processID == ProcessInfo.processInfo.processIdentifier,
@@ -515,6 +433,7 @@ import IOKit.hid
     private func setSuspended(_ reason: SuspensionReason, _ suspended: Bool) {
         if suspended { suspensionReasons.insert(reason) } else { suspensionReasons.remove(reason) }
         sessionEpoch &+= 1
+        if !suspended { refreshMacBookKeyboard() }
         if !suspended && settings.screenshotAutoCopy {
             screenshot.verifyAndRepair(reason: "Session 恢復")
         }
@@ -522,7 +441,7 @@ import IOKit.hid
     }
     private func configureMacBookKeyboard(configuration: EngineConfiguration) {
         let native = configuration.usesNativePhysicalMapping
-        macBookKeyboard.configure(enabled: settings.macBookFnControlSwap && permissions.loginItem &&
+        macBookKeyboard.configure(enabled: settings.macBookFnControlSwap &&
             policy.current?.permitsPhysicalNormalization == true,
             eventTapBackend: native, sessionActive: sessionActive)
         macBookKeyboardStatus = macBookKeyboard.status
@@ -542,9 +461,6 @@ import IOKit.hid
         settings = store.settings
         configurationError = store.errorMessage
         guard store.errorMessage == nil else { return }
-        if value {
-            checkScreenshotLogin()
-        }
         publish()
     }
     func setWindowsKeyModifier(_ value: WindowsKeyModifier) {
@@ -565,27 +481,6 @@ import IOKit.hid
     func setWinTaskViewEnabled(_ value: Bool) {
         store.update { $0.winTaskViewEnabled = value }; settings = store.settings
         configurationError = store.errorMessage; publish()
-    }
-    private func checkScreenshotLogin() {
-        // Runtime checks and feature toggles never register/unregister a
-        // different permission. Row 4 owns the login authorization action.
-        if !inputSources.loginIsActive {
-            screenshot.reportConfigurationIssue("登入啟動未生效（\(inputSources.loginStatusText)）；請在系統設定核准登入項目。")
-        }
-    }
-    private func verifyScreenshotConfiguration() {
-        guard settings.screenshotAutoCopy else { return }
-        let stored = SettingsStore().settings
-        if !stored.screenshotAutoCopy {
-            store.update { $0.screenshotAutoCopy = true }
-            settings = store.settings
-            if store.errorMessage != nil {
-                screenshot.reportConfigurationIssue("截圖設定無法持久儲存。")
-            } else {
-                screenshot.recordRepair("持久設定已重新寫入")
-            }
-        }
-        checkScreenshotLogin()
     }
     var screenshotLogPath: String { screenshot.logPath }
     func refreshSourceDiagnostics() {
@@ -609,37 +504,34 @@ import IOKit.hid
             transitionApplying = false
             if transitionRequested { transitionRequested = false; publish() }
         }
-        if settings.inputBackend == .eventTap && hid.hasOwnership { hid.releaseOwnership() }
+        synchronizeHIDMode()
         if lastAppliedSettings != settings.physicalPolicySettings { settingsRevision &+= 1; lastAppliedSettings = settings.physicalPolicySettings }
         var input = RuntimePolicyInput()
-        input.backend = settings.inputBackend; input.deviceScope = settings.keyboardScope
+        input.backend = settings.effectiveInputBackend; input.deviceScope = settings.effectiveKeyboardScope
         input.foreground = context
         input.paused = paused || status.emergencyPaused
         input.manualPassThrough = status.manualPassThrough
         input.secureInput = IsSecureEventInputEnabled()
         input.session = sessionEpoch; input.sessionActive = sessionActive
-        input.shortcutEnabled = settings.enabled && registry != nil && configurationError == nil && !installationRecoveryPending
-        // Do not touch the user's protected screenshot directory while they
-        // are authorizing a different row. Row 7 enables screenshot work only
-        // after a genuine directory read succeeds.
-        input.screenshotEnabled = settings.screenshotAutoCopy && screenshotFolderVerification == .granted
+        input.shortcutEnabled = settings.enabled && registry != nil && configurationError == nil && (!settings.isAdvancedModeEnabled || !installationRecoveryPending)
+        input.screenshotEnabled = settings.screenshotAutoCopy
         input.settingsRevision = settingsRevision
         input.restartToken = restartToken
         input.accessibility = AXIsProcessTrusted(); input.posting = CGPreflightPostEventAccess()
         input.loginItemEnabled = permissions.loginItem
         input.layoutIdentity = layoutID
         input.layoutSupported = layoutSupported; input.diagnosticsEnabled = diagnosticsEnabled
-        input.hidReleasePending = hid.releasePending
-        input.nativeRestorePending = macBookKeyboardStatus.restorePending
+        input.hidReleasePending = settings.usesHID && hid?.releasePending == true
+        input.nativeRestorePending = macBookKeyboardStatus.restorePending || macBookKeyboardStatus.awaitingNeutral
         let previous = policy.current
         let snapshot = policy.transition(input)
         remoteRegistry.configure(active: snapshot.permitsShortcuts, preferences: settings.remoteSources)
         updateRuntimeTimer()
         if previous == snapshot {
-            if var config = lastEngineConfiguration, config.inputRouting != remoteRegistry.snapshot || config.deviceInputs != settings.deviceInputs {
-                let deviceChanged = config.deviceInputs != settings.deviceInputs
-                config.inputRouting = remoteRegistry.snapshot; config.deviceInputs = settings.deviceInputs; lastEngineConfiguration = config
-                if deviceChanged { hid.update(config, active: settings.inputBackend == .deviceHID && !macBookKeyboardStatus.restorePending) }
+            if var config = lastEngineConfiguration, config.inputRouting != remoteRegistry.snapshot || config.deviceInputs != settings.effectiveDeviceInputs {
+                let deviceChanged = config.deviceInputs != settings.effectiveDeviceInputs
+                config.inputRouting = remoteRegistry.snapshot; config.deviceInputs = settings.effectiveDeviceInputs; lastEngineConfiguration = config
+                if deviceChanged { hid?.update(config, active: settings.usesHID && !macBookKeyboardStatus.restorePending) }
                 screenshot.applyPhysicalPreferences(config.deviceInputs)
                 screenshot.applyInputRouting(config.inputRouting); engine.update(config)
             }
@@ -651,14 +543,14 @@ import IOKit.hid
         config.enabled = snapshot.permitsInput
         config.generation = snapshot.generation
         config.runtimePolicy = snapshot
-        config.physicalBackend = settings.inputBackend
+        config.physicalBackend = settings.effectiveInputBackend
         config.inputRouting = remoteRegistry.snapshot
-        config.deviceInputs = settings.deviceInputs
+        config.deviceInputs = settings.effectiveDeviceInputs
         config.sessionActive = sessionActive
         config.layoutSupported = layoutSupported
         config.diagnostics = diagnosticsEnabled
         config.restartToken = restartToken
-        config.keyboardScope = settings.keyboardScope
+        config.keyboardScope = settings.effectiveKeyboardScope
         config.finderEnabled = settings.finderEnabled
         config.finderPermanentDeleteEnabled = settings.finderPermanentDeleteEnabled
         config.textNavigationEnabled = settings.textNavigationEnabled
@@ -679,19 +571,64 @@ import IOKit.hid
         if lastEngineConfiguration.map({ config.preservesModifiers(from: $0) }) != true {
             engine.update(stopped)
         }
-        if previous?.input.backend != snapshot.input.backend { hid.update(stopped, active: false) }
+        if previous?.input.backend != snapshot.input.backend { hid?.update(stopped, active: false) }
         configureMacBookKeyboard(configuration: config)
-        finderPublisher.setEnabled(settings.finderEnabled && snapshot.permitsShortcuts)
+        config.nativeMappingAwaitingNeutral = macBookKeyboardStatus.awaitingNeutral
+        finderPublisher.setEnabled(false)
         screenshot.applyRuntimePolicy(snapshot, windowsKey: settings.windowsKeyModifier,
                                       printScreen: settings.printScreenBehavior)
         screenshot.applyInputRouting(config.inputRouting)
         screenshot.applyPhysicalPreferences(config.deviceInputs)
-        hid.update(config, active: settings.inputBackend == .deviceHID && !macBookKeyboardStatus.restorePending)
+        hid?.update(config, active: settings.usesHID && !macBookKeyboardStatus.restorePending)
         // HID transports App-sensitive chords raw; annotated delivery supplies
         // receiving-App semantics. Classified remote sources keep separate ledgers.
         lastEngineConfiguration = config
         engine.update(config)
         inputSources.updateRuntimePolicy(snapshot, protection: sourceSuspension(for: context))
+    }
+    private func synchronizeHIDMode() {
+        if settings.usesHID && !backgroundInstallationNeeded {
+            if hid == nil {
+                let client = HIDBackendClient()
+                client.onOwnershipChange = { [weak self] in self?.tick() }
+                hid = client; client.start()
+            }
+        } else if let client = hid {
+            client.onOwnershipChange = nil
+            client.releaseOwnership(); client.stop(); hid = nil
+            hidStatus = HIDStatus()
+        }
+    }
+    func setAdvancedModeEnabled(_ value: Bool) {
+        store.update { $0.isAdvancedModeEnabled = value }
+        settings = store.settings; configurationError = store.errorMessage
+        guard store.errorMessage == nil else { return }
+        if !value {
+            driverActivation.stop(); driverCheckTask?.cancel(); driverCheckTask = nil
+            driverNeedsVerification = true; backgroundInputCheckPending = false
+            driverVerification = .unchecked; backgroundInputVerification = .unchecked
+            driverApprovalNotice = nil; backgroundInputNotice = nil
+            diagnosticsEnabled = false; debugUntil = nil
+            if settingsPage == .diagnostics { settingsPage = .general }
+        }
+        restartToken &+= 1; publish(); refreshPermissions()
+    }
+    func installAdvancedBackend() {
+        guard settings.isAdvancedModeEnabled else { return }
+        do { try BundledBackendInstaller.launch() }
+        catch { driverApprovalNotice = error.localizedDescription }
+    }
+    func uninstallAdvancedBackend() {
+        guard settings.isAdvancedModeEnabled else { return }
+        setInputBackend(.eventTap)
+        do {
+            try BundledBackendInstaller.uninstall { [weak self] code in
+                self?.driverApprovalNotice = code == 0 ? "已移除本 App 背景元件，共用 Driver 保留。" : "移除未完成或已取消；原背景元件保留。"
+            }
+        } catch { driverApprovalNotice = error.localizedDescription }
+    }
+    func setLoginEnabled(_ value: Bool) {
+        inputSources.setLoginEnabled(value); refreshPermissions()
     }
     func setEnabled(_ value: Bool) {
         store.update { $0.enabled = value }; settings = store.settings
@@ -712,6 +649,7 @@ import IOKit.hid
         configurationError = store.errorMessage; publish()
     }
     func setInputBackend(_ value: InputBackend) {
+        guard settings.isAdvancedModeEnabled else { return }
         store.update { $0.inputBackend = value
             $0.keyboardScope = .allKeyboards
         }
@@ -723,11 +661,11 @@ import IOKit.hid
         restartToken &+= 1; publish()
     }
     private func refreshBackgroundInputPermission() {
-        guard !backgroundInputCheckPending else { return }
+        guard settings.usesHID, let hid, !backgroundInputCheckPending else { return }
         backgroundInputCheckPending = true
         backgroundInputVerification = .awaitingVerification
         hid.checkInputAccess { [weak self] grant in
-            guard let self else { return }
+            guard let self, self.settings.usesHID else { return }
             self.backgroundInputCheckPending = false
             self.backgroundInputVerification = PermissionVerification(verifiedGrant: grant)
             self.backgroundInputNotice = grant == nil ? "背景元件尚未連線，請關閉並重新開啟 App。" : nil
@@ -855,13 +793,14 @@ import IOKit.hid
         }
     }
     func requestAccessibility() {
-        _ = KeyboardPermissionRequest.perform(read: { PermissionStatus.current() })
+        _ = KeyboardPermissionRequest.perform(read: { PermissionStatus.current(advanced: settings.isAdvancedModeEnabled) })
         refreshPermissions(userInitiated: true)
         publish()
     }
     func requestListening() {
+        guard settings.isAdvancedModeEnabled else { return }
         // Exactly one request for this App's Input Monitoring permission.
-        if settings.inputBackend == .deviceHID {
+        if settings.usesHID {
             if IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) != kIOHIDAccessTypeGranted {
                 _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
             }

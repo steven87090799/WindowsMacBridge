@@ -2,22 +2,27 @@ import Foundation
 import BridgeCore
 
 public struct BridgeSettings: Codable, Equatable, Sendable {
-    public var schemaVersion = 5
+    public var schemaVersion = 6
     public var enabled = true
     // This preset is for chat/text use. Remove it to restore Codex's IDE protection.
     public var overrides: [String: ApplicationMode] = ["com.openai.codex": .macOS]
     public var keyboardScope: KeyboardScope = .allKeyboards
-    public var finderEnabled = false
+    public var finderEnabled = true
     public var allowIMEShortcuts = true
-    public var inputBackend: InputBackend = .deviceHID
+    public var inputBackend: InputBackend = .eventTap
+    public var isAdvancedModeEnabled = false
+    public var effectiveInputBackend: InputBackend { isAdvancedModeEnabled ? inputBackend : .eventTap }
+    public var usesHID: Bool { isAdvancedModeEnabled && inputBackend == .deviceHID }
+    public var effectiveKeyboardScope: KeyboardScope { isAdvancedModeEnabled ? keyboardScope : .allKeyboards }
+    public var effectiveDeviceInputs: [DeviceInputPreference] { isAdvancedModeEnabled ? deviceInputs : [] }
     public var screenshotAutoCopy = true
     public var windowsKeyModifier: WindowsKeyModifier = .command
     public var winRunEnabled = false
     public var winSettingsEnabled = false
     public var winTaskViewEnabled = false
-    public var finderPermanentDeleteEnabled = false
+    public var finderPermanentDeleteEnabled = true
     public var textNavigationEnabled = true
-    public var altF4Enabled = false
+    public var altF4Enabled = true
     public var macBookFnControlSwap = false
     public var finderBrightnessEnterEnabled = false
     public var remoteSources: [RemoteSourcePreference] = []
@@ -43,7 +48,7 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         return settings
     }
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, enabled, overrides, keyboardScope, finderEnabled, allowIMEShortcuts, inputBackend, screenshotAutoCopy
+        case schemaVersion, enabled, overrides, keyboardScope, finderEnabled, allowIMEShortcuts, inputBackend, screenshotAutoCopy, isAdvancedModeEnabled
         case finderPermanentDeleteEnabled, textNavigationEnabled, altF4Enabled
         case macBookFnControlSwap, windowsKeyModifier, winRunEnabled, winSettingsEnabled, winTaskViewEnabled
         case finderBrightnessEnterEnabled, remoteSources, deviceInputs, printScreenBehavior
@@ -55,9 +60,11 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         overrides = try values.decode([String: ApplicationMode].self, forKey: .overrides)
         // Stored preferences, including explicit pass-through overrides, always win.
         keyboardScope = try values.decodeIfPresent(KeyboardScope.self, forKey: .keyboardScope) ?? .allKeyboards
-        finderEnabled = try values.decodeIfPresent(Bool.self, forKey: .finderEnabled) ?? false
+        finderEnabled = try values.decodeIfPresent(Bool.self, forKey: .finderEnabled) ?? true
         allowIMEShortcuts = try values.decodeIfPresent(Bool.self, forKey: .allowIMEShortcuts) ?? false
         inputBackend = try values.decodeIfPresent(InputBackend.self, forKey: .inputBackend) ?? .eventTap
+        // Old backend preferences never implicitly consent to privileged mode.
+        isAdvancedModeEnabled = try values.decodeIfPresent(Bool.self, forKey: .isAdvancedModeEnabled) ?? false
         screenshotAutoCopy = try values.decodeIfPresent(Bool.self, forKey: .screenshotAutoCopy) ?? true
         windowsKeyModifier = try values.decodeIfPresent(WindowsKeyModifier.self, forKey: .windowsKeyModifier) ?? .option
         winRunEnabled = try values.decodeIfPresent(Bool.self, forKey: .winRunEnabled) ?? false
@@ -87,9 +94,9 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
             do {
                 guard data.count <= 64 * 1024 else { throw CocoaError(.coderReadCorrupt) }
                 let loaded = try JSONDecoder().decode(BridgeSettings.self, from: data)
-                guard (1...5).contains(loaded.schemaVersion), loaded.valid else { throw CocoaError(.coderReadCorrupt) }
+                guard (1...6).contains(loaded.schemaVersion), loaded.valid else { throw CocoaError(.coderReadCorrupt) }
                 settings = loaded
-                settings.schemaVersion = 5
+                settings.schemaVersion = 6
                 // Older files without these fields get host defaults. A stored
                 // false is an explicit choice and must never be overwritten.
                 if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -143,12 +150,11 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     /// user key placement. Setup never opens system settings or grants TCC.
     public func prepareOneClickSetup(hasBuiltInAppleKeyboard: Bool) {
         update {
-            $0.enabled = true; $0.inputBackend = .deviceHID; $0.keyboardScope = .allKeyboards
+            $0.enabled = true; $0.inputBackend = .eventTap; $0.isAdvancedModeEnabled = false; $0.keyboardScope = .allKeyboards
             $0.screenshotAutoCopy = true; $0.allowIMEShortcuts = true
             $0.finderEnabled = true; $0.textNavigationEnabled = true; $0.altF4Enabled = true
             $0.winRunEnabled = true; $0.winSettingsEnabled = true; $0.winTaskViewEnabled = true
             $0.finderBrightnessEnterEnabled = false
-            if hasBuiltInAppleKeyboard { $0.macBookFnControlSwap = true }
             $0.overrides["com.openai.codex"] = .macOS
         }
     }

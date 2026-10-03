@@ -7,7 +7,6 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
-#include <thread>
 #include <unistd.h>
 
 namespace service = pqrs::karabiner::driverkit::virtual_hid_device_service;
@@ -63,6 +62,13 @@ template <class Report> size_t encode(const Report& value, uint8_t* output, size
 }
 
 struct WMBVirtualHID {
+    std::mutex callback_lock;
+    WMBStatusCallback callback = nullptr;
+    void* callback_context = nullptr;
+    void notify() {
+        std::lock_guard<std::mutex> guard(callback_lock);
+        if (callback) callback(callback_context);
+    }
     std::atomic<uint32_t> status{0};
     std::atomic<bool> needs_full_report{true};
     std::atomic<unsigned> outstanding{0};
@@ -176,6 +182,7 @@ extern "C" WMBVirtualHID* wmb_virtual_hid_create() {
         state->client->driver_connected.connect([state](bool ready) {
             if (ready) state->status.fetch_or(WMB_DRIVER_CONNECTED);
             else state->status.fetch_and(~(WMB_DRIVER_CONNECTED | WMB_KEYBOARD_READY | WMB_POINTING_READY));
+            state->notify();
         });
         state->client->virtual_hid_keyboard_ready.connect([state](bool ready) {
             if (ready) state->status.fetch_or(WMB_KEYBOARD_READY);
@@ -183,18 +190,22 @@ extern "C" WMBVirtualHID* wmb_virtual_hid_create() {
                 state->status.fetch_and(~WMB_KEYBOARD_READY);
                 state->needs_full_report.store(true);
             }
+            state->notify();
         });
         state->client->driver_version_mismatched.connect([state](bool mismatch) {
             if (mismatch) state->status.fetch_or(WMB_DRIVER_MISMATCH);
             else state->status.fetch_and(~WMB_DRIVER_MISMATCH);
+            state->notify();
         });
         state->client->virtual_hid_pointing_ready.connect([state](bool ready) {
             if (ready) state->status.fetch_or(WMB_POINTING_READY);
             else state->status.fetch_and(~WMB_POINTING_READY);
+            state->notify();
         });
         auto fault = [state] {
             state->status.store(WMB_CONNECTION_FAULT);
             state->needs_full_report.store(true);
+            state->notify();
         };
         state->client->closed.connect(fault);
         state->client->connect_failed.connect([fault](auto&&) { fault(); });
@@ -270,12 +281,16 @@ extern "C" void wmb_virtual_hid_reset(WMBVirtualHID* client) {
         client->has_last = false;
     } catch (...) { client->status.store(WMB_CONNECTION_FAULT); }
 }
+extern "C" void wmb_virtual_hid_set_status_callback(WMBVirtualHID* client, WMBStatusCallback callback, void* context) {
+    if (!client) return;
+    std::lock_guard<std::mutex> guard(client->callback_lock);
+    client->callback = callback; client->callback_context = context;
+}
 extern "C" void wmb_virtual_hid_destroy(WMBVirtualHID* client) {
     if (!client) return;
     std::lock_guard<std::mutex> guard(lifecycle);
     wmb_virtual_hid_reset(client);
-    // Give the asynchronous reset a bounded shutdown window; not an acknowledgement.
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // Called on the bounded teardown worker, never the capture RunLoop.
     delete client;
     pqrs::dispatcher::extra::terminate_shared_dispatcher();
     occupied = false;

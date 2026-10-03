@@ -15,6 +15,7 @@ final class HotkeyManager {
     init() {
         installEventHandler()
     }
+    deinit { stop() }
 
     @discardableResult
     func register(_ preset: HotkeyPreset) -> OSStatus {

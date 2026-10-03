@@ -32,6 +32,7 @@ let package = Package(
         .executableTarget(name: "BridgeImageBenchmark", dependencies: ["BridgeCore", "BridgePlatform"], path: "Tools/ImageBenchmark"),
         .testTarget(name: "VirtualHIDTests", dependencies: ["VirtualHID", "HIDLifecycle"], path: "Tools/HIDBackend/Tests/VirtualHIDTests"),
         .testTarget(name: "BridgeCoreTests", dependencies: ["BridgeCore"], resources: [.copy("Fixtures")]),
+        .testTarget(name: "InputSourceSupportTests", dependencies: ["InputSourceSupport"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(name: "InputSourceCoreTests", dependencies: ["InputSourceCore", "BridgeCore"]),
         .testTarget(name: "BridgePlatformTests", dependencies: ["BridgeCore", "BridgePlatform", "HIDProtocol"])
     ]

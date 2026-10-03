@@ -15,6 +15,15 @@ public struct RemoteSourceRouter: Sendable {
     private var configuration = SourceTranslationConfiguration()
     public private(set) var processedCount: UInt64 = 0, translatedCount: UInt64 = 0
     public init() {}
+    public var nextExpiry: Double? {
+        var deadline: Double?
+        for slot in slots {
+            guard let stream = slot, stream.processor.activePressCount > 0 || !stream.processor.modifiers.aggregate.isEmpty || stream.appSwitchHeld else { continue }
+            let candidate = stream.lastEventAt + 60
+            deadline = min(deadline ?? candidate, candidate)
+        }
+        return deadline
+    }
     public func hasNativeAppSwitchSession(_ evidence: InputOriginEvidence) -> Bool {
         configuration.enabled && slots.contains {
             $0?.producer.processID == evidence.processID && $0?.stateID == evidence.stateID &&

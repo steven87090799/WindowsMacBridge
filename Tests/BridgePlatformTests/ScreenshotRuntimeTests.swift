@@ -137,7 +137,7 @@ private final class CaptureJobFixture: ScreenshotCaptureJob, @unchecked Sendable
         }
         #expect(board.data(forType: .init("public.png")) == png)
         #expect(NSImage(pasteboard: board) != nil)
-        #expect(manager.status.lastResult.contains("可直接按"))
+        #expect(manager.status.issue == nil)
     }
 
     @Test(arguments: [false, true]) func pauseAndResumeDuringDecodeKeepsSingleFlightAndRejectsOldClipboardWrite(native: Bool) async throws {

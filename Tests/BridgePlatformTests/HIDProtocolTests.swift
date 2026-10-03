@@ -7,7 +7,7 @@ import HIDProtocol
 struct HIDProtocolTests {
     @Test func newInstallUsesChatPresetAndLegacySettingsPreserveEventTap() throws {
         let settings = BridgeSettings()
-        #expect(settings.enabled); #expect(settings.inputBackend == .deviceHID)
+        #expect(settings.enabled); #expect(settings.inputBackend == .eventTap)
         #expect(settings.keyboardScope == .allKeyboards)
         #expect(settings.screenshotAutoCopy)
         #expect(settings.overrides["com.openai.codex"] == .macOS)

@@ -43,11 +43,10 @@ public struct RuntimePolicySnapshot: Equatable, Sendable {
         permitsInput && !input.manualPassThrough
     }
     public var permitsPhysicalNormalization: Bool {
-        input.shortcutEnabled && !input.manualPassThrough && !input.hidReleasePending && !input.paused && !input.secureInput && input.sessionActive &&
-            input.accessibility && input.posting && input.loginItemEnabled
+        permitsInput && !input.manualPassThrough
     }
     public var permitsInput: Bool {
-        input.shortcutEnabled && !input.hidReleasePending && !input.paused && !input.secureInput && input.sessionActive &&
+        input.shortcutEnabled && (input.backend == .eventTap || !input.hidReleasePending) && !input.paused && !input.secureInput && input.sessionActive &&
             input.accessibility && input.posting
     }
     public var permitsScreenshots: Bool {
@@ -87,15 +86,13 @@ public struct RuntimePolicyCoordinator: Sendable {
     }
 }
 
-/// UI/status observation stops when input is intentionally inactive. Explicit pause/debug
-/// deadlines remain one-shot; a mapping waiting for neutral reuses the existing 1s check.
+/// Explicit pause/debug deadlines are one-shot. Input and mapping transitions
+/// use key and lifecycle notifications; active-but-neutral input never polls.
 public enum RuntimeWakePlan: Equatable, Sendable {
-    case stopped, periodic, deadline(Double)
+    case stopped, deadline(Double)
     public static func make(input: RuntimePolicyInput, awaitingMappingNeutral: Bool,
                             deadline: Double?) -> Self {
-        if awaitingMappingNeutral || (input.shortcutEnabled && !input.paused && input.sessionActive) {
-            return .periodic
-        }
+        // Key edges/lifecycle notifications drive maintenance; no idle polling.
         return deadline.map(Self.deadline) ?? .stopped
     }
 }

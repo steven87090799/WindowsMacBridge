@@ -1,3 +1,5 @@
+> 2026-10-03 更新：以下是歷史交接，舊分支／build／預設不代表目前程式。現行雙模式重構與外部審查逐項核對見 [DualModeReview-2026-10-03.md](DualModeReview-2026-10-03.md)；一般模式預設 EventTap，HID 只在明確進階開關後初始化。
+
 # WindowsMacBridge 複雜部分與接手位置
 
 日期：2026-10-02。Repository：`https://github.com/steven87090799/WindowsMacBridge.git`。

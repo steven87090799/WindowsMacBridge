@@ -7,14 +7,12 @@
   <key>CFBundleExecutable</key><string>WindowsMacBridge</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.6.0</string>
-  <key>CFBundleVersion</key><string>42</string>
+  <key>CFBundleVersion</key><string>43</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSMultipleInstancesProhibited</key><true/>
   <key>LSUIElement</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>NSHighResolutionCapable</key><true/>
-  <key>NSDesktopFolderUsageDescription</key><string>讀取剛完成的 macOS 截圖並自動複製，讓你可以直接貼上。</string>
-  <key>NSDocumentsFolderUsageDescription</key><string>當截圖儲存在文件資料夾時，讀取剛完成的截圖並自動複製。</string>
-  <key>NSDownloadsFolderUsageDescription</key><string>當截圖儲存在下載資料夾時，讀取剛完成的截圖並自動複製。</string>
+  <key>NSDesktopFolderUsageDescription</key><string>按 Win+PrintScreen 時，將截圖儲存到桌面並複製到剪貼簿。</string>
 </dict></plist>

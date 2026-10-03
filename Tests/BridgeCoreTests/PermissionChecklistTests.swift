@@ -2,19 +2,21 @@ import Testing
 @testable import BridgeCore
 
 struct PermissionChecklistTests {
-    @Test func loginApprovalOnlyEnablesNativeMappingAfterActualApproval() {
+    @Test func nativeUserMappingDoesNotRequireUnrelatedLoginApproval() {
         var input = RuntimePolicyInput()
         input.shortcutEnabled = true
         input.loginItemEnabled = false
         var coordinator = RuntimePolicyCoordinator()
         let before = coordinator.transition(input)
         #expect(before.permitsShortcuts)
-        #expect(!before.permitsPhysicalNormalization)
+        #expect(before.permitsPhysicalNormalization)
         input.loginItemEnabled = true
         let approved = coordinator.transition(input)
         #expect(approved.permitsPhysicalNormalization)
         #expect(approved.generation != before.generation)
         input.loginItemEnabled = false
+        #expect(coordinator.transition(input).permitsPhysicalNormalization)
+        input.accessibility = false
         #expect(!coordinator.transition(input).permitsPhysicalNormalization)
     }
     @Test func partialKeyboardGrantCanSuggestRestartWithoutClaimingSuccess() {

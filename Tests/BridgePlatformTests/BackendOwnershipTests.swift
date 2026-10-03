@@ -65,7 +65,8 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         var config = EngineConfiguration(); config.enabled = true; config.generation = 1
         config.context = .init(processID: .max, bundleID: "test", mode: .macOS)
         client?.start(); client?.update(config, active: true)
-        for _ in 0..<20 { await Task.yield() }
+        // stop() is valid with configure IPC still in flight. Do not yield to
+        // unrelated parallel tests before establishing the pending-stop state.
         client?.stop()
         for _ in 0..<100 where !helper.hasStop { try await Task.sleep(for: .milliseconds(2)) }
         #expect(helper.hasStop)
@@ -73,20 +74,28 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         for _ in 0..<100 where released != nil { try await Task.sleep(for: .milliseconds(2)) }
         #expect(released == nil)
     }
-    @Test func realIPCTransportWaitsForStopReplyAndTimeoutNeverClaimsRelease() async throws {
+    @Test func realIPCStopTimeoutInvalidatesOldLeaseWithoutBlockingEventTap() async throws {
         let helper = OfflineHelper()
         let listener = NSXPCListener.anonymous(); listener.delegate = helper; listener.resume()
         defer { listener.invalidate() }
-        let client = HIDBackendClient(connectionFactory: { NSXPCConnection(listenerEndpoint: listener.endpoint) }, stopAcknowledgementTimeout: 0.01)
+        let client = HIDBackendClient(connectionFactory: { NSXPCConnection(listenerEndpoint: listener.endpoint) }, stopAcknowledgementTimeout: 0.2)
         var config = EngineConfiguration(); config.enabled = true; config.generation = 1
         config.context = .init(processID: .max, bundleID: "test", mode: .macOS)
         client.start(); client.update(config, active: true)
-        for _ in 0..<20 { await Task.yield() }
+        // Ownership is established synchronously by update. Yielding first can
+        // let a heavily loaded runner expire configure's production deadline,
+        // leaving no connection to release and testing a different transition.
+        #expect(client.hasOwnership)
         client.releaseOwnership()
+        // Check the synchronous transition before yielding. CI can suspend the
+        // MainActor past the deadline while the helper receives the stop IPC;
+        // observing its receipt does not imply that the deadline is still open.
+        #expect(client.releasePending)
         for _ in 0..<100 where !helper.hasStop { try await Task.sleep(for: .milliseconds(2)) }
-        #expect(helper.hasStop && client.releasePending)
-        try await Task.sleep(for: .milliseconds(30))
-        #expect(client.releasePending && client.hasOwnership)
+        #expect(helper.hasStop)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(!client.releasePending && !client.hasOwnership)
+        #expect(client.status.state.contains("未獲確認"))
         helper.acknowledge()
         for _ in 0..<100 where client.releasePending { try await Task.sleep(for: .milliseconds(2)) }
         #expect(!client.releasePending && !client.hasOwnership)

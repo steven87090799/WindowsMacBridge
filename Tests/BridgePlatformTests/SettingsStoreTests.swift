@@ -14,9 +14,9 @@ import BridgePlatform
         defer { defaults.removePersistentDomain(forName: name) }
         let settings = SettingsStore(defaults: defaults).settings
         #expect(settings.enabled)
-        #expect(settings.inputBackend == .deviceHID)
+        #expect(settings.inputBackend == .eventTap)
         #expect(settings.keyboardScope == .allKeyboards)
-        #expect(!settings.finderEnabled && settings.allowIMEShortcuts)
+        #expect(settings.finderEnabled && settings.allowIMEShortcuts)
         #expect(settings.screenshotAutoCopy)
         #expect(settings.windowsKeyModifier == .command)
         #expect(!settings.winRunEnabled && !settings.winSettingsEnabled && !settings.winTaskViewEnabled)
@@ -70,10 +70,10 @@ import BridgePlatform
             $0.overrides["custom.browser"] = .remoteWindows
         }
         store.applyRecommendedPreset()
-        #expect(store.settings.enabled && store.settings.inputBackend == .deviceHID)
+        #expect(store.settings.enabled && store.settings.inputBackend == .eventTap)
         #expect(store.settings.overrides["com.openai.codex"] == .macOS)
         #expect(store.settings.overrides["custom.browser"] == .remoteWindows)
-        #expect(!store.settings.finderEnabled)
+        #expect(store.settings.finderEnabled)
         #expect(store.settings.screenshotAutoCopy)
         #expect(SettingsStore(defaults: defaults).settings == store.settings)
     }
@@ -87,10 +87,10 @@ import BridgePlatform
             $0.windowsKeyModifier = .option; $0.overrides["custom.remote"] = .remoteWindows
         }
         store.prepareOneClickSetup(hasBuiltInAppleKeyboard: builtIn)
-        #expect(store.settings.enabled && store.settings.inputBackend == .deviceHID)
+        #expect(store.settings.enabled && store.settings.inputBackend == .eventTap)
         #expect(store.settings.screenshotAutoCopy && store.settings.finderEnabled)
         #expect(store.settings.winRunEnabled && store.settings.winSettingsEnabled && store.settings.winTaskViewEnabled)
-        #expect(!store.settings.finderBrightnessEnterEnabled && store.settings.macBookFnControlSwap == builtIn)
+        #expect(!store.settings.finderBrightnessEnterEnabled && !store.settings.macBookFnControlSwap)
         #expect(store.settings.windowsKeyModifier == .option && store.settings.overrides["custom.remote"] == .remoteWindows)
         #expect(SettingsStore(defaults: defaults).settings == store.settings)
     }
@@ -148,7 +148,7 @@ import BridgePlatform
         let legacy = Data(#"{"schemaVersion":1,"enabled":false,"overrides":{"example.remote":"remoteWindows"},"finderEnabled":true,"allowIMEShortcuts":false,"screenshotAutoCopy":false}"#.utf8)
         defaults.set(legacy, forKey: "bridge.settings.v1")
         let store = SettingsStore(defaults: defaults)
-        #expect(store.settings.schemaVersion == 5)
+        #expect(store.settings.schemaVersion == 6)
         #expect(!store.settings.enabled && store.settings.finderEnabled)
         #expect(store.settings.overrides["example.remote"] == .remoteWindows)
         #expect(!store.settings.screenshotAutoCopy && !store.settings.allowIMEShortcuts)
@@ -167,7 +167,7 @@ import BridgePlatform
         object.removeValue(forKey: "macBookFnControlSwap")
         defaults.set(try JSONSerialization.data(withJSONObject: object), forKey: "bridge.settings.v1")
         let store = SettingsStore(defaults: defaults)
-        #expect(store.settings.schemaVersion == 5 && !store.settings.macBookFnControlSwap)
+        #expect(store.settings.schemaVersion == 6 && !store.settings.macBookFnControlSwap)
         #expect(!store.settings.screenshotAutoCopy && store.settings.overrides == old.overrides)
         store.update { $0.macBookFnControlSwap = true }
         store.applyRecommendedPreset()
@@ -180,7 +180,7 @@ import BridgePlatform
         let legacy = Data(#"{"schemaVersion":3,"enabled":true,"overrides":{"custom.remote":"remoteWindows"},"screenshotAutoCopy":false,"finderEnabled":true,"altF4Enabled":true,"windowSwitcherEnabled":true,"windowThumbnailsEnabled":true}"#.utf8)
         defaults.set(legacy, forKey: "bridge.settings.v1")
         let store = SettingsStore(defaults: defaults, portableHost: false)
-        #expect(store.settings.schemaVersion == 5)
+        #expect(store.settings.schemaVersion == 6)
         #expect(store.settings.finderEnabled && store.settings.altF4Enabled)
         #expect(!store.settings.screenshotAutoCopy)
         #expect(store.settings.overrides["custom.remote"] == .remoteWindows)

@@ -6,35 +6,53 @@ import BridgeCore
 /// stop acknowledgement cannot form controller -> connection -> controller ownership.
 private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unchecked Sendable {
     private weak var controller: HIDBackendClient?
-    init(_ controller: HIDBackendClient) { self.controller = controller }
+    private let identity: UUID
+    init(_ controller: HIDBackendClient, identity: UUID) { self.controller = controller; self.identity = identity }
+    func receiveStatus(_ data: Data, generation: UInt64) {
+        Task { @MainActor [weak controller, identity] in controller?.acceptStatus(data, generation: generation, identity: identity) }
+    }
     func performAction(_ id: String, processID: Int32, generation: UInt64) {
         controller?.performAction(id, processID: processID, generation: generation)
     }
 }
 
+// Cleanup has no actor-bound work: cancel owned deadlines and invalidate IPC.
+// The owner mutates this holder on MainActor; final destruction is race-free.
+private final class HIDConnectionLifetime: @unchecked Sendable {
+    var connection: NSXPCConnection?, stoppingConnection: NSXPCConnection?, permissionConnection: NSXPCConnection?
+    var requestTimeout: DispatchWorkItem?, permissionTimeout: DispatchWorkItem?
+    var stopTimeout: DispatchSourceTimer?
+    deinit {
+        requestTimeout?.cancel(); permissionTimeout?.cancel(); stopTimeout?.cancel()
+        for peer in [connection, stoppingConnection, permissionConnection] {
+            peer?.invalidationHandler = nil; peer?.interruptionHandler = nil; peer?.invalidate()
+        }
+    }
+}
 @MainActor public final class HIDBackendClient: NSObject, HIDControllerProtocol {
+    private let lifetime = HIDConnectionLifetime()
     public private(set) var status = HIDStatus()
     public var onOwnershipChange: (() -> Void)?
     public private(set) var releasePending = false
     private var verifiedStatusAt: TimeInterval?
     private var permissionProbeID: UUID?
-    private var permissionConnection: NSXPCConnection?
-    private var permissionTimeout: DispatchWorkItem?
+    private var permissionConnection: NSXPCConnection? { get { lifetime.permissionConnection } set { lifetime.permissionConnection = newValue } }
+    private var permissionTimeout: DispatchWorkItem? { get { lifetime.permissionTimeout } set { lifetime.permissionTimeout = newValue } }
     private var permissionReply: ((Bool?) -> Void)?
     public var hasFreshVerifiedStatus: Bool {
         backendActive && configuration.enabled && connection != nil && !releasePending &&
-            verifiedStatusAt.map { ProcessInfo.processInfo.systemUptime - $0 <= 1 } == true
+            verifiedStatusAt != nil
     }
     public var hasOwnership: Bool { connection != nil || stoppingConnection != nil }
-    private var stoppingConnection: NSXPCConnection?
-    private var stopTimeout: DispatchSourceTimer?
+    private var stoppingConnection: NSXPCConnection? { get { lifetime.stoppingConnection } set { lifetime.stoppingConnection = newValue } }
+    private var stopTimeout: DispatchSourceTimer? { get { lifetime.stopTimeout } set { lifetime.stopTimeout = newValue } }
     private var stopID: UUID?
     private var connectionFactory: @MainActor () -> NSXPCConnection = {
         NSXPCConnection(machServiceName: HIDService.name, options: .privileged)
     }
     private var stopAcknowledgementTimeout: TimeInterval = 1.5
     public var onScreenshot: ((ScreenshotKind) -> Void)?
-    private var connection: NSXPCConnection?
+    private var connection: NSXPCConnection? { get { lifetime.connection } set { lifetime.connection = newValue } }
     private var connectionIdentity: UUID?
     private var configuration = HIDConfiguration()
     private var generation: UInt64 = 0
@@ -42,9 +60,9 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
     private var actionEpoch: UInt64 = 0
     private var backendActive = false
     private var started = false
-    private var timer: Timer?
+    private var requestTimeout: DispatchWorkItem? { get { lifetime.requestTimeout } set { lifetime.requestTimeout = newValue } }
     private var inFlight = false
-    private var sentAt: Double = 0, retryAt: Double = 0
+    private var sentAt: Double = 0
     public override init() { super.init() }
     public init(connectionFactory: @escaping @MainActor () -> NSXPCConnection,
                 stopAcknowledgementTimeout: TimeInterval = 1.5) {
@@ -55,13 +73,7 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
     public func start() {
         guard !started else { return }
         started = true
-        if backendActive && configuration.enabled { startHeartbeat() }
-    }
-    private func startHeartbeat() {
-        guard timer == nil else { return }
-        timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.tick() }
-        }
+        if backendActive && configuration.enabled { tick() }
     }
     public func update(_ engine: EngineConfiguration, active: Bool) {
         let previous = configuration
@@ -114,18 +126,14 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
             configuration.generation = generation
         } else { generation = engine.generation; configuration.generation = generation }
         if !active || !effectiveEnabled {
-            if wasActive || timer != nil || connection != nil {
-                timer?.invalidate(); timer = nil
+            if wasActive || connection != nil {
                 disconnect()
             }
-        } else if started {
-            startHeartbeat()
-            tick()
-        }
+        } else if started && changed { tick() }
     }
     public func stop() {
         if let id = permissionProbeID { finishPermissionProbe(id, grant: nil) }
-        started = false; timer?.invalidate(); timer = nil; backendActive = false; disconnect()
+        started = false; backendActive = false; disconnect()
     }
     public func requestInputAccess() {
         checkInputAccess(request: true) { _ in }
@@ -173,7 +181,7 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
     public func releaseOwnership() { backendActive = false; configuration.enabled = false; disconnect() }
     private func disconnect() {
         verifiedStatusAt = nil
-        timer?.invalidate(); timer = nil
+        requestTimeout?.cancel(); requestTimeout = nil
         guard let old = connection else { inFlight = false; return }
         connection = nil; connectionIdentity = nil; inFlight = false
         guard stoppingConnection == nil else { old.invalidate(); return }
@@ -186,36 +194,61 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
             MainActor.assumeIsolated {
                 guard let self, self.stopID == id else { return }
                 self.stopTimeout?.cancel(); self.stopTimeout = nil
-                // A timeout is no acknowledgement. Keep every new backend stopped.
-                self.status.state = "Helper 停止未獲確認；新後端保持停用，請重新啟動 App／helper。"
+                // Invalidation retires the authenticated ownership lease at the
+                // service. Never keep a stale stop flag blocking EventTap forever.
+                self.finishStop(id, acknowledged: false)
             }
         }
         stopTimeout = timeout; timeout.resume()
-        let proxy = old.remoteObjectProxyWithErrorHandler { @Sendable _ in } as? HIDHelperProtocol
+        old.invalidationHandler = { @Sendable [weak self] in Task { @MainActor in self?.finishStop(id, acknowledged: false) } }
+        old.interruptionHandler = old.invalidationHandler
+        let proxy = old.remoteObjectProxyWithErrorHandler { @Sendable [weak self] _ in
+            Task { @MainActor in self?.finishStop(id, acknowledged: false) }
+        } as? HIDHelperProtocol
         proxy?.stop { @Sendable [weak self] in
             Task { @MainActor in
-                guard let self, self.stopID == id, let old = self.stoppingConnection else { return }
-                self.stopTimeout?.cancel(); self.stopTimeout = nil
-                self.stopID = nil; self.stoppingConnection = nil; old.invalidate()
-                self.releasePending = false; self.status = HIDStatus()
-                self.onOwnershipChange?()
+                self?.finishStop(id, acknowledged: true)
             }
         }
     }
+    private func finishStop(_ id: UUID, acknowledged: Bool) {
+        guard stopID == id else { return }
+        stopTimeout?.cancel(); stopTimeout = nil; stopID = nil
+        let old = stoppingConnection; stoppingConnection = nil
+        old?.invalidationHandler = nil; old?.interruptionHandler = nil; old?.invalidate()
+        releasePending = false; status = HIDStatus()
+        if !acknowledged { status.state = "停止未獲確認；已銷毀舊連線，EventTap 不受阻擋。" }
+        onOwnershipChange?()
+    }
+    fileprivate func acceptStatus(_ data: Data, generation: UInt64, identity: UUID) {
+        guard connectionIdentity == identity, backendActive, !releasePending,
+              generation == configuration.generation, data.count <= 16384,
+              let value = try? JSONDecoder().decode(HIDStatus.self, from: data), value.version == HIDService.protocolVersion,
+              value.devices.count <= 16, value.devices.allSatisfy({ $0.identity.utf8.count <= 128 && $0.product.utf8.count <= 256 }) else { return }
+        status = value; verifiedStatusAt = ProcessInfo.processInfo.systemUptime; onOwnershipChange?()
+    }
+    public nonisolated func receiveStatus(_ data: Data, generation: UInt64) {}
     private func tick() {
         guard backendActive, configuration.enabled, !releasePending else { return }
         let now = ProcessInfo.processInfo.systemUptime
         if inFlight {
-            if now - sentAt > 1 { disconnect(); retryAt = now + 2; status.state = "Helper 回應逾時；已停止擷取" }
+            if now - sentAt > 1 { disconnect(); status.state = "Helper 回應逾時；已停止擷取" }
             return
         }
-        guard now >= retryAt else { return }
+
         if connection == nil {
             let next = connectionFactory()
             next.remoteObjectInterface = NSXPCInterface(with: HIDHelperProtocol.self)
             next.exportedInterface = NSXPCInterface(with: HIDControllerProtocol.self)
-            next.exportedObject = HIDControllerReceiver(self)
-            connectionIdentity = UUID(); next.resume(); connection = next
+            let identity = UUID()
+            next.exportedObject = HIDControllerReceiver(self, identity: identity)
+            next.invalidationHandler = { @Sendable [weak self] in Task { @MainActor in
+                guard let self, self.connectionIdentity == identity else { return }
+                self.disconnect(); self.status.state = "進階背景元件已斷線；實體輸入已交還系統。"
+                self.onOwnershipChange?()
+            } }
+            next.interruptionHandler = next.invalidationHandler
+            connectionIdentity = identity; next.resume(); connection = next
         }
         // Legacy per-device translation cannot authorize source-side AX/Clipboard work.
         // Preserve the requested UI policy; restrict only the capture worker's capabilities.
@@ -226,25 +259,34 @@ private final class HIDControllerReceiver: NSObject, HIDControllerProtocol, @unc
         captureConfiguration.winSettingsEnabled = false
         guard let connection, let connectionIdentity, let data = try? JSONEncoder().encode(captureConfiguration), data.count <= 8192 else { return }
         sentAt = now; inFlight = true
+        requestTimeout?.cancel()
+        let timeout = DispatchWorkItem { [weak self] in MainActor.assumeIsolated {
+            guard let self, self.connectionIdentity == connectionIdentity, self.inFlight else { return }
+            self.disconnect(); self.status.state = "進階背景元件回應逾時；請重新啟動引擎。"
+            self.onOwnershipChange?()
+        } }
+        requestTimeout = timeout; DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: timeout)
         let sentGeneration = generation
         let sentActionEpoch = actionEpoch
         let proxy = connection.remoteObjectProxyWithErrorHandler { @Sendable [weak self] _ in
             Task { @MainActor in
                 guard let self, self.connectionIdentity == connectionIdentity else { return }
-                self.disconnect(); self.retryAt = ProcessInfo.processInfo.systemUptime + 2
-                self.status.state = "Helper 未安裝、尚未核准或 App 簽章與安裝版本不符"
+                self.disconnect()
+                self.status.state = "進階背景元件未安裝、尚未核准或安裝版本不符"
+                self.onOwnershipChange?()
             }
         } as? HIDHelperProtocol
         proxy?.configure(data) { @Sendable [weak self] data in
             Task { @MainActor in
                 guard let self, self.connectionIdentity == connectionIdentity else { return }
-                self.inFlight = false
+                self.inFlight = false; self.requestTimeout?.cancel(); self.requestTimeout = nil
                 guard self.backendActive, sentGeneration == self.generation, sentActionEpoch == self.actionEpoch else { self.tick(); return }
                 guard data.count <= 16384, let status = try? JSONDecoder().decode(HIDStatus.self, from: data),
                       status.version == HIDService.protocolVersion, status.devices.count <= 16,
                       status.devices.allSatisfy({ $0.identity.utf8.count <= 128 && $0.product.utf8.count <= 256 }) else { self.disconnect(); return }
                 self.status = status
                 self.verifiedStatusAt = ProcessInfo.processInfo.systemUptime
+                self.onOwnershipChange?()
                 if sentGeneration != self.generation { self.tick() }
             }
         }

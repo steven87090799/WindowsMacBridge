@@ -15,9 +15,12 @@ public struct CapturePrerequisites: Sendable {
     public var keysNeutral = false
     public var enabled = false
     public var lastHeartbeat: Double = 0
+    // A service-owned authenticated XPC connection replaces idle heartbeats.
+    // The adapter must close devices on invalidation/interruption.
+    public var connectionLeaseValid = false
     public init() {}
     public func leaseValid(at now: Double) -> Bool {
-        authenticatedController && now >= lastHeartbeat && now - lastHeartbeat < 1
+        authenticatedController && (connectionLeaseValid || (now >= lastHeartbeat && now - lastHeartbeat < 1))
     }
 }
 public struct CaptureLifecycle: Sendable {

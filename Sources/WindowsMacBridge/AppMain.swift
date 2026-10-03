@@ -28,17 +28,6 @@ import InputSourceCore
             NSApp.terminate(nil)
             return
         }
-        if controller.bundledInstallerAvailable && (controller.backgroundInstallationNeeded || controller.installationRecoveryPending) {
-            do { try BundledBackendInstaller.launch() }
-            catch {
-                let alert = NSAlert()
-                alert.messageText = "安裝尚未完成"
-                alert.informativeText = "請完成系統的管理員驗證，再重新開啟 WindowsMacBridge。\n\(error.localizedDescription)"
-                alert.runModal()
-                NSApp.terminate(nil)
-            }
-            return
-        }
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.title = ""
         item.button?.image = BrandAssets.active
@@ -49,8 +38,7 @@ import InputSourceCore
             updateStatusItem()
         }
         controller.start()
-        if !controller.permissions.keyboardControlGranted || !controller.permissions.listening ||
-            (controller.settings.screenshotAutoCopy && (!controller.permissions.screenRecording || !controller.permissions.loginItem)) ||
+        if !controller.permissions.keyboardControlGranted ||
             !controller.settings.enabled || controller.backgroundInstallationNeeded || controller.preparedSetupThisLaunch ||
             CommandLine.arguments.contains("--permission-relaunch") { showSettings() }
     }

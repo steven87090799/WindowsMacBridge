@@ -30,6 +30,22 @@ import Security
               let values = info as? [String: Any], let hash = values[kSecCodeInfoUnique as String] as? Data else { return nil }
         return hash.map { String(format: "%02x", $0) }.joined()
     }
+    private static var uninstallProcess: Process?
+    static func uninstall(completion: @escaping @MainActor (Int32) -> Void) throws {
+        guard uninstallProcess == nil else { return }
+        guard available, let resources = Bundle.main.resourceURL else { return }
+        let launcher = Process()
+        launcher.executableURL = URL(fileURLWithPath: "/bin/bash")
+        launcher.arguments = [resources.appendingPathComponent("LaunchEmbeddedUninstall.sh").path, Bundle.main.bundleURL.path]
+        launcher.standardInput = FileHandle.nullDevice
+        launcher.standardOutput = FileHandle.nullDevice; launcher.standardError = FileHandle.nullDevice
+        launcher.terminationHandler = { process in
+            Task { @MainActor in
+                uninstallProcess = nil; completion(process.terminationStatus)
+            }
+        }
+        try launcher.run(); uninstallProcess = launcher
+    }
     static func launch() throws {
         guard available, let resources = Bundle.main.resourceURL else {
             throw NSError(domain: "WindowsMacBridge.Setup", code: 1,
