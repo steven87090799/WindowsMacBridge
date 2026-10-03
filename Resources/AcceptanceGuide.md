@@ -4,7 +4,7 @@
 
 ## 最短開始
 
-DMG 拖入 Applications → 一般模式 → 權限頁輔助功能 → 原生確認綠燈 → TextEdit Ctrl+C/V。啟動不應要求 Root／Driver／輸入監控，也不應自動註冊登入。首次截圖可能要求螢幕錄製；核准後重開 App 再試。不用安裝 Finder 擴充。
+DMG 拖入 Applications → 一般模式 → 權限頁逐項核准輔助功能與輸入監控 → 原生確認綠燈 → TextEdit Ctrl+C/V。螢幕錄製單獨列出，登入時啟動為選用；一般模式不應要求 Root／Driver，也不應自動註冊登入。首次截圖可能要求螢幕錄製；核准後重開 App 再試。不用安裝 Finder 擴充。
 
 ## 1. 快捷鍵與持鍵
 

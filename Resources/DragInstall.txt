@@ -4,7 +4,7 @@ WindowsMacBridge — 開始使用
    更新時先結束舊版，再選擇取代；原本設定會保留。
 2. 從「應用程式」開啟 WindowsMacBridge。
    預設使用一般模式，不安裝背景元件，也不要求管理員密碼。
-3. 在「權限」分頁點「開啟設定」，核准 WindowsMacBridge 的輔助功能。
+3. 在「權限」分頁點「開啟設定」，逐項核准 WindowsMacBridge 的輔助功能與輸入監控。
    返回 App 確認綠燈；若顯示「需重新開啟」，按該列「重新開啟 App」。
 
 授權通過後，Ctrl+C／V 可用於文字 App；Win+Shift+S

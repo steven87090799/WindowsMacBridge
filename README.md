@@ -1,10 +1,27 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 43）雙模式修復候選版**；[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與原始碼合併是不同階段。
+Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 44）權限與鍵盤恢復修正版**；[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與原始碼合併是不同階段。
+
+## 一般模式與進階模式已分開
+
+預設使用**一般模式**。Windows 快捷鍵、Finder 操作、截圖及內建鍵盤 Fn／Ctrl 交換都能從一般設定開啟；不必先安裝 HID 或 Driver。
+
+| 項目 | 一般模式（預設） | 進階模式（明確選用） |
+|---|---|---|
+| 輸入後端 | 使用者層 EventTap | 可選 EventTap 或裝置 HID／VirtualHID |
+| 鍵盤範圍 | 所有鍵盤；EventTap 無可靠逐裝置 ID | HID 可設定實體鍵盤範圍與偏好 |
+| 基本權限 | 輔助功能與輸入監控 | 相同；HID 另驗證背景元件的讀取授權 |
+| 截圖 | 另需螢幕錄製；完成直接複製 | 相同 |
+| Root Helper／XPC／Driver | 不建立 HID client、不連線、不自動安裝或提權 | 開啟進階選項、選 HID 並明確安裝後才使用 |
+| 登入時啟動 | 選用，使用者自行開啟 | 選用 |
+
+一般模式**仍需要正常的鍵盤與截圖授權**；拆開的是 HID／Root／Driver 依賴。權限頁逐項列出所需設定，每次只申請一項，回到 App 後重新讀取原生授權結果。權限綠燈只代表該項授權通過，鍵盤後端也必須實際啟動才能顯示運作中。
+
+切回一般模式會釋放本 App 的 HID 所有權並銷毀連線。舊 HID 設定不會自動啟用進階模式；已安裝的共用 Karabiner Driver／服務會保留，避免影響其他使用者，不能把它們仍存在誤稱為全機已沒有背景服務。
 
 ## 安裝
 
-點兩下DMG，把WindowsMacBridge.app拖進Applications，正常退出舊版後替換。一般模式只引導輔助功能，回到App由AX／posting原生檢查驗證。沒有自動Root安裝、HID/XPC連接、Input Monitoring或Driver提示；登錄啓動需用戶明確開啓。截圖第一次明確使用可能需要ScreenCapture授權。
+點兩下DMG，把WindowsMacBridge.app拖進Applications，正常退出舊版後替換。一般模式逐項列出輔助功能、輸入監控、螢幕錄製與選用的登入啟動，回到App由原生API確認各項授權。一般快捷鍵先核准前兩項；截圖另需螢幕錄製。沒有自動Root安裝、HID/XPC連接或Driver提示；登錄啓動需用戶明確開啓。截圖第一次明確使用可能需要ScreenCapture授權。
 
 App使用ad-hoc簽章、尚無Apple公證；更新可能需要重新核准本版App，不能以同名舊授權項視為已通過。不要關閉SIP／Gatekeeper或重設其他App權限。
 

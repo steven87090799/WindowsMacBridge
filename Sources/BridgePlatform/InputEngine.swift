@@ -121,6 +121,7 @@ public final class InputEngine: @unchecked Sendable {
     private var publishedDiagnosticRevision: UInt64 = .max
     private var diagnosticDeadline: TimeInterval = 0
     private var actionEpoch: UInt64 = 0
+    private var tapAuthorizationFault = false
     private var policyGeneration: UInt64 = 0
     private var expiryTimer: Timer?
     private var activityHandler: (@MainActor @Sendable () -> Void)?
@@ -242,7 +243,7 @@ public final class InputEngine: @unchecked Sendable {
             }
             if lastRestart != configuration.restartToken {
                 lastRestart = configuration.restartToken
-                status.fault = nil; status.emergencyPaused = false
+                status.fault = nil; tapAuthorizationFault = false; status.emergencyPaused = false
                 recovery.reset(); attemptedStart = false
                 needsRecreation = true
                 processor.invalidate()
@@ -363,7 +364,12 @@ public final class InputEngine: @unchecked Sendable {
             processor.invalidate()
             actionEpoch &+= 1
             if (status.accessibility && !lastTrust) || (status.postAccess && !lastPostAccess) ||
-                (status.listenAccess && !lastListenAccess) { attemptedStart = false }
+                (status.listenAccess && !lastListenAccess) {
+                attemptedStart = false
+                if tapAuthorizationFault && status.accessibility && status.postAccess && status.listenAccess {
+                    status.fault = nil; tapAuthorizationFault = false
+                }
+            }
             lastTrust = status.accessibility; lastSecure = status.secureInput
             lastPostAccess = status.postAccess
             lastListenAccess = status.listenAccess
@@ -403,7 +409,7 @@ public final class InputEngine: @unchecked Sendable {
         scheduleRemoteExpiry()
     }
     private var hasInputAuthorization: Bool {
-        configuration.physicalBackend == .eventTap ? status.accessibility : status.listenAccess
+        status.listenAccess
     }
     private func scheduleRemoteExpiry() {
         expiryTimer?.invalidate(); expiryTimer = nil
@@ -437,7 +443,8 @@ public final class InputEngine: @unchecked Sendable {
                                               options: .defaultTap, eventsOfInterest: CGEventMask(mask),
                                               callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque()),
               let runSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, created, 0) else {
-            status.fault = "無法建立 Event Tap；請檢查權限後按重新啟動。"
+            tapAuthorizationFault = true
+            status.fault = "鍵盤事件尚未就緒；請確認輔助功能與輸入監控。"
             return
         }
         tap = created; source = runSource
@@ -445,7 +452,8 @@ public final class InputEngine: @unchecked Sendable {
         CGEvent.tapEnable(tap: created, enable: true)
         guard KeyboardEventTapCoverage.currentProcessIsVerified() else {
             destroyTap()
-            status.fault = "系統未提供完整按鍵事件；請核准輔助功能並重新開啟 App。"
+            tapAuthorizationFault = true
+            status.fault = "鍵盤事件尚未就緒；請確認輔助功能與輸入監控。"
             return
         }
         processor.invalidate()

@@ -53,7 +53,7 @@ struct SettingsView: View {
                 Spacer()
                     Button("重新檢查") { controller.refreshPermissions(userInitiated: true, recheckScreenshotFolder: true) }
             }
-            explanation(controller.settings.isAdvancedModeEnabled ? "進階後端所需授權逐項確認；系統核准後回來重新檢查。" : "一般快捷鍵只需輔助功能授權。按開啟設定，核准 WindowsMacBridge 後回來；原生檢查通過才顯示綠燈。")
+            explanation("依序核准輔助功能與輸入監控；需要截圖時再核准螢幕錄製。每列只申請自己的權限，回來後確認通過才顯示綠燈。登入時啟動為選用。")
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     permissionRow("輔助功能（\(KeyboardPermissionRequest.settingsTitle)）",
@@ -74,20 +74,17 @@ struct SettingsView: View {
                     if let notice = controller.permissionRelaunchNotice {
                         Text(notice).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
                     }
-                    if usesHID {
                     permissionRow("輸入監控：WindowsMacBridge",
                                   verification: controller.inputMonitoringVerification,
                                   required: controller.settings.enabled || controller.settings.screenshotAutoCopy,
                                   location: "隱私權與安全性 → 輸入監控 → WindowsMacBridge",
-                                  detail: "實體鍵盤、Ctrl 快捷鍵及 Windows 截圖都使用此 App 的同一項輸入監控權限。",
+                                  detail: "允許接收鍵盤事件；一般模式與 HID 都使用 WindowsMacBridge 的這一項權限。核准後若 macOS 要求重開 App，依提示完成。",
                                   actionLabel: "開啟設定") {
                         controller.requestListening(); controller.openPermissionSettings(.listening)
                     }
                     if let notice = controller.backgroundInputNotice {
                         Text(notice).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 16)
                     }
-                    }
-                    if controller.settings.isAdvancedModeEnabled {
                     permissionRow("螢幕錄製",
                                   verification: controller.permissionChecklist.verification(for: [.screenRecording]),
                                   required: controller.settings.screenshotAutoCopy,
@@ -105,6 +102,7 @@ struct SettingsView: View {
                                   enabledLabel: "已核准", disabledLabel: "未核准") {
                         controller.requestLoginItem()
                     }
+                    if controller.settings.isAdvancedModeEnabled {
                     permissionRow("WindowsMacBridge 鍵盤驅動",
                                   verification: controller.driverVerification, required: usesHID,
                                   location: "一般 → 登入項目與延伸功能 → 驅動程式延伸功能 → .Karabiner‑VirtualHIDDevice‑Manager",

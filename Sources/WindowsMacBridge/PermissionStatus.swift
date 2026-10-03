@@ -21,7 +21,7 @@ import BridgeCore
     static func current(advanced: Bool = false) -> PermissionSnapshot {
         PermissionSnapshot(accessibility: AXIsProcessTrusted(),
              posting: CGPreflightPostEventAccess(),
-             listening: advanced && CGPreflightListenEventAccess() && IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted,
+             listening: CGPreflightListenEventAccess() && (!advanced || IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted),
              screenRecording: CGPreflightScreenCaptureAccess(),
              finderExtension: advanced && FIFinderSyncController.isExtensionEnabled,
              loginItem: SMAppService.mainApp.status == .enabled)

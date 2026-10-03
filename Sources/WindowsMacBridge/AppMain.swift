@@ -38,14 +38,14 @@ import InputSourceCore
             updateStatusItem()
         }
         controller.start()
-        if !controller.permissions.keyboardControlGranted ||
+        if !controller.permissions.keyboardControlGranted || !controller.permissions.listening ||
             !controller.settings.enabled || controller.backgroundInstallationNeeded || controller.preparedSetupThisLaunch ||
             CommandLine.arguments.contains("--permission-relaunch") { showSettings() }
     }
     private func updateStatusItem() {
-        let tooltip = controller.summary + " · " + controller.sourceStatus.summary
+        let tooltip = "WindowsMacBridge"
         if tooltip != lastTooltip { item.button?.toolTip = tooltip; lastTooltip = tooltip }
-        let active = controller.settings.enabled && !controller.paused && !controller.status.emergencyPaused
+        let active = controller.isOperating
         if active != lastActive {
             item.button?.image = active ? BrandAssets.active : BrandAssets.paused
             lastActive = active
@@ -89,11 +89,6 @@ import InputSourceCore
     }
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        label("WindowsMacBridge \(AppBuildInfo.current.versionLabel) · \(AppBuildInfo.current.shortRevision)", in: menu)
-        label(controller.summary, in: menu)
-        label("App: \(controller.context.displayName)", in: menu)
-        label("Profile: \(controller.context.mode.title)", in: menu)
-        menu.addItem(.separator())
         let enabled = action("啟用 Windows Mode", #selector(toggleEnabled), in: menu)
         enabled.state = controller.settings.enabled ? .on : .off
         action("恢復／重啟引擎", #selector(resume), in: menu)

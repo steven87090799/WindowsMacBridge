@@ -355,6 +355,11 @@ public struct ScreenshotStatus: Equatable, Sendable {
             setStatus(issue: "截圖快捷鍵需要輔助功能授權。", result: "截圖快捷鍵尚未就緒")
             return
         }
+        if validatesNativeContext && !CGPreflightListenEventAccess() {
+            destroyTap(); destroyNativeTap()
+            setStatus(issue: "截圖快捷鍵需要輸入監控授權。", result: "截圖快捷鍵尚未就緒")
+            return
+        }
         if validatesNativeContext {
             if let nativeTap, !CFMachPortIsValid(nativeTap) || !CGEvent.tapIsEnabled(tap: nativeTap) { destroyNativeTap() }
             createNativeTapIfNeeded()
