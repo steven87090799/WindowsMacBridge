@@ -65,7 +65,8 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         var config = EngineConfiguration(); config.enabled = true; config.generation = 1
         config.context = .init(processID: .max, bundleID: "test", mode: .macOS)
         client?.start(); client?.update(config, active: true)
-        for _ in 0..<20 { await Task.yield() }
+        // stop() is valid with configure IPC still in flight. Do not yield to
+        // unrelated parallel tests before establishing the pending-stop state.
         client?.stop()
         for _ in 0..<100 where !helper.hasStop { try await Task.sleep(for: .milliseconds(2)) }
         #expect(helper.hasStop)
@@ -81,7 +82,10 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         var config = EngineConfiguration(); config.enabled = true; config.generation = 1
         config.context = .init(processID: .max, bundleID: "test", mode: .macOS)
         client.start(); client.update(config, active: true)
-        for _ in 0..<20 { await Task.yield() }
+        // Ownership is established synchronously by update. Yielding first can
+        // let a heavily loaded runner expire configure's production deadline,
+        // leaving no connection to release and testing a different transition.
+        #expect(client.hasOwnership)
         client.releaseOwnership()
         // Check the synchronous transition before yielding. CI can suspend the
         // MainActor past the deadline while the helper receives the stop IPC;
