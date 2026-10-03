@@ -7,6 +7,8 @@ bridge_driver_old_version=''
 bridge_driver_old_pkg='Karabiner-DriverKit-VirtualHIDDevice-7.3.0.pkg'
 bridge_driver_old_sha=4ccd9b11628f4c319b17452927827a8313728fe60292e4f789ef4ba626e09ba0
 bridge_driver_identifier=org.pqrs.Karabiner-DriverKit-VirtualHIDDevice
+# Another product that ships and manages the same shared Driver.
+bridge_karabiner_elements='/Applications/Karabiner-Elements.app'
 
 bridge_driver_write_phase() {
     local bridge_phase_temp
@@ -75,7 +77,7 @@ bridge_driver_prepare() {
         bridge_driver_kind=fresh
     elif [[ "$bridge_driver_installed" == 7.3.0 ]]; then
         bridge_driver_kind=upgrade
-        [[ ! -d /Applications/Karabiner-Elements.app ]] || {
+        [[ ! -d "$bridge_karabiner_elements" ]] || {
             echo 'Karabiner also owns the old Driver; update its compatible client first.' >&2; return 1;
         }
         bridge_driver_verify_old_package "$bridge_payload/Driver/$bridge_driver_old_pkg" || return 1
@@ -137,6 +139,11 @@ bridge_driver_rollback() {
     fi
     [[ -z "$bridge_current" || "$bridge_current" == 8.6.0 || "$bridge_current" == "$bridge_driver_old_version" ]] || {
         echo 'Shared Driver was changed by another installer; recovery snapshot retained.' >&2; return 1;
+    }
+    # A version number is not ownership. If another Driver owner appeared after an
+    # interrupted transaction, never downgrade or delete its files: keep recovery pending.
+    [[ ! -d "$bridge_karabiner_elements" ]] || {
+        echo 'Karabiner now also uses the shared Driver; recovery snapshot retained and shared files left unchanged.' >&2; return 1;
     }
     if [[ "$bridge_driver_kind" == upgrade ]]; then
         bridge_driver_verify_old_package "$bridge_stage/previous/$bridge_driver_old_pkg" || return 1

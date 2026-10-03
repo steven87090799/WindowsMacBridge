@@ -45,6 +45,9 @@ elif name in ['chown', 'chmod']:
 elif name == 'codesign':
     if '-R' in args and not args[args.index('-R')+1].startswith('='):
         sys.exit(65)  # Native codesign interprets a bare expression as a filename.
+    reject = os.environ.get('WMB_CODESIGN_REJECT', '')
+    if reject and any(reject in arg for arg in args):
+        sys.exit(1)  # e.g. Finder tag detritus on a moved bundle fails --strict.
 elif name == 'pkgutil':
     receipt_path = root/'receipt-state'
     state = receipt_path.read_text() if receipt_path.exists() else os.environ.get('WMB_RECEIPT', 'fresh')
@@ -146,7 +149,7 @@ class InstallBackendTests(unittest.TestCase):
                                         capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
-    def run_install(self, receipt='installed', fail='', existing=True, installed_driver_version='1.8.0', active_driver=True, driver_running=None, private_app_resource=False, protected_app=False, unified_runtime=False):
+    def run_install(self, receipt='installed', fail='', existing=True, installed_driver_version='1.8.0', active_driver=True, driver_running=None, private_app_resource=False, protected_app=False, unified_runtime=False, codesign_reject=''):
         temp = tempfile.TemporaryDirectory(prefix='wmb-install-test-')
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
@@ -241,6 +244,9 @@ class InstallBackendTests(unittest.TestCase):
         script = root/'InstallBackend.sh'; script.write_text(text)
         if transaction.exists():
             transaction_text = transaction.read_text()
+            # A developer Mac may have Karabiner-Elements installed; never read the real path.
+            transaction_text = transaction_text.replace("'/Applications/Karabiner-Elements.app'",
+                                                        repr(str(root/'Applications/Karabiner-Elements.app')))
             for command in ['/usr/bin/ditto','/usr/sbin/chown','/usr/bin/codesign','/usr/sbin/pkgutil',
                             '/usr/sbin/installer','/usr/bin/shasum','/bin/launchctl','/usr/bin/pgrep','/bin/ps',
                             '/usr/bin/stat','/usr/bin/install','/usr/sbin/lsof','/usr/bin/systemextensionsctl']:
@@ -252,7 +258,7 @@ class InstallBackendTests(unittest.TestCase):
             (payload/'PAYLOAD-SHA256SUMS').write_text(manifest)
         env = dict(os.environ, WMB_TEST_ROOT=str(root), WMB_DRIVER_SHA=DRIVER_SHA,
                    WMB_ROLLBACK_SHA=ROLLBACK_SHA, WMB_RECEIPT=receipt, WMB_FAIL=fail,
-                   WMB_APP_PROTECTED='1' if protected_app else '0')
+                   WMB_APP_PROTECTED='1' if protected_app else '0', WMB_CODESIGN_REJECT=codesign_reject)
         result = subprocess.run(['/bin/bash',str(script),str(payload)], env=env, capture_output=True, text=True, timeout=20)
         return root, app, helper_root, daemons, result
 
@@ -445,6 +451,42 @@ class InstallBackendTests(unittest.TestCase):
         self.assertEqual((root/'receipt-state').read_text(),'7.3.0')
         self.assertEqual((app/'identity').read_text(),'old-app')
         self.assertFalse((helper/'.install-recovery').exists())
+
+    def test_finder_tagged_retired_app_rolls_back_from_the_verified_snapshot(self):
+        # mv keeps com.apple.FinderInfo; strict verification of the retired bundle fails.
+        root, app, helper, daemons, result = self.run_install(fail='bootstrap_helper')
+        self.assertNotEqual(result.returncode, 0)
+        self.assert_original(app, helper, daemons)
+        env = dict(os.environ, WMB_TEST_ROOT=str(root), WMB_DRIVER_SHA=DRIVER_SHA, WMB_ROLLBACK_SHA=ROLLBACK_SHA,
+                   WMB_RECEIPT='installed', WMB_FAIL='bootstrap_helper', WMB_CODESIGN_REJECT='retired-application')
+        (root/'failed-once').unlink(missing_ok=True)
+        retry = subprocess.run(['/bin/bash', str(root/'InstallBackend.sh'), str(root/'payload')],
+                               env=env, capture_output=True, text=True, timeout=20)
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertIn('previous App, input runtime, pin, Driver and service state restored', retry.stderr)
+        self.assert_original(app, helper, daemons)
+        self.assertFalse((helper/'.install-recovery').exists())
+
+    def test_unverifiable_installed_app_is_never_switched(self):
+        _, app, helper, daemons, result = self.run_install(codesign_reject='previous/WindowsMacBridge.app')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('cannot be snapshotted for rollback', result.stderr)
+        self.assert_original(app, helper, daemons)
+        self.assertFalse((helper/'.install-recovery').exists())
+
+    def test_recovery_leaves_the_shared_driver_alone_once_karabiner_also_uses_it(self):
+        root, app, helper, _, result = self.run_install(receipt='7.3.0', fail='kill_during_driver')
+        self.assertEqual(result.returncode, -9)
+        (root/'Applications/Karabiner-Elements.app').mkdir()
+        env = dict(os.environ, WMB_TEST_ROOT=str(root), WMB_DRIVER_SHA=DRIVER_SHA,
+                   WMB_ROLLBACK_SHA=ROLLBACK_SHA, WMB_RECEIPT='7.3.0', WMB_FAIL='')
+        retry = subprocess.run(['/bin/bash', str(root/'InstallBackend.sh'), str(root/'payload')],
+                               env=env, capture_output=True, text=True, timeout=20)
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertIn('Karabiner now also uses the shared Driver', retry.stderr)
+        driver = root/'Library/Application Support/org.pqrs/Karabiner-DriverKit-VirtualHIDDevice'
+        self.assertEqual((driver/'identity').read_text(), 'new-shared-driver')
+        self.assertTrue((helper/'.install-recovery').exists())
 
     def test_corrupt_driver_phase_retains_the_protected_recovery_snapshot(self):
         root, _, helper, _, result = self.run_install(receipt='7.3.0',fail='kill_during_driver')

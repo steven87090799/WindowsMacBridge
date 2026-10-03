@@ -135,7 +135,8 @@ import IOKit.hid
     }
     var paused: Bool { pausedUntilRestart || (pauseUntil.map { $0 > Date() } ?? false) }
     var summary: String {
-        if settings.isAdvancedModeEnabled && installationRecoveryPending { return "安裝尚未完成，請依系統提示核准或重新開機後再開啟 App。" }
+        // Reopening the App does not resume recovery; only the explicit install action does.
+        if settings.isAdvancedModeEnabled && installationRecoveryPending { return "背景元件更新中斷；請在進階設定按「安裝進階背景元件」完成復原。" }
         if let configurationError { return configurationError }
         if !settings.enabled { return "已停用" }
         if paused || status.emergencyPaused { return "已暫停" }
