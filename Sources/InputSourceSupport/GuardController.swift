@@ -68,6 +68,10 @@ final class GuardController {
     private var pauseRecoveryWork: DispatchWorkItem?
     private var pauseGeneration = 0
     private var lastObservedIdentifier: String?
+    /// Enabled-source changes that arrived while work was suspended or cancelled.
+    /// A host resume rediscovers (a full TIS enumeration) only when this is set
+    /// or the guard is enabled, not on every protected-App round trip.
+    private var discoveryStale = false
     private(set) var preservedSourceIdentifier = AppSettings.preservedSourceIdentifier
 
     init() {
@@ -165,7 +169,7 @@ final class GuardController {
 
         FileLogger.shared.log("Guard started; respecting the current input source")
         installTISObservers()
-        _ = inputSources.rediscover()
+        _ = inputSources.rediscover(); discoveryStale = false
         preserveCurrentSelection(record: false)
         schedulePauseRecovery()
         startupRetryCount = 0
@@ -191,6 +195,9 @@ final class GuardController {
         pauseRecoveryWork?.cancel(); pauseRecoveryWork = nil
         stopSecureRecoveryTimer()
         pendingExplicitSelection = nil
+        // A later start must not inherit a selection gate or a stale observation.
+        pendingInternalSourceID = nil; pendingSelectionWasAutomatic = false
+        lastObservedIdentifier = nil; discoveryStale = true
         environmentSuspensionReasons.removeAll()
         shouldReconcileAfterWake = false
         automaticCorrectionTimestamps.removeAll()
@@ -332,11 +339,13 @@ final class GuardController {
         scheduleReconciliation(after: machine.debounceMilliseconds)
     }
 
-    func refreshAndReconcile(reason: String) {
+    func refreshAndReconcile(reason: String, forceDiscovery: Bool = false) {
         guard !isEnvironmentSuspended else { return }
 
-        FileLogger.shared.log(reason)
-        _ = inputSources.rediscover()
+        if isEnabled || forceDiscovery { FileLogger.shared.log(reason) }
+        if isEnabled || forceDiscovery || discoveryStale {
+            _ = inputSources.rediscover(); discoveryStale = false
+        }
 
         // A refresh or wake must not turn a manually selected source back into
         // an automatic correction. TIS does not report who initiated a switch.
@@ -538,7 +547,10 @@ final class GuardController {
         DispatchQueue.main.async { [weak controller] in
             guard let controller else { return }
             let signals = controller.notifications.take()
-            guard controller.isStarted, !controller.isEnvironmentSuspended else { return }
+            guard controller.isStarted, !controller.isEnvironmentSuspended else {
+                if signals & 2 != 0 { controller.discoveryStale = true }
+                return
+            }
             if signals & 2 != 0 { controller.handleEnabledSourcesChange() }
             if signals & 1 != 0 { controller.handleSelectedSourceChange() }
         }
@@ -549,7 +561,7 @@ final class GuardController {
 
         FileLogger.shared.log("Enabled input sources changed; re-discovering")
         startupRetryCount = 0
-        _ = inputSources.rediscover()
+        _ = inputSources.rediscover(); discoveryStale = false
         preserveCurrentSelection(record: false)
 
         if automaticReconciliationAllowed {
@@ -729,8 +741,8 @@ final class GuardController {
         guard !isEnvironmentSuspended else { return }
         if !isExplicitUserRequest, !automaticReconciliationAllowed { return }
 
-        if targetSource == nil {
-            _ = inputSources.rediscover()
+        if targetSource == nil || discoveryStale {
+            _ = inputSources.rediscover(); discoveryStale = false
         }
 
         guard let target = targetSource else {
@@ -845,9 +857,20 @@ final class GuardController {
         cancelVerificationWork()
         let epoch = workEpoch
         let work = DispatchWorkItem { [weak self] in
-            guard let self, self.isStarted, self.workEpoch == epoch, !self.isEnvironmentSuspended,
-                  self.selectionAllowed(), !self.isSecureInputEnabled,
+            guard let self, self.isStarted, self.workEpoch == epoch,
                   self.pendingInternalSourceID == identifier else { return }
+            // Resolve, never abandon, the pending selection: it gates the host's
+            // shortcuts (selectionInProgress), and TIS may post nothing at all.
+            guard !self.isEnvironmentSuspended, self.selectionAllowed(), !self.isSecureInputEnabled else {
+                self.pendingInternalSourceID = nil
+                self.pendingSelectionWasAutomatic = false
+                if self.isSecureInputEnabled {
+                    self.deferAttemptsUntilSecureInputEnds()
+                    self.ensureSecureRecoveryTimer()
+                }
+                self.onStateChange?()
+                return
+            }
 
             let currentIdentifier = self.inputSources.currentSource().identifier
             if currentIdentifier == identifier {
@@ -1079,7 +1102,9 @@ final class GuardController {
         environmentSuspensionReasons.insert(reason)
         guard !wasSuspended else { return }
 
-        FileLogger.shared.log("Background work paused: \(logMessage)")
+        // Routine protected-App/Secure Input transitions are logged only when
+        // the guard is in use; the log is not a per-App-switch activity trace.
+        if isEnabled { FileLogger.shared.log("Background work paused: \(logMessage)") }
         cancelScheduledWork()
         cancelCorrectionCooldownWork()
         stopSecureRecoveryTimer()
@@ -1102,7 +1127,7 @@ final class GuardController {
 
         shouldReconcileAfterWake = false
         startupRetryCount = 0
-        FileLogger.shared.log("Background work resumed: \(logMessage)")
+        if isEnabled { FileLogger.shared.log("Background work resumed: \(logMessage)") }
         refreshAndReconcile(reason: logMessage)
     }
 
@@ -1117,7 +1142,7 @@ final class GuardController {
     }
 
     private func cancelScheduledWork() {
-        notifications.invalidate()
+        if notifications.invalidate() & 2 != 0 { discoveryStale = true }
         workEpoch &+= 1
         startupWork?.cancel()
         startupWork = nil
