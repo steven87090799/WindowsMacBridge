@@ -19,7 +19,7 @@ public struct RuntimePolicyInput: Equatable, Sendable {
     public var screenshotEnabled = false, shortcutEnabled = false
     public var settingsRevision: UInt64 = 0
     public var restartToken: UInt64 = 0
-    public var accessibility = true, posting = true
+    public var accessibility = true, posting = true, listening = true
     public var loginItemEnabled = true
     public var hidReleasePending = false
     public var layoutIdentity = ""
@@ -47,7 +47,7 @@ public struct RuntimePolicySnapshot: Equatable, Sendable {
     }
     public var permitsInput: Bool {
         input.shortcutEnabled && (input.backend == .eventTap || !input.hidReleasePending) && !input.paused && !input.secureInput && input.sessionActive &&
-            input.accessibility && input.posting
+            input.accessibility && input.posting && input.listening
     }
     public var permitsScreenshots: Bool {
         permitsShortcuts && input.screenshotEnabled &&

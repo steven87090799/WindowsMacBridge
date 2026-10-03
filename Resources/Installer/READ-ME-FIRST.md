@@ -1,8 +1,8 @@
 # WindowsMacBridge 單一 App 安裝
 
-使用完整 DMG，將 WindowsMacBridge 拖進「應用程式」，再從那裡開啟。預設一般模式只引導輔助功能，不安裝背景元件、不要求管理員密碼，也不連線 HID 服務。
+使用完整 DMG，將 WindowsMacBridge 拖進「應用程式」，再從那裡開啟。預設一般模式逐項引導輔助功能與輸入監控，不安裝背景元件、不要求管理員密碼，也不連線 HID 服務。
 
-在權限分頁核准輔助功能，返回確認綠燈；首次使用自動複製截圖時，依提示核准螢幕錄製。開機自動啟動與 MacBook Fn／Ctrl 交換由一般設定的開關控制。
+在權限分頁逐項核准輔助功能與輸入監控，返回確認綠燈；首次使用自動複製截圖時，依提示核准螢幕錄製。開機自動啟動與 MacBook Fn／Ctrl 交換由一般設定的開關控制。
 
 只有明確開啟「進階選項」並選 HID，才使用面板的安裝按鈕準備內含背景元件及已簽署的官方 Driver；此時才需要管理員驗證、輸入監控及 Driver 核准。輸入監控只授權 WindowsMacBridge，沒有獨立 HID Helper App。官方 Driver 的系統名稱是 .Karabiner‑VirtualHIDDevice‑Manager；核准／重開機由 macOS 決定，安裝成功不代表已核准。
 

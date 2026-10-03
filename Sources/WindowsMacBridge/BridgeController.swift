@@ -126,7 +126,7 @@ import IOKit.hid
     var onStatusChange: (() -> Void)?
 
     var isOperating: Bool {
-        guard settings.enabled, !paused, !status.emergencyPaused, permissions.keyboardControlGranted,
+        guard settings.enabled, !paused, !status.emergencyPaused, permissions.keyboardControlGranted, permissions.listening,
               sessionActive, !status.secureInput, !status.manualPassThrough else { return false }
         if settings.usesHID { return hidStatus.permissions && hidStatus.driverReady && hidStatus.capturedDevices > 0 }
         return status.tapActive && status.fault == nil && status.backendIssue == nil && !status.awaitingNeutral
@@ -139,7 +139,7 @@ import IOKit.hid
         if paused || status.emergencyPaused { return "已暫停" }
         if settings.usesHID && hid?.releasePending == true { return "等待 Helper 安全釋放；新後端尚未啟動" }
         if !permissions.keyboardControlGranted { return "等待鍵盤控制授權（\(KeyboardPermissionRequest.settingsTitle)）" }
-        if settings.usesHID && !permissions.listening { return "等待輸入監控授權（WindowsMacBridge 主 App）" }
+        if !permissions.listening { return "等待輸入監控授權" }
         if settings.usesHID {
             if macBookKeyboardStatus.restorePending { return "等待 Fn／Ctrl 原生交換還原；HID 尚未啟動" }
             if hidStatus.manualPassThrough { return "右 Option+P 穿透：ON" }
@@ -363,7 +363,7 @@ import IOKit.hid
         // settings link. Verify once the user returns, or explicitly rechecks.
         if !userInitiated && !permissionChecklist.awaitingVerification.isEmpty && !NSApp.isActive { return }
         let previous = permissionChecklist.verified
-        let current = PermissionStatus.current(advanced: settings.isAdvancedModeEnabled)
+        let current = PermissionStatus.current(advanced: settings.usesHID)
         var next = permissionChecklist
         next.verify(current)
         if permissionChecklist != next { permissionChecklist = next }
@@ -518,6 +518,7 @@ import IOKit.hid
         input.settingsRevision = settingsRevision
         input.restartToken = restartToken
         input.accessibility = AXIsProcessTrusted(); input.posting = CGPreflightPostEventAccess()
+        input.listening = CGPreflightListenEventAccess()
         input.loginItemEnabled = permissions.loginItem
         input.layoutIdentity = layoutID
         input.layoutSupported = layoutSupported; input.diagnosticsEnabled = diagnosticsEnabled
@@ -793,12 +794,11 @@ import IOKit.hid
         }
     }
     func requestAccessibility() {
-        _ = KeyboardPermissionRequest.perform(read: { PermissionStatus.current(advanced: settings.isAdvancedModeEnabled) })
+        _ = KeyboardPermissionRequest.perform(read: { PermissionStatus.current(advanced: settings.usesHID) })
         refreshPermissions(userInitiated: true)
         publish()
     }
     func requestListening() {
-        guard settings.isAdvancedModeEnabled else { return }
         // Exactly one request for this App's Input Monitoring permission.
         if settings.usesHID {
             if IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) != kIOHIDAccessTypeGranted {

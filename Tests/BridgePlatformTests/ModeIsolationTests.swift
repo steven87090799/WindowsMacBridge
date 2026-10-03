@@ -42,4 +42,16 @@ import BridgePlatform
         #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: true, deadline: nil) == .stopped)
         #expect(RuntimeWakePlan.make(input: input, awaitingMappingNeutral: false, deadline: 25) == .deadline(25))
     }
+    @Test func normalKeyboardInputRequiresBothControlAndMonitoringGrants() {
+        var input = RuntimePolicyInput(); input.shortcutEnabled = true
+        var policy = RuntimePolicyCoordinator()
+        input.listening = false
+        #expect(!policy.transition(input).permitsInput)
+        input.listening = true
+        #expect(policy.transition(input).permitsInput)
+        input.posting = false
+        #expect(!policy.transition(input).permitsInput)
+        input.posting = true; input.accessibility = false
+        #expect(!policy.transition(input).permitsInput)
+    }
 }
