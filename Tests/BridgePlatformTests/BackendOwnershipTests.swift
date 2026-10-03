@@ -83,8 +83,12 @@ private final class OfflineHelper: NSObject, HIDHelperProtocol, NSXPCListenerDel
         client.start(); client.update(config, active: true)
         for _ in 0..<20 { await Task.yield() }
         client.releaseOwnership()
+        // Check the synchronous transition before yielding. CI can suspend the
+        // MainActor past the deadline while the helper receives the stop IPC;
+        // observing its receipt does not imply that the deadline is still open.
+        #expect(client.releasePending)
         for _ in 0..<100 where !helper.hasStop { try await Task.sleep(for: .milliseconds(2)) }
-        #expect(helper.hasStop && client.releasePending)
+        #expect(helper.hasStop)
         try await Task.sleep(for: .milliseconds(250))
         #expect(!client.releasePending && !client.hasOwnership)
         #expect(client.status.state.contains("未獲確認"))
