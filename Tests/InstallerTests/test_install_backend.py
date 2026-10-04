@@ -45,6 +45,12 @@ elif name in ['chown', 'chmod']:
 elif name == 'codesign':
     if '-R' in args and not args[args.index('-R')+1].startswith('='):
         sys.exit(65)  # Native codesign interprets a bare expression as a filename.
+    if fail == 'snapshot_replaced' and args[-1].endswith('/previous/WindowsMacBridge.app'):
+        target = root/'Applications/WindowsMacBridge.app'
+        if not (root/'snapshot-race-done').exists():
+            (root/'snapshot-race-done').touch()
+            os.rename(target, root/'displaced-during-snapshot.app')
+            target.mkdir(); (target/'foreign').write_text('foreign-must-survive')
     reject = os.environ.get('WMB_CODESIGN_REJECT', '')
     if reject and any(reject in arg for arg in args):
         sys.exit(1)  # e.g. Finder tag detritus on a moved bundle fails --strict.
@@ -136,6 +142,19 @@ elif name == 'stat':
     elif args[-2] == '%d': print(os.stat(args[-1]).st_dev)
     elif args[-2] == '%d:%i':
         st = os.lstat(args[-1]); print(f'{st.st_dev}:{st.st_ino}')
+        # Swap after returning the identity, in the gap before the shell's move.
+        target = root/'Applications/WindowsMacBridge.app'
+        race = os.environ.get('WMB_RETIRE_RACE', '')
+        phase = ((root/'failed-once').exists() if race == 'rollback' else
+                 any(root.glob('WindowsMacBridge-install.*/original.identity')) and
+                 not any(root.glob('WindowsMacBridge-install.*/published.identity')))
+        if race in ('rollback', 'upgrade') and pathlib.Path(args[-1]) == target and phase:
+            counter = root/'retire-race-count'
+            n = int(counter.read_text()) + 1 if counter.exists() else 1
+            counter.write_text(str(n))
+            if n == (3 if race == 'upgrade' else 2):
+                os.rename(target, root/'displaced-before-retirement.app')
+                target.mkdir(); (target/'foreign').write_text('foreign-must-survive')
 elif name == 'install': copy(args[-2],args[-1])
 '''
 
@@ -146,6 +165,32 @@ import ctypes, os, pathlib, shutil, sys
 args = sys.argv[1:]
 if args[:1] == ['--controller-pin']:
     print('new-pin'); sys.exit(0)
+if args[:1] == ['--retire-owned']:
+    src, dst, identity = args[1:]
+    root = pathlib.Path(os.environ['WMB_TEST_ROOT'])
+    if not any(root.glob('WindowsMacBridge-install.*/retirement.unconfirmed')): sys.exit(79)
+    expected = tuple(map(int, identity.split(':')))
+    st = os.lstat(src)
+    if (st.st_dev, st.st_ino) != expected: sys.exit(73)
+    root = pathlib.Path(os.environ['WMB_TEST_ROOT'])
+    inside_race = (os.environ.get('WMB_RETIRE_RACE') == 'rollback_inside_rename' and
+                   (root/'failed-once').exists() and not (root/'inside-race-done').exists())
+    if inside_race:
+        (root/'inside-race-done').touch()
+        os.rename(src, root/'displaced-inside-retirement.app')
+        pathlib.Path(src).mkdir(); (pathlib.Path(src)/'foreign').write_text('foreign-must-survive')
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.renamex_np(src.encode(), dst.encode(), 0x4) != 0: sys.exit(73)
+    if inside_race:
+        pathlib.Path(src).mkdir(); (pathlib.Path(src)/'blocker').write_text('also-foreign')
+    if os.environ.get('WMB_FAIL') == 'kill_after_retirement':
+        import signal
+        os.kill(os.getppid(), signal.SIGKILL); sys.exit(44)
+    moved = os.lstat(dst)
+    if (moved.st_dev, moved.st_ino) != expected:
+        libc.renamex_np(dst.encode(), src.encode(), 0x4)
+        sys.exit(73)
+    sys.exit(0)
 if args[:1] == ['--publish-exclusive']:
     src, dst = args[1], args[2]
     root = pathlib.Path(os.environ['WMB_TEST_ROOT'])
@@ -180,7 +225,7 @@ class InstallBackendTests(unittest.TestCase):
                                         capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
-    def run_install(self, receipt='installed', fail='', existing=True, installed_driver_version='1.8.0', active_driver=True, driver_running=None, private_app_resource=False, protected_app=False, unified_runtime=False, codesign_reject='', publish_race=''):
+    def run_install(self, receipt='installed', fail='', existing=True, installed_driver_version='1.8.0', active_driver=True, driver_running=None, private_app_resource=False, protected_app=False, unified_runtime=False, codesign_reject='', publish_race='', retire_race=''):
         temp = tempfile.TemporaryDirectory(prefix='wmb-install-test-')
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
@@ -290,7 +335,7 @@ class InstallBackendTests(unittest.TestCase):
         env = dict(os.environ, WMB_TEST_ROOT=str(root), WMB_DRIVER_SHA=DRIVER_SHA,
                    WMB_ROLLBACK_SHA=ROLLBACK_SHA, WMB_RECEIPT=receipt, WMB_FAIL=fail,
                    WMB_APP_PROTECTED='1' if protected_app else '0', WMB_CODESIGN_REJECT=codesign_reject,
-                   WMB_PUBLISH_RACE=publish_race)
+                   WMB_PUBLISH_RACE=publish_race, WMB_RETIRE_RACE=retire_race)
         result = subprocess.run(['/bin/bash',str(script),str(payload)], env=env, capture_output=True, text=True, timeout=20)
         return root, app, helper_root, daemons, result
 
@@ -547,6 +592,70 @@ class InstallBackendTests(unittest.TestCase):
         self.assertIn('foreign object now occupies the App path', result.stderr)
         self.assertEqual((app/'foreign').read_text(), 'foreign')
         self.assertTrue((helper/'.install-recovery').exists(), 'recovery stays pending')
+
+    def test_rollback_identity_to_move_race_never_deletes_the_foreign_object(self):
+        root, app, helper, _, result = self.run_install(fail='bootstrap_helper', retire_race='rollback')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((root/'retire-race-count').read_text(), '2', 'race was exercised')
+        foreign = list(root.rglob('foreign'))
+        self.assertEqual(len(foreign), 1, 'foreign object must survive rollback and cleanup')
+        self.assertEqual(foreign[0].read_text(), 'foreign-must-survive')
+        self.assertTrue((helper/'.install-recovery').exists(), 'recovery stays pending')
+
+    def test_upgrade_identity_to_move_race_never_deletes_the_foreign_object(self):
+        root, app, helper, _, result = self.run_install(retire_race='upgrade')
+        self.assertNotEqual(result.returncode, 0, 'must refuse a changed App')
+        self.assertEqual((root/'retire-race-count').read_text(), '3', 'race was exercised')
+        foreign = list(root.rglob('foreign'))
+        self.assertEqual(len(foreign), 1, 'foreign object must survive retirement and cleanup')
+        self.assertEqual(foreign[0].read_text(), 'foreign-must-survive')
+        self.assertTrue((helper/'.install-recovery').exists(), 'recovery stays pending')
+
+    def test_later_recovery_never_cleans_a_quarantined_foreign_object(self):
+        root, app, helper, _, result = self.run_install(fail='bootstrap_helper', retire_race='rollback_inside_rename')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((app/'blocker').exists())
+        journal = helper/'.install-recovery'
+        stage = Path(journal.read_text().splitlines()[1])
+        self.assertTrue((stage/'retirement.unconfirmed').exists())
+        foreign = list(stage.rglob('foreign'))
+        self.assertEqual(len(foreign), 1)
+        # Even after the occupied source path is freed, a later Install must not
+        # silently delete the foreign object quarantined by the previous attempt.
+        shutil.rmtree(app)
+        env = dict(os.environ, WMB_TEST_ROOT=str(root), WMB_DRIVER_SHA=DRIVER_SHA,
+                   WMB_ROLLBACK_SHA=ROLLBACK_SHA, WMB_RECEIPT='installed', WMB_FAIL='')
+        retry = subprocess.run(['/bin/bash', str(root/'InstallBackend.sh'), str(root/'payload')],
+                               env=env, capture_output=True, text=True, timeout=20)
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertIn('Unconfirmed App retirement requires inspection', retry.stderr)
+        self.assertEqual(foreign[0].read_text(), 'foreign-must-survive')
+        self.assertTrue(journal.exists())
+
+    def test_kill_after_retirement_preserves_the_durable_intent_and_old_app(self):
+        root, app, helper, _, result = self.run_install(fail='kill_after_retirement')
+        self.assertEqual(result.returncode, -9)
+        journal = helper/'.install-recovery'
+        stage = Path(journal.read_text().splitlines()[1])
+        self.assertTrue((stage/'retirement.unconfirmed').exists())
+        self.assertEqual((stage/'retired-application.app/identity').read_text(), 'old-app')
+        env = dict(os.environ, WMB_TEST_ROOT=str(root), WMB_DRIVER_SHA=DRIVER_SHA,
+                   WMB_ROLLBACK_SHA=ROLLBACK_SHA, WMB_RECEIPT='installed', WMB_FAIL='')
+        retry = subprocess.run(['/bin/bash', str(root/'InstallBackend.sh'), str(root/'payload')],
+                               env=env, capture_output=True, text=True, timeout=20)
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertIn('Unconfirmed App retirement requires inspection', retry.stderr)
+        self.assertTrue(journal.exists())
+        self.assertEqual((stage/'retired-application.app/identity').read_text(), 'old-app')
+
+    def test_snapshot_replacement_never_becomes_the_original_identity(self):
+        root, app, helper, _, result = self.run_install(fail='snapshot_replaced')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('changed during snapshot', result.stderr)
+        self.assertEqual((app/'foreign').read_text(), 'foreign-must-survive')
+        self.assertEqual((root/'displaced-during-snapshot.app/identity').read_text(), 'old-app')
+        self.assertEqual((helper/'controller.plist').read_text(), 'old-pin')
+        self.assertFalse((helper/'.install-recovery').exists())
 
     def test_concurrent_installer_cannot_switch_while_another_owns_the_journal(self):
         root, app, helper, daemons, result = self.run_install(fail='kill_before_bootstrap')

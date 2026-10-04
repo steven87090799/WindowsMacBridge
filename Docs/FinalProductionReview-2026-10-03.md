@@ -1,4 +1,4 @@
-# Final production review — 2026-10-03 (revision 2: 2026-10-04)
+# Final production review — 2026-10-03 (revision 3: 2026-10-04)
 
 | Item | Value |
 |---|---|
@@ -116,6 +116,29 @@ The program did not get smaller; it grew by the added safety code.
 6. Idle and typing CPU/RSS/footprint with `scripts/monitor-runtime.py`.
 
 Items 1–3 block merging the default (normal) mode; 4–5 block enabling Advanced mode or the installer for users.
+
+## 0.1 Revision 3 — independent review repairs (2026-10-04)
+
+The review of `ba747a8` reopened two revision-2 claims. This revision keeps PR #13 and `fix/final-production-hardening-20261003`; it does not install or merge anything.
+
+- **WMB-55 remained incomplete (P1):** a shell identity check followed by `mv` still raced on retirement and rollback. The original regression deleted a foreign replacement during stage cleanup; the upgrade regression incorrectly succeeded. `--retire-owned` now pins the validated directory with an `O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC` descriptor and uses an exclusive rename into a private quarantine and validates the identity of the object actually moved. On mismatch it attempts an exclusive put-back; if that path is occupied, the foreign object remains in the protected snapshot. A durable `retirement.unconfirmed` marker is written before the rename and cleared only on verified success. Both the current cleanup and later recovery refuse to discard an unconfirmed snapshot. The original App's identity is recorded before snapshotting and checked again afterwards. A concurrent replacement can be temporarily quarantined: the guarantee is preservation and no overwrite/deletion, not an atomic identity-check-and-rename.
+- **WMB-52's scheduling remained incomplete (P2):** an existing 1 s held-only timer prevented a newly outstanding report from scheduling its earlier 0.6 s check. `HeldSafetyTimer` retains the earlier absolute deadline and advances it only when needed. Further key edges cannot postpone it; neutral/stop cancels it. The added 0.1 s timer tolerance is removed. The 0.6 s value is a requested check deadline, not a hard real-time guarantee of driver reset or physical key release.
+
+Regression evidence: the two installer race tests failed before the repair; the held-only → outstanding timer regression failed with deadline 101.0 instead of 100.7. The fixed helper is tested on the real macOS filesystem for directory/file/symlink replacements, an occupied put-back path, and an occupied quarantine. The shell fixture also covers a later recovery with a foreign object retained in quarantine.
+
+Validation for this revision:
+
+| Gate | Result |
+|---|---|
+| Debug / release (`scripts/test.sh --no-parallel`, `-c release --no-parallel`) | 418/418 each (149 core, 173 platform, 40 input-source core, 14 input-source support, 42 VirtualHID) |
+| Installer transaction / rollback / bootstrap / ZIP regressions | 54/54 |
+| Monitoring regressions | 5/5 |
+| Actual release executable `--retire-owned` (private fixture; no administrator rights) | owned directory retired; mismatched identity refused; foreign object preserved |
+| Static checks | `git diff --check`, installer `bash -n` pass |
+
+Two ordinary parallel debug runs on this Mac failed the unchanged, process-wide `repeatedPreparationDoesNotGrowMemoryWithCaptureCount` test. That test passes in isolation and both full serial configurations pass with the original +128 MiB assertion unchanged. No screenshot product/test code, memory limit or CI assertion was modified. Swift Testing's [parallelization documentation](https://docs.swift.org/latest/documentation/testing/parallelizationtrait/) explains why a suite's serialized trait does not isolate it from unrelated tests. Hosted CI will independently run its existing parallel debug/release gates on this commit.
+
+ Revision-2 sanitizer results above apply to revision 2; this revision does not inherit them as proof of its changed code. Real administrator installation/recovery, DriverKit input and CPU/footprint remain unverified. **NOT READY FOR MERGE.**
 
 ## 1. Architecture (rebuilt from code)
 

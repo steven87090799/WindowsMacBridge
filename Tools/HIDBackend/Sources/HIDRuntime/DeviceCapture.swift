@@ -65,7 +65,7 @@ final class DeviceCapture {
     private var failClosed = false
     private var fault = ""
     private var maxMicroseconds: Double = 0
-    private var heldSafety: Timer?
+    private let heldSafety = HeldSafetyTimer()
     private let relay = CaptureStatusRelay()
     private static let teardownQueue = DispatchQueue(label: "WindowsMacBridge.virtual-hid-teardown", qos: .utility)
     private var tearingDown = false
@@ -156,7 +156,7 @@ final class DeviceCapture {
         tick()
     }
     func stop(completion: (() -> Void)? = nil) {
-        config = HIDConfiguration(); heldSafety?.invalidate(); heldSafety = nil; consoleSessionValid = false
+        config = HIDConfiguration(); heldSafety.cancel(); consoleSessionValid = false
         if let completion { teardownReplies.append(completion) }
         stopCapture()
         if !tearingDown { finishTeardown() }
@@ -405,13 +405,7 @@ final class DeviceCapture {
         let deadline = HeldSafetyPolicy.deadline(
             capturing: config.enabled && devices.contains(where: { $0.seized }), heldOutput: held,
             pointingButtons: pointing.buttons, outstandingReports: client.map { wmb_virtual_hid_outstanding($0) } ?? 0)
-        guard let deadline else { heldSafety?.invalidate(); heldSafety = nil; return }
-        if let heldSafety, heldSafety.isValid { return }
-        let timer = Timer.scheduledTimer(withTimeInterval: deadline, repeats: false) { [weak self] _ in
-            guard let self else { return }
-            self.heldSafety = nil; self.tick()
-        }
-        timer.tolerance = 0.1; heldSafety = timer
+        heldSafety.schedule(after: deadline) { [weak self] in self?.tick() }
     }
     private func received(_ result: IOReturn, value: IOHIDValue) {
         let started = DispatchTime.now().uptimeNanoseconds

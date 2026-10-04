@@ -31,19 +31,35 @@ bridge_publish_exclusive() {
 }
 # Rollback may move only the bundle this transaction published or the App it
 # found and snapshotted; anything else at the path is foreign and left alone.
-bridge_owns_app_path() {
+bridge_owned_app_identity() {
     local bridge_found bridge_id
     bridge_found="$(bridge_identity "$bridge_app")" && [[ -n "$bridge_found" ]] || return 1
     for bridge_id in published original restored; do
-        if [[ -f "$bridge_stage/$bridge_id.identity" && "$bridge_found" == "$(/bin/cat "$bridge_stage/$bridge_id.identity")" ]]; then return 0; fi
+        if [[ -f "$bridge_stage/$bridge_id.identity" && "$bridge_found" == "$(/bin/cat "$bridge_stage/$bridge_id.identity")" ]]; then printf '%s\n' "$bridge_found"; return 0; fi
     done
     # Snapshots from installers that predate identity records: only our own bundle.
     [[ ! -f "$bridge_stage/published.identity" && ! -f "$bridge_stage/original.identity" && ! -f "$bridge_stage/restored.identity" &&
        -d "$bridge_app" && ! -L "$bridge_app" &&
-       "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bridge_app/Contents/Info.plist" 2>/dev/null)" == local.WindowsMacBridge ]]
+       "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bridge_app/Contents/Info.plist" 2>/dev/null)" == local.WindowsMacBridge ]] || return 1
+    printf '%s\n' "$bridge_found"
+}
+# No cleanup is allowed after a retirement error: even if a foreign object
+# could not be put back, it remains safe in the protected transaction snapshot.
+bridge_retire_owned() {
+    # Durable intent precedes the rename. A killed helper/installer must not
+    # leave a quarantined object eligible for a later recovery's cleanup.
+    printf 'WMB-RETIRE-UNCONFIRMED\n' > "$bridge_stage/retirement.unconfirmed" || {
+        bridge_preserve_stage=1; return 1; }
+    /bin/sync
+    if ! "$bridge_payload/WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge" --retire-owned "$1" "$2" "$3"; then
+        bridge_preserve_stage=1
+        echo 'App retirement was not confirmed; protected recovery snapshot retained. No quarantined object will be deleted.' >&2
+        return 1
+    fi
+    /bin/rm -f "$bridge_stage/retirement.unconfirmed" || { bridge_preserve_stage=1; return 1; }
 }
 bridge_restore_application() {
-    local bridge_restore="$bridge_stage/retired-application.app" bridge_rejected
+    local bridge_restore="$bridge_stage/retired-application.app" bridge_rejected bridge_expected
     # Interrupted before the App was retired: the original is still in place.
     if [[ "$bridge_app_saved" == 1 && -f "$bridge_stage/original.identity" &&
           "$(bridge_identity "$bridge_app")" == "$(/bin/cat "$bridge_stage/original.identity")" ]]; then
@@ -61,9 +77,9 @@ bridge_restore_application() {
         /usr/bin/codesign --verify --strict "$bridge_restore" || { echo 'Previous App snapshot failed verification.' >&2; return 1; }
     fi
     if [[ -e "$bridge_app" || -L "$bridge_app" ]]; then
-        if bridge_owns_app_path; then
+        if bridge_expected="$(bridge_owned_app_identity)"; then
             bridge_rejected="$(/usr/bin/mktemp -d "$bridge_stage/rejected.XXXXXX")" || return 1
-            /bin/mv "$bridge_app" "$bridge_rejected/WindowsMacBridge.app" || return 1
+            bridge_retire_owned "$bridge_app" "$bridge_rejected/WindowsMacBridge.app" "$bridge_expected" || return 1
         elif [[ "$bridge_app_saved" == 1 ]]; then
             echo 'A foreign object now occupies the App path; it was left untouched and recovery stays pending.' >&2; return 1
         else
@@ -181,6 +197,10 @@ bridge_recover_interrupted() {
     bridge_mode="$(/usr/bin/stat -f '%Lp' "$bridge_saved_stage")"
     [[ "$((8#$bridge_mode & 077))" == 0 && -z "$(/usr/bin/find "$bridge_saved_stage" -type l -print -quit)" ]] || {
         echo 'Recovery snapshot has unsafe permissions or symlinks; nothing was changed.' >&2; return 1; }
+    # A prior retirement may have quarantined a foreign object. Never let a
+    # subsequent recovery clean that snapshot, even if the App path is now free.
+    [[ ! -e "$bridge_saved_stage/retirement.unconfirmed" ]] || {
+        echo 'Unconfirmed App retirement requires inspection of the protected recovery snapshot; nothing was changed.' >&2; return 1; }
     if [[ "$bridge_saved_boot" == "$(/usr/sbin/sysctl -n kern.bootsessionuuid)" ]] && kill -0 "$bridge_saved_pid" 2>/dev/null; then
         echo 'Another installer may still be running; recovery refused.' >&2; return 1
     fi
@@ -333,10 +353,12 @@ if /bin/launchctl print system/local.WindowsMacBridge.VirtualHIDService >/dev/nu
 if [[ -d "$bridge_app" ]]; then
     # Attribute-free and verified before anything is switched, so rollback can
     # always publish it (a Finder tag on the installed App fails --strict).
+    bridge_identity "$bridge_app" > "$bridge_stage/original.identity"
     /usr/bin/ditto --noextattr --norsrc "$bridge_app" "$bridge_stage/previous/WindowsMacBridge.app"
     /usr/bin/codesign --verify --strict "$bridge_stage/previous/WindowsMacBridge.app" || {
         echo 'The installed App cannot be snapshotted for rollback; nothing was switched.' >&2; exit 1; }
-    bridge_identity "$bridge_app" > "$bridge_stage/original.identity"
+    [[ "$(bridge_identity "$bridge_app")" == "$(/bin/cat "$bridge_stage/original.identity")" ]] || {
+        echo 'The installed App changed during snapshot; nothing was switched.' >&2; exit 1; }
     bridge_app_saved=1
 fi
 bridge_driver_prepare
@@ -366,7 +388,7 @@ if [[ -e "$bridge_app" || -L "$bridge_app" ]]; then
     # Retire only the App that was snapshotted, never an object that replaced it.
     [[ -f "$bridge_stage/original.identity" && "$(bridge_identity "$bridge_app")" == "$(/bin/cat "$bridge_stage/original.identity")" ]] || {
         echo 'The installed App changed during installation; not switching.' >&2; exit 1; }
-    /bin/mv "$bridge_app" "$bridge_stage/retired-application.app"
+    bridge_retire_owned "$bridge_app" "$bridge_stage/retired-application.app" "$(/bin/cat "$bridge_stage/original.identity")" || exit 1
 fi
 bridge_app_changed=1
 # /Applications is admin-group writable: re-check immediately before publishing,

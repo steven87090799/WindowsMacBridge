@@ -22,6 +22,13 @@ public enum HIDRuntimeCommand {
             if result != 0 { FileHandle.standardError.write(Data("publish refused: errno \(result)\n".utf8)) }
             exit(result == 0 ? 0 : 73)
         }
+        if arguments.count == 4 && arguments[0] == "--retire-owned" {
+            let result = OwnedRetirement.retire(arguments[1], to: arguments[2], identity: arguments[3])
+            if result != 0 {
+                FileHandle.standardError.write(Data("retirement unconfirmed: errno \(result); preserve the transaction snapshot\n".utf8))
+            }
+            exit(result == 0 ? 0 : 73)
+        }
         if arguments == ["--hid-service"] {
             guard geteuid() == 0, let service = InputService() else { print("Root-owned installation pin unavailable; no capture started."); exit(77) }
             service.run(); return true
