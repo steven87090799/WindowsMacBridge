@@ -41,7 +41,9 @@ struct ControllerRequirementTests {
                 if once.claim() { continuation.resume(returning: false) }
             } as? RequirementPing
             proxy?.ping { value in if once.claim() { continuation.resume(returning: value) } }
-            DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+            // Harness deadline only: a mismatched peer is rejected through the error
+            // handler; this bound must outlast XPC stalls on loaded CI runners.
+            DispatchQueue.global().asyncAfter(deadline: .now() + 30) {
                 if once.claim() { continuation.resume(returning: false) }
             }
         }

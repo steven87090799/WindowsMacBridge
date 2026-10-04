@@ -54,7 +54,9 @@ private final class FakeHelper: NSObject, HIDHelperProtocol, NSXPCListenerDelega
     config.context = .init(processID: .max, bundleID: "test", mode: .macOS)
     return config
 }
-@MainActor private func eventually(_ seconds: Double = 10, _ condition: () -> Bool) async throws {
+/// Returns as soon as the condition holds. The bound covers the multi-second XPC
+/// stall seen at the start of CI test runs; it never relaxes what is asserted.
+@MainActor private func eventually(_ seconds: Double = 60, _ condition: () -> Bool) async throws {
     let deadline = ProcessInfo.processInfo.systemUptime + seconds
     while !condition(), ProcessInfo.processInfo.systemUptime < deadline { try await Task.sleep(for: .milliseconds(10)) }
 }
@@ -69,7 +71,7 @@ private final class FakeHelper: NSObject, HIDHelperProtocol, NSXPCListenerDelega
             created?(connection); return connection
         }, stopAcknowledgementTimeout: timeout, liveness: liveness.value)
         // The fake replies at once; only a starved CI MainActor can miss 1.5 s.
-        client.configureReplyTimeout = 30
+        client.configureReplyTimeout = 60
         return client
     }
     /// Configure and wait for the reply so the lease knows the helper PID.
@@ -193,7 +195,7 @@ private final class FakeHelper: NSObject, HIDHelperProtocol, NSXPCListenerDelega
         HIDBackendSlot(factory: {
             let client = HIDBackendClient(connectionFactory: { NSXPCConnection(listenerEndpoint: helper.listener.endpoint) },
                                           stopAcknowledgementTimeout: timeout, liveness: liveness.value)
-            client.configureReplyTimeout = 30; return client
+            client.configureReplyTimeout = 60; return client
         })
     }
     private func policy(_ slot: HIDBackendSlot, backend: InputBackend) -> RuntimePolicySnapshot {
@@ -254,7 +256,7 @@ private final class FakeHelper: NSObject, HIDHelperProtocol, NSXPCListenerDelega
         let slot = HIDBackendSlot(factory: {
             let client = HIDBackendClient(connectionFactory: { NSXPCConnection(listenerEndpoint: helper.listener.endpoint) },
                                           liveness: liveness.value)
-            client.configureReplyTimeout = 30; lastClient = client; return client
+            client.configureReplyTimeout = 60; lastClient = client; return client
         })
         for cycle in 0..<1000 {
             slot.synchronize(wanted: true); slot.synchronize(wanted: false)
