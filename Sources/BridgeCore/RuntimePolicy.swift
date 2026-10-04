@@ -45,9 +45,20 @@ public struct RuntimePolicySnapshot: Equatable, Sendable {
     public var permitsPhysicalNormalization: Bool {
         permitsInput && !input.manualPassThrough
     }
-    public var permitsInput: Bool {
-        input.shortcutEnabled && (input.backend == .eventTap || !input.hidReleasePending) && !input.paused && !input.secureInput && input.sessionActive &&
+    /// A pending HID release gates BOTH backends: until the old capture lease is
+    /// retired, VirtualHID output can re-enter a session tap as HID-state input.
+    /// The client's stop deadline bounds the gate; it cannot persist.
+    public var permitsInput: Bool { Self.permitsInput(input) }
+    private static func permitsInput(_ input: RuntimePolicyInput) -> Bool {
+        input.shortcutEnabled && !input.hidReleasePending && !input.paused && !input.secureInput && input.sessionActive &&
             input.accessibility && input.posting && input.listening
+    }
+    /// Secure Input alone blocks translation. macOS posts no notification when it
+    /// ends; the EventTap's first event afterwards is the in-App signal, so the
+    /// tap must stay installed (it receives nothing while Secure Input is on).
+    public var awaitsSecureInputEnd: Bool {
+        var unblocked = input; unblocked.secureInput = false
+        return input.secureInput && Self.permitsInput(unblocked)
     }
     public var permitsScreenshots: Bool {
         permitsShortcuts && input.screenshotEnabled &&

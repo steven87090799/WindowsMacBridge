@@ -18,7 +18,7 @@ final class GuardController {
         case inactiveSession
     }
 
-    private enum Configuration {
+    enum Configuration {
         static let maximumSelectionAttempts = 3
         static let verificationDelayMilliseconds = 400
         static let startupRetryDelaysMilliseconds = [1_000, 2_000, 4_000]
@@ -52,11 +52,13 @@ final class GuardController {
 
     private var secureRecoveryTimer: DispatchSourceTimer?
     private var secureRecoveryPollIndex = 0
+    /// One bounded pass while waiting for Secure Input to end (seconds).
+    private let secureRecoveryDelays: [Double]
     private var pendingExplicitSelection: DesiredInputSource?
 
     private var pendingInternalSourceID: String?
     private var pendingSelectionWasAutomatic = false
-    private var isWaitingForSecureInputToEnd = false
+    private(set) var isWaitingForSecureInputToEnd = false
     private var secureInputIsBlockingRecorded = false
     private var didReportRetryExhaustion = false
     private var startupRetryCount = 0
@@ -70,10 +72,17 @@ final class GuardController {
     private var pauseRecoveryWork: DispatchWorkItem?
     private var pauseGeneration = 0
     private var lastObservedIdentifier: String?
+    /// Enabled-source changes that arrived while work was suspended or cancelled.
+    /// A host resume rediscovers (a full TIS enumeration) only when this is set
+    /// or the guard is enabled, not on every protected-App round trip.
+    private var discoveryStale = false
+
     init(inputSources: any InputSourceProviding = InputSourceManager(),
          selectionStore: GuardSelectionStore = GuardSelectionStore(defaults: .standard),
          isEnabled: Bool = AppSettings.guardEnabled,
-         secureInputEnabled: @escaping () -> Bool = { IsSecureEventInputEnabled() }) {
+         secureInputEnabled: @escaping () -> Bool = { IsSecureEventInputEnabled() },
+         secureRecoveryDelays: [Double] = Configuration.secureInputPollDelaysSeconds.map(Double.init)) {
+        self.secureRecoveryDelays = secureRecoveryDelays.isEmpty ? [2] : secureRecoveryDelays
         self.inputSources = inputSources
         self.selectionStore = selectionStore
         self.secureInputEnabled = secureInputEnabled
@@ -172,7 +181,7 @@ final class GuardController {
 
         FileLogger.shared.log("Guard started; target: \(desired.rawValue)")
         installTISObservers()
-        _ = inputSources.rediscover()
+        _ = inputSources.rediscover(); discoveryStale = false
         lastObservedIdentifier = inputSources.currentIdentifier
         schedulePauseRecovery()
         startupRetryCount = 0
@@ -201,6 +210,8 @@ final class GuardController {
         pendingInternalSourceID = nil
         pendingSelectionWasAutomatic = false
         machine.selectionSucceeded()
+        // A later start must not trust discovery gathered before it.
+        discoveryStale = true
         environmentSuspensionReasons.removeAll()
         shouldReconcileAfterWake = false
         automaticCorrectionTimestamps.removeAll()
@@ -324,11 +335,13 @@ final class GuardController {
         scheduleReconciliation(after: machine.debounceMilliseconds)
     }
 
-    func refreshAndReconcile(reason: String) {
+    func refreshAndReconcile(reason: String, forceDiscovery: Bool = false) {
         guard !isEnvironmentSuspended else { return }
 
-        FileLogger.shared.log(reason)
-        _ = inputSources.rediscover()
+        if isEnabled || forceDiscovery { FileLogger.shared.log(reason) }
+        if isEnabled || forceDiscovery || discoveryStale {
+            _ = inputSources.rediscover(); discoveryStale = false
+        }
 
         // Wake/refresh observes the source without adopting it as user intent.
         lastObservedIdentifier = inputSources.currentIdentifier
@@ -529,7 +542,10 @@ final class GuardController {
         DispatchQueue.main.async { [weak controller] in
             guard let controller else { return }
             let signals = controller.notifications.take()
-            guard controller.isStarted, !controller.isEnvironmentSuspended else { return }
+            guard controller.isStarted, !controller.isEnvironmentSuspended else {
+                if signals & 2 != 0 { controller.discoveryStale = true }
+                return
+            }
             if signals & 2 != 0 { controller.handleEnabledSourcesChange() }
             if signals & 1 != 0 { controller.handleSelectedSourceChange() }
         }
@@ -540,7 +556,7 @@ final class GuardController {
 
         FileLogger.shared.log("Enabled input sources changed; re-discovering")
         startupRetryCount = 0
-        _ = inputSources.rediscover()
+        _ = inputSources.rediscover(); discoveryStale = false
 
         if automaticReconciliationAllowed {
             if targetSource == nil {
@@ -725,8 +741,8 @@ final class GuardController {
         guard !isEnvironmentSuspended else { return }
         if !isExplicitUserRequest, !automaticReconciliationAllowed { return }
 
-        if targetSource == nil {
-            _ = inputSources.rediscover()
+        if targetSource == nil || discoveryStale {
+            _ = inputSources.rediscover(); discoveryStale = false
         }
 
         guard let target = targetSource else {
@@ -841,9 +857,20 @@ final class GuardController {
         cancelVerificationWork()
         let epoch = workEpoch
         let work = DispatchWorkItem { [weak self] in
-            guard let self, self.isStarted, self.workEpoch == epoch, !self.isEnvironmentSuspended,
-                  self.selectionAllowed(), !self.isSecureInputEnabled,
+            guard let self, self.isStarted, self.workEpoch == epoch,
                   self.pendingInternalSourceID == identifier else { return }
+            // Resolve, never abandon, the pending selection: it gates the host's
+            // shortcuts (selectionInProgress), and TIS may post nothing at all.
+            guard !self.isEnvironmentSuspended, self.selectionAllowed(), !self.isSecureInputEnabled else {
+                self.pendingInternalSourceID = nil
+                self.pendingSelectionWasAutomatic = false
+                if self.isSecureInputEnabled {
+                    self.deferAttemptsUntilSecureInputEnds()
+                    self.ensureSecureRecoveryTimer()
+                }
+                self.onStateChange?()
+                return
+            }
 
             let currentIdentifier = self.inputSources.currentSource().identifier
             if currentIdentifier == identifier {
@@ -918,15 +945,12 @@ final class GuardController {
 
         isWaitingForSecureInputToEnd = true
 
-        let index = min(
-            secureRecoveryPollIndex,
-            Configuration.secureInputPollDelaysSeconds.count - 1
-        )
-        let delay = Configuration.secureInputPollDelaysSeconds[index]
+        let index = min(secureRecoveryPollIndex, secureRecoveryDelays.count - 1)
+        let delay = secureRecoveryDelays[index]
         let epoch = workEpoch
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(
-            deadline: .now() + .seconds(delay),
+            deadline: .now() + .milliseconds(Int(delay * 1000)),
             leeway: .milliseconds(500)
         )
         timer.setEventHandler { [weak self] in
@@ -937,9 +961,17 @@ final class GuardController {
             self.secureRecoveryPollIndex += 1
             self.checkForSecureInputEnd()
 
-            if self.isWaitingForSecureInputToEnd {
-                self.ensureSecureRecoveryTimer()
+            guard self.isWaitingForSecureInputToEnd else { return }
+            // Bounded: one pass through the backoff schedule (~66 s), never a
+            // standing 30 s poll for as long as Secure Input lasts.
+            if self.secureRecoveryPollIndex >= self.secureRecoveryDelays.count {
+                FileLogger.shared.log("Secure Input still active; stopped waiting. Select the input source again when needed.")
+                self.pendingExplicitSelection = nil
+                self.stopSecureRecoveryTimer()
+                self.onStateChange?()
+                return
             }
+            self.ensureSecureRecoveryTimer()
         }
 
         secureRecoveryTimer = timer
@@ -1071,7 +1103,9 @@ final class GuardController {
         environmentSuspensionReasons.insert(reason)
         guard !wasSuspended else { return }
 
-        FileLogger.shared.log("Background work paused: \(logMessage)")
+        // Routine protected-App/Secure Input transitions are logged only when
+        // the guard is in use; the log is not a per-App-switch activity trace.
+        if isEnabled { FileLogger.shared.log("Background work paused: \(logMessage)") }
         cancelScheduledWork()
         cancelCorrectionCooldownWork()
         stopSecureRecoveryTimer()
@@ -1094,7 +1128,7 @@ final class GuardController {
 
         shouldReconcileAfterWake = false
         startupRetryCount = 0
-        FileLogger.shared.log("Background work resumed: \(logMessage)")
+        if isEnabled { FileLogger.shared.log("Background work resumed: \(logMessage)") }
         refreshAndReconcile(reason: logMessage)
     }
 
@@ -1109,7 +1143,7 @@ final class GuardController {
     }
 
     private func cancelScheduledWork() {
-        notifications.invalidate()
+        if notifications.invalidate() & 2 != 0 { discoveryStale = true }
         workEpoch &+= 1
         startupWork?.cancel()
         startupWork = nil

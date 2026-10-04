@@ -202,7 +202,7 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
             let count = pasteboard.changeCount
             // A destination folder may have no selection. The armed file clipboard and
             // Finder PID are the move authority; text editing always gets ordinary paste.
-            let move = focus != .text && pasteboard.types?.contains(.fileURL) == true &&
+            let move = FinderActionPolicy.allowsMove(focus: focus) && pasteboard.types?.contains(.fileURL) == true &&
                 cut.consume(changeCount: count, finderPID: pid, now: now)
             cut.cancel()
             guard pasteboard.changeCount == count else { report("剪貼簿已改變，取消本次貼上。"); return }
@@ -222,18 +222,19 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
             guard finderPermanentDeleteEnabled, focus == .files else {
                 report("永久刪除略過：設定未啟用或焦點不是檔案列表。"); return
             }
-            let alert = NSAlert()
-            alert.messageText = "永久刪除 Finder 選取項目？"
-            alert.informativeText = "此操作無法從垃圾桶還原。Finder 可能會再次要求確認。"
-            alert.addButton(withTitle: "永久刪除")
-            alert.addButton(withTitle: "取消")
-            guard alert.runModal() == .alertFirstButtonReturn, allowed(request, ignoreDeadline: true) else { return }
-            _ = emit(51, [.command, .option], request: request, ignoreDeadline: true)
+            // Finder's own Delete Immediately (Option-Command-Delete) always asks
+            // for confirmation. An in-App modal could not work here: clicking it
+            // activated this App, so the Finder-frontmost check then dropped the
+            // confirmed request, and the modal blocked every queued action.
+            if emit(51, [.command, .option], request: request) {
+                report("已請 Finder 永久刪除；請在 Finder 的確認視窗中決定。")
+            }
         case .parentFolder:
-            if focus == .files { _ = emit(126, .command, request: request) }
+            if FinderActionPolicy.inFileView(focus) { _ = emit(126, .command, request: request) }
             else { _ = emit(51, [], request: request) }
         case .newFolder:
-            if focus == .files { _ = emit(45, [.command, .shift], request: request) }
+            if FinderActionPolicy.inFileView(focus) { _ = emit(45, [.command, .shift], request: request) }
+            else { report("新增資料夾略過：焦點不是可確認的 Finder 視窗。") }
         case .goToFolder:
             _ = emit(5, [.command, .shift], request: request)
         }
@@ -266,13 +267,44 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     }
 }
 
+/// One AX element on the focus chain, from the focused element up to its window.
+struct FinderAXNode: Sendable, Equatable {
+    var role: String
+    var subrole: String = ""
+    var identifier: String = ""
+    var description: String = ""
+    /// A selected child of this element exposes a file URL (read for containers only).
+    var selectedFileURL = false
+}
+
 enum FinderFocusReader {
-    static func classify(role: String, fileSelection: Bool, sidebar: Bool) -> FinderFocus {
-        if [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole].contains(role) { return .text }
-        if !sidebar && fileSelection { return .files }
-        return .unknown
+    /// Roles that host Finder's file items in list, column, icon and gallery views.
+    static let contentRoles: Set<String> = [kAXOutlineRole, kAXTableRole, kAXBrowserRole, kAXListRole, "AXCollection"]
+    static let textRoles: Set<String> = [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole]
+
+    /// Positive-evidence classification of a focus chain (focused element first,
+    /// window last). `complete` is false when the walk failed or timed out.
+    static func classify(_ chain: [FinderAXNode], complete: Bool) -> FinderFocus {
+        // Text editing wins even on a partial chain: never turn typing into a file action.
+        if chain.contains(where: { textRoles.contains($0.role) || $0.subrole == kAXSearchFieldSubrole }) { return .text }
+        guard complete, let window = chain.last, window.role == kAXWindowRole else { return .unknown }
+        if window.subrole != kAXStandardWindowSubrole { return .chrome }      // dialogs, panels, unknown windows
+        if chain.contains(where: { $0.role == kAXSheetRole || $0.role == kAXToolbarRole }) { return .chrome }
+        func mentionsSidebar(_ node: FinderAXNode) -> Bool {
+            node.subrole == "AXSourceList" || node.identifier.range(of: "sidebar", options: .caseInsensitive) != nil ||
+                node.description.range(of: "sidebar", options: .caseInsensitive) != nil
+        }
+        if chain.contains(where: mentionsSidebar) { return .sidebar }
+        // File content: a content container inside a scroll area (column view: a browser).
+        guard let index = chain.firstIndex(where: { contentRoles.contains($0.role) }) else { return .unknown }
+        let container = chain[index]
+        guard container.role == kAXBrowserRole ||
+              chain[(index + 1)...].contains(where: { $0.role == kAXScrollAreaRole || $0.role == kAXBrowserRole }) else { return .unknown }
+        return chain[...index].contains(where: \.selectedFileURL) ? .files : .folder
     }
-    /// Runs on a worker. Reads roles/parents only, never selected text or document values.
+
+    /// Runs on a worker. Reads roles/identifiers/descriptions of the focus chain and
+    /// one selected child's URL, never selected text or document values.
     static func read(pid: Int32) -> FinderFocus {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.03)
@@ -281,33 +313,40 @@ enum FinderFocusReader {
               let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return .unknown }
         var element = unsafeDowncast(focused, to: AXUIElement.self)
         let deadline = ProcessInfo.processInfo.systemUptime + 0.25
-        var fileSelection = false
-        for _ in 0..<5 {
-            guard ProcessInfo.processInfo.systemUptime < deadline else { return .unknown }
+        var chain: [FinderAXNode] = []
+        func string(_ element: AXUIElement, _ attribute: String) -> String {
+            var value: CFTypeRef?
+            return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? (value as? String ?? "") : ""
+        }
+        for _ in 0..<10 {
+            guard ProcessInfo.processInfo.systemUptime < deadline else { return classify(chain, complete: false) }
             AXUIElementSetMessagingTimeout(element, 0.01)
             var value: CFTypeRef?
             guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &value) == .success,
-                  let role = value as? String else { return .unknown }
-            if classify(role: role, fileSelection: false, sidebar: false) == .text { return .text }
-            if role == kAXWindowRole { return fileSelection ? .files : .unknown }
-            var identifier: CFTypeRef?
-            _ = AXUIElementCopyAttributeValue(element, kAXIdentifierAttribute as CFString, &identifier)
-            if (identifier as? String)?.localizedCaseInsensitiveContains("sidebar") == true { return .unknown }
-            var selection: CFArray?
-            // One selected child, never the complete file collection.
-            if AXUIElementCopyAttributeValues(element, kAXSelectedChildrenAttribute as CFString, 0, 1, &selection) == .success,
-               let selected = (selection as? [AXUIElement])?.first {
-                AXUIElementSetMessagingTimeout(selected, 0.01)
-                var url: CFTypeRef?
-                if AXUIElementCopyAttributeValue(selected, kAXURLAttribute as CFString, &url) == .success,
-                   let value = url as? URL, value.isFileURL { fileSelection = true }
+                  let role = value as? String else { return classify(chain, complete: false) }
+            var node = FinderAXNode(role: role, subrole: string(element, kAXSubroleAttribute),
+                                    identifier: string(element, kAXIdentifierAttribute))
+            if contentRoles.contains(role) || role == kAXScrollAreaRole {
+                node.description = string(element, kAXDescriptionAttribute)
+                var selection: CFArray?
+                // One selected child, never the complete file collection.
+                if contentRoles.contains(role),
+                   AXUIElementCopyAttributeValues(element, kAXSelectedChildrenAttribute as CFString, 0, 1, &selection) == .success,
+                   let selected = (selection as? [AXUIElement])?.first {
+                    AXUIElementSetMessagingTimeout(selected, 0.01)
+                    var url: CFTypeRef?
+                    if AXUIElementCopyAttributeValue(selected, kAXURLAttribute as CFString, &url) == .success,
+                       let value = url as? URL, value.isFileURL { node.selectedFileURL = true }
+                }
             }
+            chain.append(node)
+            if role == kAXWindowRole { return classify(chain, complete: true) }
             var parent: CFTypeRef?
             guard AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &parent) == .success,
-                  let parent, CFGetTypeID(parent) == AXUIElementGetTypeID() else { return .unknown }
+                  let parent, CFGetTypeID(parent) == AXUIElementGetTypeID() else { return classify(chain, complete: false) }
             element = unsafeDowncast(parent, to: AXUIElement.self)
         }
-        return .unknown
+        return classify(chain, complete: false)
     }
 }
 

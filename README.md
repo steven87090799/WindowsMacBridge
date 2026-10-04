@@ -1,6 +1,6 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 46）輸入法守護修正版**；[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與原始碼合併是不同階段。
+Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 47）正式前整體強化版**，包含 build 46 輸入法守護修正（審查與修復紀錄：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）；[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與原始碼合併是不同階段。
 
 ## 一般模式與進階模式已分開
 
@@ -17,7 +17,7 @@ Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、
 
 一般模式**仍需要正常的鍵盤與截圖授權**；拆開的是 HID／Root／Driver 依賴。權限頁逐項列出所需設定，每次只申請一項，回到 App 後重新讀取原生授權結果。權限綠燈只代表該項授權通過，鍵盤後端也必須實際啟動才能顯示運作中。
 
-切回一般模式會釋放本 App 的 HID 所有權並銷毀連線。舊 HID 設定不會自動啟用進階模式；已安裝的共用 Karabiner Driver／服務會保留，避免影響其他使用者，不能把它們仍存在誤稱為全機已沒有背景服務。
+切回一般模式會釋放本 App 的 HID 所有權並銷毀連線；舊 HID 確認停止前兩種後端都不翻譯（最多 3 秒）；只有停止回覆、從未擷取或背景元件確定結束才算釋放，XPC 中斷或逾時都保持停用到使用者按「恢復／重啟引擎」。舊 HID 設定不會自動啟用進階模式；已安裝的共用 Karabiner Driver／服務會保留，避免影響其他使用者，不能把它們仍存在誤稱為全機已沒有背景服務。
 
 ## 安裝
 
@@ -31,7 +31,7 @@ App使用ad-hoc簽章、尚無Apple公證；更新可能需要重新核准本版
 |---|---|
 | Ctrl複製／貼上／復原／全選／儲存、文字導覽、瀏覽器分頁 | 開 |
 | Alt+Tab、Alt+F4 | macOS原生切換／當前窗口關閉，保留未儲存提示 |
-| Finder Ctrl+X→V移動、F2、Delete、確認式ShiftDelete | 開；不需FinderSync，根目錄監控已移除 |
+| Finder Ctrl+X→V移動、F2、Delete、確認式ShiftDelete | 開；ShiftDelete由Finder原生確認；焦點無法確認時只貼上不搬移；不需FinderSync，根目錄監控已移除 |
 | Windows截圖與CmdShift3／4 | 開；完成直接寫PNG clipboard，取消／舊session不寫入 |
 | MacBook Fn／左Ctrl | 關，明確開關只改本機builtIn鍵盤 |
 | Windows鍵位置 | Command，可選Option |
@@ -49,7 +49,7 @@ Mac mini固定外接鍵盤、MacBook內建鍵盤，只有MacBook開啓Fn交換�
 
 ## 資源與驗證
 
-一般模式沒有250ms／1s固定閒置輪詢，只有按鍵、系統通知及明確deadline。HID使用XPC ownership lease和Driver回報，放開所有鍵後不輪詢；尚有held output時保留單次安全檢查。截圖單輪、臨時PNG直接clipboard，TIFF／PDF按預算處理。代碼審查或CI不證明CPU穩定0.0–0.1%、完整App記憶體峰值、硬件交接或Driver恢復已通過。
+一般模式沒有250ms／1s固定閒置輪詢，只有按鍵、系統通知及明確deadline；一般打字不會為計數喚醒主執行緒，遠端來源結束由kqueue事件通知。HID使用XPC ownership lease和Driver回報，放開所有鍵後不輪詢；尚有held output時保留單次安全檢查。截圖單輪、臨時PNG直接clipboard，TIFF／PDF按預算處理。代碼審查或CI不證明CPU穩定0.0–0.1%、完整App記憶體峰值、硬件交接或Driver恢復已通過。
 
 - [操作說明](Resources/UserGuide.md)
 - [人工驗收八類功能](Resources/AcceptanceGuide.md)

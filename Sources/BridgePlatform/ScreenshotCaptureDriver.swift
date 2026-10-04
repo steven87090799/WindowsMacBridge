@@ -44,6 +44,9 @@ final class NativeScreenshotJob: ScreenshotCaptureJob, @unchecked Sendable {
     private let lock = NSLock()
     private let diagnosticLock = NSLock()
     private var failure: ScreenshotFailure?
+    /// Esc during region selection only explains a non-zero exit; it must not
+    /// discard a capture that screencapture completed successfully.
+    private var userCancellationNoted = false
     private var diagnostic = Data()
     private var terminationSent = false, startRequested = false
     private let prepareArguments: @Sendable () throws -> [String]
@@ -65,17 +68,22 @@ final class NativeScreenshotJob: ScreenshotCaptureJob, @unchecked Sendable {
             guard let self else { return }
             self.pipe.fileHandleForReading.readabilityHandler = nil
             self.diagnosticLock.lock()
-            // Parent closes its write endpoint after spawn, so this bounded final
-            // read reaches EOF and cannot lose a short child's cancellation message.
+            // The child has exited, so its output is already buffered. Read it
+            // without blocking: an inherited write end must never stall completion
+            // and hold the single capture slot until relaunch.
+            let descriptor = self.pipe.fileHandleForReading.fileDescriptor
+            let flags = fcntl(descriptor, F_GETFL)
+            if flags >= 0 { _ = fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) }
             let tail = (try? self.pipe.fileHandleForReading.read(upToCount: 4096)) ?? Data()
             self.diagnostic.append(tail.prefix(max(0, 4096 - self.diagnostic.count)))
             let diagnostic = String(decoding: self.diagnostic, as: UTF8.self).lowercased()
             self.diagnosticLock.unlock()
             self.lock.lock()
             var result = self.failure
+            let escaped = self.userCancellationNoted
             self.lock.unlock()
             if result == nil && finished.terminationStatus != 0 {
-                if diagnostic.contains("canceled") || diagnostic.contains("user cancelled") || diagnostic.contains("no selection to capture. cancelling") { result = .userCancelled }
+                if escaped || diagnostic.contains("canceled") || diagnostic.contains("user cancelled") || diagnostic.contains("no selection to capture. cancelling") { result = .userCancelled }
                 else if diagnostic.contains("denied") || diagnostic.contains("not permitted") || diagnostic.contains("permission") { result = .permissionDenied }
                 else if diagnostic.contains("no space") || diagnostic.contains("write") { result = .diskFailure }
                 else { result = .processFailure }
@@ -106,7 +114,7 @@ final class NativeScreenshotJob: ScreenshotCaptureJob, @unchecked Sendable {
         }
     }
     func noteUserCancellation() {
-        lock.lock(); if failure == nil { failure = .userCancelled }; lock.unlock()
+        lock.lock(); userCancellationNoted = true; lock.unlock()
     }
     func cancel(_ reason: ScreenshotFailure) {
         lock.lock(); if failure == nil { failure = reason }; lock.unlock()

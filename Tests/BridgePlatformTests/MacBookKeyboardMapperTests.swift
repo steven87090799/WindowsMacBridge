@@ -228,7 +228,11 @@ import BridgeCore
             #expect(native.observeChanges {})
             native.stopObserving()
         }
+        // An Apple Silicon MacBook on macOS 27 publishes 129 event services with
+        // one keyboard; the old 128-service bound rejected the whole inventory.
         #expect(native.services() != nil)
+        #expect(NativeMacBookKeyboardBackend.serviceScanLimit > 1024 &&
+                NativeMacBookKeyboardBackend.keyboardServiceLimit <= NativeMacBookKeyboardBackend.serviceScanLimit)
     }
     @Test func disabledOrDesktopModeDoesNoInventoryOrObservationWork() {
         let (name, defaults) = defaults(); defer { defaults.removePersistentDomain(forName: name); try? FileManager.default.removeItem(at: FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal")) }

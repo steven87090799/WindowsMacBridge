@@ -1,3 +1,5 @@
+> 目前架構、程序／執行緒／權限邊界與修復紀錄以 [FinalProductionReview-2026-10-03](FinalProductionReview-2026-10-03.md) 為準。
+
 > 這份文件保留歷史版本記錄；目前行為、測試與阻擋項目以 [2026-09-30 修復報告](PreReleaseRepair-2026-09-30.md) 為準。自製 Alt+Tab 已移除，不再列為待實作功能。
 
 > 以下為 0.2 初始設計背景。0.3 的規則、Finder 輸出及 HID 後端界線以 [KarabinerReplacement.md](KarabinerReplacement.md) 為準；目前已有指定 PID 的 Finder down/up 輸出，不再是完全零注入。

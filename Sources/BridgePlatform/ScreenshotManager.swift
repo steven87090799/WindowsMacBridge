@@ -32,6 +32,45 @@ private final class PNGEncodingBuffer {
     }
 }
 
+/// One immutable, bounded snapshot of a capture file. Validation and every
+/// later parse use the same descriptor's bytes, so a path that is replaced,
+/// truncated or grown after the size check cannot bypass the budget. Never mapped.
+enum BoundedImageFile {
+    static func read(_ url: URL, limit: Int = ImageMemoryBudget.maximumFileBytes,
+                     afterValidation: (() -> Void)? = nil) -> Result<Data, ScreenshotFailure> {
+        // O_NONBLOCK: a FIFO at this path must not block the open.
+        let descriptor = open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard descriptor >= 0 else { return .failure(.diskFailure) }
+        defer { close(descriptor) }
+        var before = stat()
+        guard fstat(descriptor, &before) == 0, before.st_mode & S_IFMT == S_IFREG,
+              before.st_size > 0, before.st_size <= off_t(limit) else { return .failure(.diskFailure) }
+        afterValidation?()
+        let expected = Int(before.st_size)
+        // One extra byte detects growth; the allocation is bounded by the validated size.
+        var data = Data(count: expected + 1)
+        var total = 0
+        let complete = data.withUnsafeMutableBytes { buffer -> Bool in
+            guard let base = buffer.baseAddress else { return false }
+            while total < buffer.count {
+                guard !Task.isCancelled else { return false }
+                let count = Darwin.read(descriptor, base.advanced(by: total), buffer.count - total)
+                if count < 0 { if errno == EINTR { continue }; return false }
+                if count == 0 { break }
+                total += count
+            }
+            return true
+        }
+        guard !Task.isCancelled else { return .failure(.policyCancelled) }
+        var after = stat()
+        guard complete, total == expected, fstat(descriptor, &after) == 0, after.st_size == before.st_size,
+              after.st_ino == before.st_ino, after.st_mtimespec.tv_sec == before.st_mtimespec.tv_sec,
+              after.st_mtimespec.tv_nsec == before.st_mtimespec.tv_nsec else { return .failure(.diskFailure) }
+        data.count = expected
+        return .success(data)
+    }
+}
+
 public enum ScreenshotImagePreparation {
     static func encodePNG(_ image: CGImage, maximumBytes: Int = ImageMemoryBudget.maximumFileBytes) -> Result<ScreenshotImagePayload, ScreenshotFailure> {
         guard !Task.isCancelled else { return .failure(.policyCancelled) }
@@ -56,17 +95,22 @@ public enum ScreenshotImagePreparation {
     public static func prepare(at url: URL) -> ScreenshotImagePayload? {
         try? prepareResult(at: url).get()
     }
+    /// Peak transient memory: encoded snapshot (≤ maximumFileBytes) + decoded
+    /// bitmap (≤ maximumDecodedBytes) + PNG output (≤ maximumFileBytes), then the
+    /// pasteboard's copy of the output. The PNG fast path holds only the snapshot.
     public static func prepareResult(at url: URL) -> Result<ScreenshotImagePayload, ScreenshotFailure> {
         autoreleasepool {
             guard !Task.isCancelled else { return .failure(.policyCancelled) }
-            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-                  let bytes = (attributes[.size] as? NSNumber)?.intValue,
-                  bytes > 0, bytes <= ImageMemoryBudget.maximumFileBytes else { return .failure(.diskFailure) }
+            let encoded: Data
+            switch BoundedImageFile.read(url) {
+            case .success(let data): encoded = data
+            case .failure(let failure): return .failure(failure)
+            }
             if url.pathExtension.lowercased() == "pdf" {
-                return preparePDF(at: url)
+                return preparePDF(encoded)
             }
             let options = [kCGImageSourceShouldCache: false] as CFDictionary
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, options),
+            guard let source = CGImageSourceCreateWithData(encoded as CFData, options),
                   CGImageSourceGetCount(source) > 0,
                   CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete,
                   let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, options) as? [CFString: Any],
@@ -78,10 +122,10 @@ public enum ScreenshotImagePreparation {
                 return .failure(.decodeFailure)
             }
             guard !Task.isCancelled else { return .failure(.policyCancelled) }
-            if url.pathExtension.lowercased() == "png",
-               let original = try? Data(contentsOf: url, options: .mappedIfSafe),
-               original.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]) {
-                return .success(ScreenshotImagePayload(png: original))
+            // Already a valid, budget-checked PNG: hand over the same snapshot, no re-encode.
+            if url.pathExtension.lowercased() == "png", encoded.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]),
+               CGImageSourceGetType(source) as String? == "public.png" {
+                return .success(ScreenshotImagePayload(png: encoded))
             }
             guard let image = CGImageSourceCreateImageAtIndex(source, 0, options),
                   ImageMemoryBudget.allows(width: image.width, height: image.height,
@@ -92,8 +136,8 @@ public enum ScreenshotImagePreparation {
         }
     }
 
-    private static func preparePDF(at url: URL) -> Result<ScreenshotImagePayload, ScreenshotFailure> {
-        guard let document = CGPDFDocument(url as CFURL),
+    private static func preparePDF(_ encoded: Data) -> Result<ScreenshotImagePayload, ScreenshotFailure> {
+        guard let provider = CGDataProvider(data: encoded as CFData), let document = CGPDFDocument(provider),
               let page = document.page(at: 1), PDFImageBudget().allows(page) else { return .failure(.decodeFailure) }
         guard !Task.isCancelled else { return .failure(.policyCancelled) }
         let bounds = page.getBoxRect(.mediaBox).standardized
@@ -174,6 +218,11 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private var runtimePolicy: RuntimePolicySnapshot?
     private var policyEpoch: UInt64 = 0
     private var activeJob: (any ScreenshotCaptureJob)?
+    /// The job's token and private output path. Only the matching completion
+    /// may clear the job, and stop() removes an abandoned temporary capture.
+    private var activeJobToken: ScreenshotCaptureLifecycle.Token?
+    private var activeDestination: URL?
+    static let temporaryCapturePrefix = "WindowsMacBridge Screenshot "
     private var sourceJob: SourceWorkToken?
     private var inputRouting = InputRoutingSnapshot()
     private var physicalPreferences: [DeviceInputPreference] = []
@@ -217,6 +266,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     public func start(enabled: Bool) {
+        removeAbandonedTemporaryCaptures()
         self.enabled = enabled
         capture.configure(enabled: enabled, epoch: policyEpoch)
         guard enabled else { return }
@@ -317,6 +367,22 @@ public struct ScreenshotStatus: Equatable, Sendable {
         capture.configure(enabled: false, epoch: policyEpoch)
         recovery.reset()
         accessibilityTrusted = false
+        // A quit during capture never reaches finishCapture's cleanup; screen
+        // contents must not stay in the temporary directory.
+        if let destination = activeDestination, isTemporary(destination) { try? fileManager.removeItem(at: destination) }
+        activeDestination = nil
+    }
+    private func isTemporary(_ url: URL) -> Bool {
+        url.deletingLastPathComponent().standardizedFileURL == fileManager.temporaryDirectory.standardizedFileURL
+    }
+    /// A crash can still leave a private capture behind. Only this App's own
+    /// temporary capture names are removed; Desktop saves are never touched.
+    private func removeAbandonedTemporaryCaptures() {
+        guard validatesNativeContext, captureDirectoryOverride == nil,
+              let names = try? fileManager.contentsOfDirectory(atPath: fileManager.temporaryDirectory.path) else { return }
+        for name in names.prefix(4096) where name.hasPrefix(Self.temporaryCapturePrefix) && name.hasSuffix(".png") {
+            try? fileManager.removeItem(at: fileManager.temporaryDirectory.appendingPathComponent(name))
+        }
     }
 
     public func verifyAndRepair(reason: String) {
@@ -604,10 +670,12 @@ public struct ScreenshotStatus: Equatable, Sendable {
             return
         }
         let destination = captureURL()
+        activeDestination = destination
         scheduleCaptureTimeout(token)
         jobKind = kind
         setStatus(issue: nil, result: kind == .region ? "正在框選截圖" : "正在截圖")
         do {
+            activeJobToken = token
             activeJob = try driver.launch(to: destination, kind: kind,
                 processID: runtimePolicy?.input.foreground.processID ?? 0) { [weak self] code, failure in
                 Task { @MainActor [weak self] in
@@ -638,15 +706,17 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     private func finishCapture(exitCode: Int32, failure: ScreenshotFailure?, url: URL, token: ScreenshotCaptureLifecycle.Token) async {
-        let temporary = url.deletingLastPathComponent().standardizedFileURL == fileManager.temporaryDirectory.standardizedFileURL
+        let temporary = isTemporary(url)
         defer {
             if temporary { try? fileManager.removeItem(at: url) }
+            if activeDestination == url { activeDestination = nil }
             if let pending = pendingNativeURL {
                 pendingNativeURL = nil
                 acceptNativeScreenshot(pending)
             }
         }
-        activeJob = nil
+        // A late completion of an older job must not drop the current job's handle.
+        if activeJobToken == token { activeJob = nil; activeJobToken = nil }
         guard capture.isCurrent(token), sourceJob?.validForAsyncWork ?? true else {
             jobTimer?.cancel(); jobTimer = nil
             _ = capture.complete(token); return
@@ -688,16 +758,17 @@ public struct ScreenshotStatus: Equatable, Sendable {
         switch result {
         case .unreadableImage:
             setStatus(issue: "圖片已儲存，但無法讀取以複製到剪貼簿。", result: "儲存成功、複製失敗")
-            log("圖片已儲存，但無法讀取：\(url.path)")
+            log("截圖無法讀取以複製（\(jobKind)）")
             return
         case .writeFailed:
             setStatus(issue: "圖片已儲存，但無法寫入剪貼簿。", result: "儲存成功、複製失敗")
-            log("圖片已儲存，但剪貼簿寫入失敗：\(url.path)")
+            log("截圖剪貼簿寫入失敗（\(jobKind)）")
             return
         case .success: break
         }
         setStatus(issue: nil, result: "截圖已複製，可直接貼上")
-        log("截圖已儲存並複製：\(url.path)")
+        // Paths contain the account name; log only the outcome and kind.
+        log(temporary ? "截圖已複製（\(jobKind)）" : "截圖已儲存並複製（\(jobKind)）")
     }
 
     private func isAuthorized() -> Bool {
@@ -718,7 +789,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         let directory = captureDirectory()
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        let name = "WindowsMacBridge Screenshot \(formatter.string(from: Date()))-\(UUID().uuidString.prefix(8)).png"
+        let name = Self.temporaryCapturePrefix + "\(formatter.string(from: Date()))-\(UUID().uuidString.prefix(8)).png"
         return directory.appendingPathComponent(name)
     }
 

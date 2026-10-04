@@ -6,7 +6,7 @@ bridge_daemon='/Library/LaunchDaemons/local.WindowsMacBridge.HIDHelper.plist'
 bridge_driver_daemon='/Library/LaunchDaemons/local.WindowsMacBridge.VirtualHIDService.plist'
 [[ ! -L "$bridge_root" && ! -L "$bridge_daemon" && ! -L "$bridge_driver_daemon" ]] || exit 1
 if [[ -e "$bridge_root/.install-recovery" || -L "$bridge_root/.install-recovery" ]]; then
-    echo 'An interrupted update needs recovery. Reopen WindowsMacBridge before uninstalling.' >&2
+    echo 'An interrupted update needs recovery. Choose Install in WindowsMacBridge advanced settings to finish recovery before uninstalling.' >&2
     exit 1
 fi
 /bin/launchctl bootout system "$bridge_daemon" 2>/dev/null || true

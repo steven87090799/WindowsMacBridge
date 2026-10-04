@@ -132,7 +132,7 @@ public struct InputSourceStatus: Equatable, Sendable {
     public func setPauseDuration(_ duration: GuardPauseDuration) { AppSettings.setPauseDuration(duration); emit() }
     public func pauseDetection(_ duration: GuardPauseDuration) { controller.pauseDetection(duration); emit() }
     public func resumeDetection() { controller.resumeDetection(); emit() }
-    public func rediscover() { issue = nil; controller.refreshAndReconcile(reason: "User refreshed input sources"); emit() }
+    public func rediscover() { issue = nil; controller.refreshAndReconcile(reason: "User refreshed input sources", forceDiscovery: true); emit() }
     public func setLoginEnabled(_ enabled: Bool) {
         do { try LoginItemManager.setEnabled(enabled); loginIssue = nil }
         catch { loginIssue = "登入項目更新失敗：\(error.localizedDescription)。請將 App 放在 Applications 後再設定。" }
@@ -141,10 +141,6 @@ public struct InputSourceStatus: Equatable, Sendable {
     public var loginIsRegistered: Bool { LoginItemManager.isRegistered }
     public var loginIsActive: Bool { LoginItemManager.isEnabled }
     public var loginStatusText: String { LoginItemManager.statusDescription }
-    @discardableResult public func ensureLoginEnabled() -> Bool {
-        setLoginEnabled(true)
-        return LoginItemManager.isRegistered
-    }
     public func openLoginSettings() { SMAppService.openSystemSettingsLoginItems() }
 
     public var status: InputSourceStatus {
@@ -194,9 +190,11 @@ public struct InputSourceStatus: Equatable, Sendable {
         return "Current: \(manager.currentIdentifier ?? "unknown")\nSecure Input: \(IsSecureEventInputEnabled())\nvChewing Traditional: \(found.traditional?.summary ?? "not found")\nABC: \(found.abc?.summary ?? "not found")"
     }
     private func synchronizeHotkey() {
-        guard started, suspension == nil, defaults.bool(forKey: hotkeyEnabledKey) else {
-            hotkey?.suspend(); hotkeyRegistered = false; return
+        guard started, defaults.bool(forKey: hotkeyEnabledKey) else {
+            // Disabled by the user: remove the Carbon handler, not only the binding.
+            hotkey?.stop(); hotkey = nil; hotkeyRegistered = false; return
         }
+        guard suspension == nil else { hotkey?.suspend(); hotkeyRegistered = false; return }
         if hotkey == nil {
             hotkey = HotkeyManager()
             hotkey?.onHotkey = { [weak self] in

@@ -8,7 +8,9 @@ public struct EngineConfiguration: Equatable, Sendable {
     public var enabled = false
     public var sessionActive = true
     public var nativeMappingAwaitingNeutral = false
-    public var needsEventTap: Bool { sessionActive && (enabled || nativeMappingAwaitingNeutral) }
+    /// Policy is blocked only by Secure Input; keep the tap to observe its end.
+    public var observesSecureInputEnd = false
+    public var needsEventTap: Bool { sessionActive && (enabled || nativeMappingAwaitingNeutral || observesSecureInputEnd) }
     public var layoutSupported = false
     public var diagnostics = false
     public var restartToken: UInt64 = 0
@@ -87,6 +89,8 @@ private final class EngineMailbox: @unchecked Sendable {
     var stopping = false
     var runLoop: CFRunLoop?
     var wakeQueued = false
+    /// A lifecycle/host request: re-read permissions now, not on the key-edge budget.
+    var authorizationCheckRequested = true
 }
 
 /// @unchecked Sendable is confined here: mutable event state belongs exclusively to run().
@@ -124,9 +128,21 @@ public final class InputEngine: @unchecked Sendable {
     private var tapAuthorizationFault = false
     private var policyGeneration: UInt64 = 0
     private var expiryTimer: Timer?
+    private var expiryDeadline: Double?
+    /// Key edges wake tick() after the callback. Permission reads (AX, Input
+    /// Monitoring, posting) on that path run at most once per interval; every
+    /// configuration change, host maintenance and tap-disable event forces one.
+    /// Secure Input is still checked on every event in the callback itself.
+    static let keyEdgeAuthorizationInterval = 1.0
+    private var lastAuthorizationCheck = -Double.infinity
+    private var keyEdgeWake = false
     private var activityHandler: (@MainActor @Sendable () -> Void)?
     private let activityMailbox = DeferredSignalMailbox()
-    private var observedProducers = [Int32]()
+    /// Fixed ring of recently reported synthetic producers. An append-only list
+    /// filled after 32 short-lived posters and then hid new remote hosts until
+    /// a restart or session change.
+    private var observedProducers = [Int32](repeating: 0, count: 32)
+    private var observedProducerNext = 0
     @MainActor public func setActivityHandler(_ handler: @escaping @MainActor @Sendable () -> Void) {
         activityHandler = handler
     }
@@ -169,6 +185,7 @@ public final class InputEngine: @unchecked Sendable {
             previous.winTaskViewEnabled != configuration.winTaskViewEnabled ||
             previous.restartToken != configuration.restartToken || previous.physicalBackend != configuration.physicalBackend
         mailbox.configuration = configuration; mailbox.revision &+= 1
+        mailbox.authorizationCheckRequested = true
         mailbox.lock.unlock()
         if cancel { actions.cancelPending() }
         else if previous.deviceInputs != configuration.deviceInputs { actions.cancelLocalPending() }
@@ -179,7 +196,13 @@ public final class InputEngine: @unchecked Sendable {
         return mailbox.status
     }
     /// Reuse the host's existing lifecycle observation when physical input is owned by HID.
-    public func maintain() { wake() }
+    public func maintain() {
+        mailbox.lock.lock(); mailbox.authorizationCheckRequested = true; mailbox.lock.unlock()
+        wake()
+    }
+    static func authorizationCheckDue(requested: Bool, keyEdgeOnly: Bool, now: Double, last: Double) -> Bool {
+        requested || !keyEdgeOnly || now - last >= keyEdgeAuthorizationInterval
+    }
     public func stop() {
         actions.cancelPending(disable: true)
         mailbox.lock.lock()
@@ -227,7 +250,9 @@ public final class InputEngine: @unchecked Sendable {
         if changed { configuration = mailbox.configuration; revision = mailbox.revision }
         mailbox.lock.unlock()
         if changed {
-            if configuration.restartToken != lastRestart || configuration.sessionActive != lastSessionActive { observedProducers.removeAll(keepingCapacity: true) }
+            if configuration.restartToken != lastRestart || configuration.sessionActive != lastSessionActive {
+                for i in observedProducers.indices { observedProducers[i] = 0 }
+            }
             if deliveryChanged { needsRecreation = true; attemptedStart = false }
             if deviceChanged {
                 processor.drainTranslatedReleases { key, flags, pid in
@@ -346,14 +371,22 @@ public final class InputEngine: @unchecked Sendable {
 
     private func tick() {
         readConfiguration()
-        mailbox.lock.lock(); let stopping = mailbox.stopping; mailbox.lock.unlock()
+        mailbox.lock.lock()
+        let stopping = mailbox.stopping, requested = mailbox.authorizationCheckRequested
+        mailbox.authorizationCheckRequested = false
+        mailbox.lock.unlock()
         if stopping { queueReleases(); deliverReleases(); CFRunLoopStop(CFRunLoopGetCurrent()); return }
         if needsRecreation { destroyTap(); needsRecreation = false }
 
-        status.accessibility = AXIsProcessTrusted()
-        status.listenAccess = CGPreflightListenEventAccess()
-        status.postAccess = CGPreflightPostEventAccess()
-        status.secureInput = IsSecureEventInputEnabled()
+        let now = ProcessInfo.processInfo.systemUptime
+        let keyEdgeOnly = keyEdgeWake; keyEdgeWake = false
+        if Self.authorizationCheckDue(requested: requested || tap == nil, keyEdgeOnly: keyEdgeOnly, now: now, last: lastAuthorizationCheck) {
+            lastAuthorizationCheck = now
+            status.accessibility = AXIsProcessTrusted()
+            status.listenAccess = CGPreflightListenEventAccess()
+            status.postAccess = CGPreflightPostEventAccess()
+            status.secureInput = IsSecureEventInputEnabled()
+        }
         remote.expire(at: ProcessInfo.processInfo.systemUptime) { key, flags, pid in
             guard releaseCount < releases.count else { return }
             releases[releaseCount] = (key, flags, pid); releaseCount += 1
@@ -404,18 +437,36 @@ public final class InputEngine: @unchecked Sendable {
             status.diagnostics = records.compactMap { $0 }.sorted { $0.id > $1.id }
             publishedDiagnosticRevision = diagnosticRevision
         }
-        mailbox.lock.lock(); let changed = mailbox.status != status; mailbox.status = status; mailbox.lock.unlock()
-        if changed { notifyActivity() }
+        mailbox.lock.lock(); let previous = mailbox.status; mailbox.status = status; mailbox.lock.unlock()
+        if Self.requiresHostWake(previous: previous, next: status,
+                                 everyChange: configuration.diagnostics || configuration.nativeMappingAwaitingNeutral) {
+            notifyActivity()
+        }
         scheduleRemoteExpiry()
+    }
+    /// Counters advance on every key edge. Waking the host for them ran a full
+    /// MainActor tick (TCC reads, policy, registry, SwiftUI publish) per keystroke.
+    /// They are still published with the next material change or on request.
+    /// Live diagnostics and a pending Fn/Ctrl neutral check still need key edges.
+    static func requiresHostWake(previous: EngineStatus, next: EngineStatus, everyChange: Bool) -> Bool {
+        if everyChange { return previous != next }
+        var before = previous, after = next
+        before.processed = 0; before.translated = 0; before.maxMicroseconds = 0
+        after.processed = 0; after.translated = 0; after.maxMicroseconds = 0
+        return before != after
     }
     private var hasInputAuthorization: Bool {
         status.listenAccess
     }
+    /// One-shot, re-armed only when the earliest held-remote deadline changes
+    /// (not re-allocated on every key edge while a remote key is held).
     private func scheduleRemoteExpiry() {
-        expiryTimer?.invalidate(); expiryTimer = nil
-        guard let deadline = remote.nextExpiry else { return }
+        let deadline = remote.nextExpiry
+        if deadline == expiryDeadline, deadline == nil || expiryTimer?.isValid == true { return }
+        expiryTimer?.invalidate(); expiryTimer = nil; expiryDeadline = deadline
+        guard let deadline else { return }
         let timer = Timer(timeInterval: max(0.05, deadline - ProcessInfo.processInfo.systemUptime), repeats: false) { [weak self] _ in
-            autoreleasepool { self?.tick() }
+            autoreleasepool { self?.expiryDeadline = nil; self?.tick() }
         }
         expiryTimer = timer; RunLoop.current.add(timer, forMode: .common)
     }
@@ -467,6 +518,7 @@ public final class InputEngine: @unchecked Sendable {
 
     private func handle(_ type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            mailbox.lock.lock(); mailbox.authorizationCheckRequested = true; mailbox.lock.unlock()
             queueReleases(); wake()
             processor.invalidate()
             actionEpoch &+= 1
@@ -509,14 +561,15 @@ public final class InputEngine: @unchecked Sendable {
         let physical = origin == .physicalFallback || destinationPhysical
         if evidence.processID > 0 && !evidence.ownEvent &&
             !configuration.inputRouting.producers.contains(where: { $0.processID == evidence.processID }) &&
-            !observedProducers.contains(evidence.processID) && observedProducers.count < 32 {
-            observedProducers.append(evidence.processID)
+            !observedProducers.contains(evidence.processID) {
+            observedProducers[observedProducerNext] = evidence.processID
+            observedProducerNext = (observedProducerNext + 1) % observedProducers.count
             producerInbox.observe(evidence.processID); notifyActivity()
         }
         guard physical || { if case .remote = origin { return true }; return false }() else {
             return Unmanaged.passUnretained(event)
         }
-        defer { wake() } // Coalesced work after callback, no recurring poll.
+        defer { keyEdgeWake = true; wake() } // Coalesced work after callback, no recurring poll.
         let start = DispatchTime.now().uptimeNanoseconds
         let key = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
         let flags = Self.modifiers(event.flags)
@@ -535,7 +588,9 @@ public final class InputEngine: @unchecked Sendable {
         let normalized = KeyboardEvent(phase, keyCode: key, modifiers: flags,
                                        isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
                                        modifierSide: side, modifierDown: down)
-        calibrationInbox.observe(processID: evidence.processID, key: key, phase: phase, flags: flags, repeatKey: normalized.isRepeat)
+        if calibrationInbox.observe(processID: evidence.processID, key: key, phase: phase, flags: flags, repeatKey: normalized.isRepeat) {
+            notifyActivity()
+        }
         if destinationPhysical { processor.reconcileIndependentSourceFlags(normalized.modifiers) }
         var routed = physical ? RoutedInputDecision(processor.process(normalized)) : remote.process(normalized, evidence: evidence, now: ProcessInfo.processInfo.systemUptime)
         if physical && configuration.windowsKeyModifier == .command {

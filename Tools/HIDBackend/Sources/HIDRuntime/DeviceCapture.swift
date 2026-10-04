@@ -31,7 +31,9 @@ final class DeviceCapture {
         init(_ hid: IOHIDDevice, id: UInt64, builtIn: Bool, apple834: Bool, elements: [IOHIDElement], identity: String, product: String) {
             self.hid = hid; self.id = id; self.builtIn = builtIn; self.apple834 = apple834; self.elements = elements
             self.identity = identity; self.product = String(decoding: product.utf8.prefix(240), as: UTF8.self)
-            self.roles = Dictionary(uniqueKeysWithValues: elements.map { (IOHIDElementGetCookie($0), DeviceCapture.descriptor($0).role) })
+            // A malformed descriptor can repeat a cookie; never trap the root process on it.
+            self.roles = Dictionary(elements.map { (IOHIDElementGetCookie($0), DeviceCapture.descriptor($0).role) },
+                                    uniquingKeysWith: { first, _ in first })
             self.neutralElements = elements.filter { let role = DeviceCapture.descriptor($0).role; return role == .key || role == .button }
             self.hasPointing = roles.values.contains { $0.pointing }
         }
@@ -49,13 +51,21 @@ final class DeviceCapture {
     private var pointingFlushQueued = false
     private var report = WMBHIDState()
     private var config = HIDConfiguration()
-    private var lastHeartbeat: Double = 0
     private var controllerUID: uid_t = 0
+    /// Console ownership for the authenticated controller, refreshed per tick and
+    /// on console-user changes; device callbacks never query configd themselves.
+    private var consoleSessionValid = false
+    private var consoleStore: SCDynamicStore?
+    private var tickQueued = false
+    /// Consecutive observe-to-seize neutral races; bounded so a flapping element
+    /// becomes an explicit fault instead of a busy retry loop.
+    private var neutralAborts = 0
+    private static let neutralAbortLimit = 3
     private var currentRestart: UInt64 = 0
     private var failClosed = false
     private var fault = ""
     private var maxMicroseconds: Double = 0
-    private var heldSafety: Timer?
+    private let heldSafety = HeldSafetyTimer()
     private let relay = CaptureStatusRelay()
     private static let teardownQueue = DispatchQueue(label: "WindowsMacBridge.virtual-hid-teardown", qos: .utility)
     private var tearingDown = false
@@ -80,6 +90,19 @@ final class DeviceCapture {
         }, Unmanaged.passUnretained(self).toOpaque())
         IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
         if let all = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> { for device in all { added(device) } }
+        // Fast user switching or logout releases capture without waiting for the
+        // old session's App, which may no longer be scheduled.
+        var context = SCDynamicStoreContext(version: 0, info: Unmanaged.passUnretained(relay).toOpaque(),
+                                            retain: nil, release: nil, copyDescription: nil)
+        if let store = SCDynamicStoreCreate(nil, "WindowsMacBridge.HIDConsole" as CFString, { _, _, info in
+            guard let info else { return }
+            Unmanaged<CaptureStatusRelay>.fromOpaque(info).takeUnretainedValue().signal()
+        }, &context) {
+            let keys = [SCDynamicStoreKeyCreateConsoleUser(nil)] as CFArray
+            if SCDynamicStoreSetNotificationKeys(store, keys, nil), SCDynamicStoreSetDispatchQueue(store, .main) {
+                consoleStore = store
+            }
+        }
     }
     static func consoleUID() -> uid_t? {
         var uid: uid_t = 0, gid: gid_t = 0
@@ -87,9 +110,10 @@ final class DeviceCapture {
         return uid
     }
     func configure(_ next: HIDConfiguration, uid: uid_t) {
-        controllerUID = uid; lastHeartbeat = ProcessInfo.processInfo.systemUptime
+        controllerUID = uid
         if next.restartToken != currentRestart {
             currentRestart = next.restartToken; execute(lifecycle.restart()); engine.restart(); failClosed = false; fault = ""
+            neutralAborts = 0
         }
         if !config.sameCapturePolicy(as: next) {
             pendingPointing = .init(); pointingFields = 0
@@ -132,7 +156,7 @@ final class DeviceCapture {
         tick()
     }
     func stop(completion: (() -> Void)? = nil) {
-        config = HIDConfiguration(); heldSafety?.invalidate(); heldSafety = nil; lastHeartbeat = 0
+        config = HIDConfiguration(); heldSafety.cancel(); consoleSessionValid = false
         if let completion { teardownReplies.append(completion) }
         stopCapture()
         if !tearingDown { finishTeardown() }
@@ -196,10 +220,7 @@ final class DeviceCapture {
             Unmanaged<DeviceCapture>.fromOpaque(context).takeUnretainedValue().received(result, value: value)
         }, Unmanaged.passUnretained(self).toOpaque())
         IOHIDDeviceScheduleWithRunLoop(hid, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
-        if config.enabled { DispatchQueue.main.async { [weak self] in self?.tick() } }
-    }
-    private static func isFn(_ e: IOHIDElement) -> Bool {
-        HIDTranslationEngine.modifier(page: IOHIDElementGetUsagePage(e), usage: UInt16(truncatingIfNeeded: IOHIDElementGetUsage(e))) == .fn
+        if config.enabled { scheduleTick() }
     }
     private static func descriptor(_ e: IOHIDElement) -> HIDElementDescriptor {
         .init(page: IOHIDElementGetUsagePage(e), usage: IOHIDElementGetUsage(e),
@@ -242,33 +263,59 @@ final class DeviceCapture {
                     pointing.disconnect(device.id); _ = pointing.register(device.id)
                 }
             case .openPhysicalDevices:
-                var success = devices.contains(where: { selected($0) && captureReady($0) })
+                var opened = devices.contains(where: { selected($0) && captureReady($0) })
+                var neutralAfterSeize = true
                 for device in devices where selected(device) && captureReady(device) {
                     if device.observed { IOHIDDeviceClose(device.hid, 0); device.observed = false }
-                    guard IOHIDDeviceOpen(device.hid, IOOptionBits(kIOHIDOptionsTypeSeizeDevice)) == kIOReturnSuccess else { success = false; break }
+                    guard IOHIDDeviceOpen(device.hid, IOOptionBits(kIOHIDOptionsTypeSeizeDevice)) == kIOReturnSuccess else { opened = false; break }
                     device.seized = true
                     // Recheck after the open: a key pressed in the observation/open gap aborts capture.
-                    if !neutral(device) { success = false; break }
+                    if !neutral(device) { neutralAfterSeize = false; break }
                 }
-                execute(lifecycle.captureCompleted(success: success))
-                if !success { fault = "裝置擷取失敗；已釋放，請放開所有按鍵後重啟引擎。" }
+                if opened && !neutralAfterSeize && neutralAborts < Self.neutralAbortLimit {
+                    // A held key is not a device fault: release and wait for neutral again.
+                    neutralAborts += 1
+                    execute(lifecycle.captureAborted()); scheduleTick()
+                } else {
+                    let success = opened && neutralAfterSeize
+                    execute(lifecycle.captureCompleted(success: success))
+                    if success { neutralAborts = 0 }
+                    else { fault = "裝置擷取失敗；已釋放，請放開所有按鍵後重啟引擎。" }
+                }
             }
         }
     }
-    private func sessionActive() -> Bool {
-        guard Self.consoleUID() == controllerUID,
-              let dictionary = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
-        return (dictionary[kCGSessionOnConsoleKey as String] as? Bool) == true &&
-            (dictionary[kCGSessionLoginDoneKey as String] as? Bool) == true
+    /// A system LaunchDaemon is outside every Quartz GUI session, where
+    /// CGSessionCopyCurrentDictionary returns NULL by contract. Session state comes
+    /// from the authenticated App; the daemon independently requires that App's
+    /// user to own the console (configd, also notified on console-user change).
+    private func refreshConsoleSession() -> Bool {
+        consoleSessionValid = controllerUID != 0 && Self.consoleUID() == controllerUID && config.sessionActive
+        return consoleSessionValid
+    }
+    private func scheduleTick() {
+        guard !tickQueued else { return }
+        tickQueued = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            tickQueued = false; tick()
+        }
+    }
+    /// Device, report or output-path errors need an explicit engine restart.
+    /// The follow-up tick publishes the fault and retires the virtual client.
+    private func failClose(_ message: String) {
+        failClosed = true; fault = message
+        execute(lifecycle.stop()); scheduleTick()
     }
     private func tick() {
         let now = ProcessInfo.processInfo.systemUptime
+        let session = refreshConsoleSession()
         status.secureInput = IsSecureEventInputEnabled()
         status.permissions = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
         // Native hand-back for clients that may own/read physical HID devices themselves.
         // Keep terminal/IDE identity reports, but never seize a Remote/VM/Game/Disabled device.
         let nativePass = HIDCapturePolicy.requiresNativePassThrough(mode: config.mode, layoutSupported: config.layoutSupported, transportOnly: config.transportOnly)
-        let valid = config.enabled && config.sessionActive && sessionActive() && !status.secureInput && status.permissions &&
+        let valid = config.enabled && session && !status.secureInput && status.permissions &&
             !failClosed && !engine.emergencyPaused && !nativePass
         if valid && client == nil && !tearingDown {
             client = wmb_virtual_hid_create()
@@ -282,6 +329,11 @@ final class DeviceCapture {
         if valid, let client, devices.contains(where: { selected($0) && $0.hasPointing }) { wmb_virtual_hid_enable_pointing(client) }
         let driver = client.map { wmb_virtual_hid_status($0) } ?? 0
         status.driverReady = driver & UInt32(WMB_KEYBOARD_READY) != 0 && driver & UInt32(WMB_CONNECTION_FAULT | WMB_DRIVER_MISMATCH) == 0
+        // Pointing readiness was checked only at seize time. If it is lost later,
+        // hand every device back; ready ones are recaptured below after neutral.
+        if lifecycle.phase == .capturing && devices.contains(where: { $0.seized && !captureReady($0) }) {
+            execute(lifecycle.stop())
+        }
         // Observation begins only after explicit enabled policy and permission. Never opens unrelated devices.
         if valid && status.driverReady && lifecycle.phase != .faulted {
             for device in devices where selected(device) && captureReady(device) && !device.observed && !device.seized {
@@ -302,9 +354,9 @@ final class DeviceCapture {
             }
         }
         var p = CapturePrerequisites()
-        p.enabled = valid; p.sessionActive = sessionActive(); p.secureInput = status.secureInput
+        p.enabled = valid; p.sessionActive = session; p.secureInput = status.secureInput
         p.permissions = status.permissions; p.authenticatedController = controllerUID != 0
-        p.driverReady = status.driverReady; p.lastHeartbeat = lastHeartbeat; p.connectionLeaseValid = config.enabled
+        p.driverReady = status.driverReady; p.connectionLeaseValid = config.enabled
         let targets = devices.filter { selected($0) }
         let readyTargets = targets.filter { captureReady($0) }
         p.keysNeutral = lifecycle.phase == .capturing || (!readyTargets.isEmpty && readyTargets.allSatisfy { ($0.observed || $0.seized) && neutral($0) })
@@ -342,14 +394,18 @@ final class DeviceCapture {
         }
         scheduleHeldSafety()
     }
+    /// One-shot loss guard (HeldSafetyPolicy): held keys/modifiers/buttons or
+    /// reports the driver has not completed (a final key-up or button-up
+    /// included). An armed deadline is reused rather than re-allocated per HID
+    /// value; it re-arms from tick() only while something is still pending, and a
+    /// stalled driver (no completion for 500 ms) makes tick() fail closed.
     private func scheduleHeldSafety() {
-        heldSafety?.invalidate(); heldSafety = nil
         let held = report.modifiers != 0 || report.fn || report.key_count != 0 || report.consumer_count != 0 ||
             report.top_case_count != 0 || report.vendor_count != 0 || report.desktop_count != 0
-        guard config.enabled, devices.contains(where: { $0.seized }), held else { return }
-        // Only outstanding held input needs a loss guard. Neutral idle has no timer.
-        let timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: false) { [weak self] _ in self?.tick() }
-        timer.tolerance = 0.1; heldSafety = timer
+        let deadline = HeldSafetyPolicy.deadline(
+            capturing: config.enabled && devices.contains(where: { $0.seized }), heldOutput: held,
+            pointingButtons: pointing.buttons, outstandingReports: client.map { wmb_virtual_hid_outstanding($0) } ?? 0)
+        heldSafety.schedule(after: deadline) { [weak self] in self?.tick() }
     }
     private func received(_ result: IOReturn, value: IOHIDValue) {
         let started = DispatchTime.now().uptimeNanoseconds
@@ -359,27 +415,35 @@ final class DeviceCapture {
         if device.observed && !device.seized { tick(); return }
         guard device.seized else { return }
         defer { scheduleHeldSafety() }
-        guard result == kIOReturnSuccess, let role = device.roles[IOHIDElementGetCookie(element)], IOHIDValueGetLength(value) <= 8,
-              !IsSecureEventInputEnabled(), config.enabled, config.sessionActive, sessionActive() else {
-            failClosed = true; fault = "輸入狀態失效；擷取已停止。"; execute(lifecycle.stop()); return
+        guard result == kIOReturnSuccess, let role = device.roles[IOHIDElementGetCookie(element)], IOHIDValueGetLength(value) <= 8 else {
+            failClose("輸入狀態失效；擷取已停止。"); return
+        }
+        // Policy gaps (Secure Input, session change, lease) are transient: hand the
+        // devices back now and let tick re-evaluate. They are not device faults.
+        guard config.enabled, config.sessionActive, consoleSessionValid, !IsSecureEventInputEnabled() else {
+            execute(lifecycle.stop()); scheduleTick(); return
         }
         if role.pointing { receivePointing(device, role: role, value: value); return }
-        let wasPassing = engine.manualPassThrough
+        guard let usage = UInt16(exactly: IOHIDElementGetUsage(element)) else { failClose("輸入狀態失效；擷取已停止。"); return }
+        let wasPassing = engine.manualPassThrough, wasPaused = engine.emergencyPaused
         let action = engine.observe(device: device.id, page: IOHIDElementGetUsagePage(element),
-            usage: UInt16(IOHIDElementGetUsage(element)), down: IOHIDValueGetIntegerValue(value) != 0)
+            usage: usage, down: IOHIDValueGetIntegerValue(value) != 0)
         if wasPassing != engine.manualPassThrough || engine.emergencyPaused { actions.removeAll(keepingCapacity: true) }
         if config.diagnostics, let rule = engine.lastRuleID { status.lastRule = rule }
         if let action {
             if actions.count < 16 { actions.append((action, config.processID, config.actionGeneration)) }
-            else { failClosed = true; fault = "動作佇列已滿；擷取已停止。"; execute(lifecycle.stop()); return }
+            else { failClose("動作佇列已滿；擷取已停止。"); return }
         }
         sendOutput()
+        // The emergency chord must release the seized devices, not leave them mute,
+        // and both toggles must reach the App. Only tick() does either.
+        if wasPassing != engine.manualPassThrough || wasPaused != engine.emergencyPaused { scheduleTick() }
     }
     private func receivePointing(_ device: Device, role: HIDElementRole, value: IOHIDValue) {
         let element = IOHIDValueGetElement(value), amount = IOHIDValueGetIntegerValue(value)
         if role == .button { flushPointing() } // Motion belongs to the button state before this edge.
         guard pointing.observe(device: device.id, role: role, usage: IOHIDElementGetUsage(element), value: amount) else {
-            failClosed = true; fault = "複合裝置值超出輸出預算；已釋放。"; execute(lifecycle.stop()); return
+            failClose("複合裝置值超出輸出預算；已釋放。"); return
         }
         if role == .button { flushPointing(force: true); return }
         let field: UInt8 = role == .x ? 1 : role == .y ? 2 : role == .wheel ? 4 : 8
@@ -395,19 +459,27 @@ final class DeviceCapture {
             }
         }
     }
+    /// Motion may be dropped under backpressure; button state never is.
+    static let pointingMotionBacklog: UInt32 = 64
     private func flushPointing(force: Bool = false) {
         guard force || pointingFields != 0 else { return }
         let motion = pendingPointing; pendingPointing = .init(); pointingFields = 0
-        guard config.enabled, config.sessionActive, !failClosed, !engine.emergencyPaused,
-              !IsSecureEventInputEnabled(), ProcessInfo.processInfo.systemUptime - lastHeartbeat < 1,
-              let client, wmb_virtual_hid_status(client) & UInt32(WMB_POINTING_READY) != 0 else { return }
+        // The authenticated XPC lease replaced heartbeats; the old one-second
+        // heartbeat clause silently dropped all pointing (and button-up) output.
+        guard lifecycle.phase == .capturing, config.enabled, config.sessionActive, consoleSessionValid,
+              !failClosed, !engine.emergencyPaused, let client else { return }
+        guard wmb_virtual_hid_status(client) & UInt32(WMB_POINTING_READY) != 0 else {
+            // Never keep a composite device seized without a pointing output path.
+            execute(lifecycle.stop()); scheduleTick(); return
+        }
+        if !force && wmb_virtual_hid_outstanding(client) > Self.pointingMotionBacklog { return }
         if !wmb_virtual_hid_post_pointing(client, pointing.buttons, motion.x, motion.y, motion.wheel, motion.pan) {
-            failClosed = true; fault = "複合裝置輸出失效；已釋放。"; execute(lifecycle.stop())
+            failClose("複合裝置輸出失效；已釋放。")
         }
     }
     private func sendOutput() {
         guard let client else { return }
-        guard engine.render(into: &output) else { failClosed = true; fault = "輸出容量超限；擷取已停止。"; execute(lifecycle.stop()); return }
+        guard engine.render(into: &output) else { failClose("輸出容量超限；擷取已停止。"); return }
         report.modifiers = output.modifiers; report.fn = output.fn
         report.key_count = UInt8(output.keyCount); report.consumer_count = UInt8(output.consumerCount)
         report.top_case_count = UInt8(output.topCaseCount); report.vendor_count = UInt8(output.vendorCount); report.desktop_count = UInt8(output.desktopCount)
@@ -416,6 +488,6 @@ final class DeviceCapture {
         withUnsafeMutableBytes(of: &report.top_case_keys) { bytes in output.topCase.withUnsafeBytes { bytes.copyMemory(from: $0) } }
         withUnsafeMutableBytes(of: &report.vendor_keys) { bytes in output.vendor.withUnsafeBytes { bytes.copyMemory(from: $0) } }
         withUnsafeMutableBytes(of: &report.desktop_keys) { bytes in output.desktop.withUnsafeBytes { bytes.copyMemory(from: $0) } }
-        if !wmb_virtual_hid_post(client, &report) { failClosed = true; fault = "VirtualHID 輸出中斷；已釋放鍵盤。"; execute(lifecycle.stop()) }
+        if !wmb_virtual_hid_post(client, &report) { failClose("VirtualHID 輸出中斷；已釋放鍵盤。") }
     }
 }

@@ -184,7 +184,7 @@ struct SettingsView: View {
                     explanation("只交換這臺 MacBook 的內建鍵盤；外接鍵盤不變。關閉或正常退出後還原，切換時請放開所有按鍵。")
                 }
                 Toggle("Finder 檔案操作加強", isOn: Binding(get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
-                explanation("Ctrl+X → Ctrl+V 移動檔案，F2 改名，Delete 移到垃圾桶。Shift+Delete 由確認視窗保護；不需要 Finder 擴充功能。")
+                explanation("Ctrl+X → Ctrl+V 移動檔案，F2 改名，Delete 移到垃圾桶。Shift+Delete 交由 Finder 的「立即刪除」確認視窗保護；不需要 Finder 擴充功能。")
                 Toggle("Windows 快捷截圖（截圖後自動複製）", isOn: Binding(get: { controller.settings.screenshotAutoCopy }, set: { controller.setScreenshotAutoCopy($0) }))
                 explanation("Win+Shift+S／PrintScreen 框選，Alt+PrintScreen 擷取視窗，Win+PrintScreen 儲存全螢幕並複製。⌘⇧3／⌘⇧4 也直接複製；第一次擷取可能由 macOS 要求螢幕錄製授權。")
                 if let issue = controller.screenshotStatus.issue {
@@ -439,6 +439,8 @@ struct SettingsView: View {
                 explanation("處理數包含引擎接收到的事件，翻譯數是實際套用規則的事件。數字不含輸入文字；在穿透 App 中增加處理數但沒有翻譯屬正常。")
                 LabeledContent("最大觀測處理時間", value: String(format: "%.2f µs", controller.status.maxMicroseconds))
                 explanation("只量測引擎 callback 的最大處理時間，1 ms = 1000 µs；不包含完整 macOS／App／遠端網路延遲，也不等於端到端速度。")
+                Button("重新整理計數") { controller.refreshEngineStatus() }
+                explanation("一般打字不會為了計數喚醒主執行緒；開啟 5 分鐘診斷時即時更新，否則按此或狀態改變時更新。")
             }
             Section("短期規則診斷") {
                 Toggle("啟用 5 分鐘診斷", isOn: Binding(get: { controller.diagnosticsEnabled }, set: { controller.setDiagnostics($0) }))
@@ -454,5 +456,6 @@ struct SettingsView: View {
                 explanation("所有鍵盤處理留在本機。不讀取或保存輸入文字、密碼、剪貼簿內容，也不上傳事件；Finder 只讀取剪貼簿版本與類型。")
             }
         }.formStyle(.grouped)
+        .onAppear { controller.refreshEngineStatus() }
     }
 }

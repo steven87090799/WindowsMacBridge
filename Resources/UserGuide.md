@@ -1,4 +1,4 @@
-# WindowsMacBridge 0.6.0（build 46）
+# WindowsMacBridge 0.6.0（build 47）
 
 ## 安裝與使用
 
@@ -15,7 +15,7 @@
 |---|---|
 | Windows 核心快捷鍵 | 開；複製、貼上、復原、儲存、分頁與文字導覽。Alt+Tab 使用 macOS 原生切換器，沒有 MRU／自製視窗切換器。 |
 | MacBook 鍵盤模式 | 關；明確開啟才交換本機內建 Fn／Globe 與左 Ctrl。外接與 UC 虛擬鍵盤不交換。切換前放開所有按鍵。 |
-| Finder 檔案操作加強 | 開；Ctrl+X→切資料夾→Ctrl+V 移動、F2 改名、Delete 垃圾桶。Shift+Delete 有確認，舊版明確停用永久刪除的設定保留。文字編輯／未知焦點不會盲刪。無需 Finder 擴充。 |
+| Finder 檔案操作加強 | 開；Ctrl+X→切資料夾→Ctrl+V 移動、F2 改名、Delete 垃圾桶。Shift+Delete 交由 Finder 原生「立即刪除」確認視窗決定，舊版明確停用永久刪除的設定保留。文字編輯／未知焦點不會盲刪；讀不到 Finder 焦點時 Ctrl+V 只做一般貼上，不搬移檔案。無需 Finder 擴充。 |
 | Windows 快捷截圖 | 開；Win+Shift+S／PrintScreen 框選，Alt+PrintScreen 當前視窗，Win+PrintScreen 全螢幕存檔＋複製。⌘⇧3／⌘⇧4 使用相同取消／自動複製流程。 |
 | 這臺 Mac 收到的 Windows 鍵 | Command；若實際 Win 發出 Option，改選 Option。不是交換整臺鍵盤的 Ctrl／Command。 |
 | 開機自動啟動 | 使用系統原生登入項目，只有明確切換才註冊／移除；不因截圖開關而自動申請。 |
@@ -40,6 +40,6 @@ UC 與 Remote 不是相同來源契約，來源 PID／目標 App 可能缺失；
 
 一般設定 → 展開「進階選項」→ 明確勾選「解鎖進階後端模式」。之後才顯示後端、安裝／移除、Driver、指定鍵盤及詳細診斷。勾選本身不自動提權；選 HID 後，用面板的安裝按鈕準備背景元件，再逐項核准輸入監控與 Driver。所有安裝材料仍在同一 App，不要另外找 HID Helper.app。
 
-系統 Driver 的官方名稱是 `.Karabiner-VirtualHIDDevice-Manager`；沒有自己的 Developer／DriverKit 簽署資格不能冒用或改寫該名稱。共用 Driver 不會因為退出一般模式或移除 WindowsMacBridge 的 root runtime 被刪除。切回一般模式先釋放硬件 ownership／關閉 XPC；新 EventTap 不會被舊 stop 旗標永久封鎖。HID 斷線／Driver teardown 仍需實機驗收。
+系統 Driver 的官方名稱是 `.Karabiner-VirtualHIDDevice-Manager`；沒有自己的 Developer／DriverKit 簽署資格不能冒用或改寫該名稱。共用 Driver 不會因為退出一般模式或移除 WindowsMacBridge 的 root runtime 被刪除。切回一般模式先釋放硬件 ownership／關閉 XPC；舊 HID 確認停止之前，兩種後端都不翻譯，最多等 3 秒。只有背景元件回覆已停止、該連線從未擷取，或背景元件確定已結束，才算釋放；連線中斷或在期限內沒有回覆時，App 不推定鍵盤已釋放：選單顯示「Helper 未確認釋放鍵盤」，確認鍵盤正常後按「恢復／重啟引擎」。緊急暫停組合 Ctrl+Option+Command+P 會立即交還實體鍵盤。HID 斷線／Driver teardown 仍需實機驗收。
 
 暫停可用選單列；暫停與正常退出會取消輸入輔助及未完成截圖。診斷只在進階模式明確開啟，5 分鐘到期，記錄規則／時間，不記錄輸入文字。

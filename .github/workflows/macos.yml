@@ -35,11 +35,20 @@ jobs:
       - name: Unit and in-process AppKit tests
         env:
           SWIFT_BACKTRACE: enable=yes,interactive=no
-        run: bash scripts/test.sh
+        # Failing test lines become annotations, readable without log access.
+        run: |
+          set -o pipefail
+          bash scripts/test.sh 2>&1 | tee -a "$RUNNER_TEMP/swift-tests.log"
       - name: Full optimized regressions
         env:
           SWIFT_BACKTRACE: enable=yes,interactive=no
-        run: bash scripts/test.sh -c release
+        # Failing test lines become annotations, readable without log access.
+        run: |
+          set -o pipefail
+          bash scripts/test.sh -c release 2>&1 | tee -a "$RUNNER_TEMP/swift-tests.log"
+      - name: Annotate failing Swift tests
+        if: failure()
+        run: grep -E '✘|error:|Fatal error' "$RUNNER_TEMP/swift-tests.log" | head -40 | sed 's/^/::error::/' || true
       - name: Installer, rollback and ZIP version regressions
         run: python3 -m unittest discover -s Tests/InstallerTests -v
       - name: Resource measurement regressions

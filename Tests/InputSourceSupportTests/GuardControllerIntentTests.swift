@@ -30,13 +30,14 @@ private final class TestInputSources: InputSourceProviding {
     let defaults: UserDefaults
     let sources = TestInputSources()
     let controller: GuardController
-    init(enabled: Bool = true) {
+    init(enabled: Bool = true, secureRecoveryDelays: [Double]? = nil) {
         defaults = UserDefaults(suiteName: name)!
         defaults.set("com.apple.keylayout.ABC", forKey: "inputSource.preservedSourceIdentifier")
         let sources = self.sources
         controller = GuardController(inputSources: sources,
             selectionStore: GuardSelectionStore(defaults: defaults), isEnabled: enabled,
-            secureInputEnabled: { sources.secure })
+            secureInputEnabled: { sources.secure },
+            secureRecoveryDelays: secureRecoveryDelays ?? GuardController.Configuration.secureInputPollDelaysSeconds.map(Double.init))
         // No native selection is permitted; every read/select uses test metadata.
         controller.selectionAllowed = { false }
     }
@@ -58,6 +59,27 @@ private final class TestInputSources: InputSourceProviding {
 }
 
 @MainActor @Suite(.serialized) struct GuardControllerIntentTests {
+    @Test func secureInputWaitIsOneBoundedPassNotAStandingPoll() async throws {
+        let fixture = GuardFixture(enabled: false, secureRecoveryDelays: [0.02, 0.02, 0.02]); defer { fixture.close() }
+        fixture.sources.current = "test.vChewing"
+        fixture.start()
+        fixture.sources.secure = true
+        fixture.controller.request(.abc)              // explicit request while Secure Input is on
+        #expect(fixture.sources.selections.isEmpty)
+        #expect(fixture.controller.isWaitingForSecureInputToEnd)
+        // Three 20 ms steps, each with the timer's 500 ms leeway; wait for the
+        // schedule to run out rather than guessing how long a loaded runner takes.
+        for _ in 0..<400 where fixture.controller.isWaitingForSecureInputToEnd { try await Task.sleep(for: .milliseconds(25)) }
+        #expect(!fixture.controller.isWaitingForSecureInputToEnd, "the wait must end after one pass")
+        fixture.sources.secure = false
+        try await Task.sleep(for: .milliseconds(300))
+        // A standing poll would have selected ABC as soon as Secure Input ended.
+        #expect(fixture.sources.selections.isEmpty)
+        // An explicit new request still works.
+        fixture.controller.request(.abc)
+        try await fixture.waitForSelections(1)
+        #expect(fixture.sources.selections == ["test.ABC"])
+    }
     @Test func startupAndRefreshIgnoreLegacyPreservedABC() async throws {
         let fixture = GuardFixture(); defer { fixture.close() }
         fixture.sources.current = "test.ABC"

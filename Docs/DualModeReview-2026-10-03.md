@@ -10,7 +10,7 @@ build 44 修正：build 43 的一般權限頁過度簡化，漏列輸入監控�
 |---|---|
 | 1 模式隔離 | 原預設為 HID，啟動會建立 client／探測背景元件，而且首次設定會強制 HID。改成 EventTap 預設與持久化的明確進階開關；舊 HID 選項不構成新模式的同意。一般模式不建立 HID client、探測 Driver 或自動提權。只註冊 closure 本身不是 XPC 連線證據，但其後的啟動／publish 路徑確實有問題。 |
 | 2 Finder 根目錄 | 確實把擴充作用於 `/`。已永久改成空清單並停止主 App 的 Finder Sync 啟用通知。Ctrl+X／V、F2、Delete 由 ShortcutActionDispatcher 執行，不依賴擴充。實際彩球是否由此造成沒有量測證據。 |
-| 3 releasePending | 原逾時會永久保留 stop 狀態。現在逾時／斷線銷毀舊 XPC lease、清除旗標，逾時仍明確顯示「未獲確認」。EventTap 不再被舊 HID 的旗標阻擋；正常切換先釋放 ownership 再銷毀 client。這不能冒充 Driver 的硬體釋放確認。 |
+| 3 releasePending | （已由 [FinalProductionReview-2026-10-03](FinalProductionReview-2026-10-03.md) 取代：切換時保留舊 client 直到 stop 結束，兩種後端都受 gate；逾時改為明確 fail-closed，按「恢復／重啟引擎」解除。）原逾時會永久保留 stop 狀態。現在逾時／斷線銷毀舊 XPC lease、清除旗標，逾時仍明確顯示「未獲確認」。EventTap 不再被舊 HID 的旗標阻擋；正常切換先釋放 ownership 再銷毀 client。這不能冒充 Driver 的硬體釋放確認。 |
 | 4 同步 sleep | C++ 確有 100ms sleep。已移除；關閉實體裝置先於有界的單一 VirtualHID teardown worker，完成後才回覆 stop。共享 dispatcher 的銷毀不再卡住 capture RunLoop。 |
 | 5 輪詢 | 原 client、capture、EventTap 都有 250ms timer，host 另有 1s timer。已改為設定、App／session、裝置匹配及 Driver callback 驅動；遠端持鍵遺失使用單次 60s deadline，HID 只有尚有 held output 時使用單次 1s 安全檢查，所有鍵放開即停止。一般模式閒置沒有固定輪詢。 |
 | 6 生命週期 | 原已有 stop 的 TIS RemoveObserver/release 及 Carbon RemoveEventHandler，報告「缺乏清理」不精確；但 passRetained(self) 仍可在未呼叫 stop 時自我保留。改成弱 owner 通知 token，加入 deinit 清理與生命週期回歸。 |

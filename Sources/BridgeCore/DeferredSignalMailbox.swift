@@ -20,5 +20,8 @@ public final class DeferredSignalMailbox: @unchecked Sendable {
         let value = bits; bits = 0; scheduled = false
         return value
     }
-    public func invalidate() { lock.lock(); bits = 0; lock.unlock() }
+    /// Returns the discarded signals so a caller can keep a coarse "stale" mark.
+    @discardableResult public func invalidate() -> UInt32 {
+        lock.lock(); let dropped = bits; bits = 0; lock.unlock(); return dropped
+    }
 }
