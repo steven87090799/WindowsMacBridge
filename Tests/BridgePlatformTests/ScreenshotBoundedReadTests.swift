@@ -127,7 +127,11 @@ struct ScreenshotBoundedReadTests {
         // bitmap per capture, ~700 MiB over 60) but above concurrent-test noise.
         let directory = TemporaryDirectory(); let url = directory.file("capture.tiff")
         try NSBitmapImageRep(data: pngData(width: 2048, height: 1536))!.tiffRepresentation!.write(to: url)
-        for _ in 0..<3 { _ = ScreenshotImagePreparation.prepareResult(at: url) }   // warm caches
+        // AddressSanitizer quarantines freed blocks (256 MiB by default), so the
+        // footprint rises until the quarantine is full even without a leak. Fill
+        // it first; a per-capture leak still grows past the bound afterwards.
+        let warmUp = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "__asan_init") == nil ? 3 : 40
+        for _ in 0..<warmUp { autoreleasepool { _ = ScreenshotImagePreparation.prepareResult(at: url) } }   // warm caches
         let before = footprint()
         for _ in 0..<60 { autoreleasepool { _ = ScreenshotImagePreparation.prepareResult(at: url) } }
         #expect(footprint() < before + 128 * 1024 * 1024, "transient buffers must be released per capture")
