@@ -70,7 +70,7 @@ final class DiagnosticMetrics {
             "自動修正成功：\(automaticCorrectionCount) 次",
             "切換失敗：\(failedSelectionCount) 次",
             "Secure Input 等待：\(secureInputWaitCount) 次",
-            "保留外部切換：\(statistics.preservedExternalSelections) 次",
+            "舊版保留外部切換：\(statistics.preservedExternalSelections) 次",
             "最後成功切換：\(lastSuccess)",
             "程式切回唯音：\(vChewingRestoreCount) 次",
             "最近程式切回唯音時間：\(recent.isEmpty ? "尚無" : recent)",

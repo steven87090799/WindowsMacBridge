@@ -29,12 +29,12 @@ struct GuardDetectionPauseTests {
         #expect(pause.isActive(at: now.addingTimeInterval(300)))
         #expect(pause.until == now.addingTimeInterval(3_660))
     }
-    @Test func pauseExpiryDoesNotReleasePreservedInputSource() {
+    @Test func pauseExpiryRestoresExplicitTargetInsteadOfAdoptingCurrentSource() {
         let pause = GuardDetectionPause(duration: .fiveMinutes, now: now)
         var machine = GuardStateMachine()
-        machine.preserveExternalSelection(.abc)
         #expect(!pause.isActive(at: now.addingTimeInterval(301)))
-        #expect(machine.observe(.abc, isInternalSwitch: false) == .alreadySatisfied)
-        #expect(machine.beginSelectionAttempt() == nil)
+        #expect(machine.observeExternalSelection(.abc) == .scheduleDebounce(milliseconds: 400))
+        #expect(machine.desired == .vChewing)
+        #expect(machine.beginSelectionAttempt() == 1)
     }
 }

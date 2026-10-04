@@ -1,6 +1,6 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 44）權限與鍵盤恢復修正版**；[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與原始碼合併是不同階段。
+Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 46）輸入法守護修正版**；[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與原始碼合併是不同階段。
 
 ## 一般模式與進階模式已分開
 
@@ -35,7 +35,7 @@ App使用ad-hoc簽章、尚無Apple公證；更新可能需要重新核准本版
 | Windows截圖與CmdShift3／4 | 開；完成直接寫PNG clipboard，取消／舊session不寫入 |
 | MacBook Fn／左Ctrl | 關，明確開關只改本機builtIn鍵盤 |
 | Windows鍵位置 | Command，可選Option |
-| 唯音守護／Carbon切換熱鍵 | 各自關，保留手動輸入來源 |
+| 唯音守護／Carbon切換熱鍵 | 各自關；守護開啟後維持本 App 明確選定的唯音／ABC，預設唯音 |
 | Terminal／IDE／Remote viewer／VM／Game | 依App profile保護Ctrl語意 |
 | HID／VirtualHID／root runtime | 進階選配，默認關 |
 

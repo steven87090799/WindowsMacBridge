@@ -36,7 +36,11 @@ Win+Shift+S／PrintScreen框選、Alt+PrintScreen當前窗口、Win+PrintScreen�
 
 ## 7. 輸入法與App模式
 
-ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再測試複製。終端運行 `sleep 30` 後 Ctrl+C 應中斷，IDE內嵌Terminal同樣。手動App規則、快速切換、Pause應同步取消舊輸入法／AX／截圖任務。守護／切換熱鍵默認關閉，手動選擇不自動搶回。多個工具同時控制來源時觀察衝突冷卻。
+ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再測試複製。終端運行 `sleep 30` 後 Ctrl+C 應中斷，IDE內嵌Terminal同樣。手動App規則、快速切換、Pause應同步取消舊輸入法／AX／截圖任務。守護／切換熱鍵默認關閉；守護關閉時不修正系統輸入來源。
+
+守護開啟後預設維持唯音繁體。用系統選單切成 ABC，應在設定延遲後回到唯音；切換本機 App、喚醒或重新啟動後仍應回到守護目標。用本 App 的 ABC 按鈕或唯音／ABC 快捷鍵選英文，應維持 ABC，並在重新啟動後保留此明確目標；本 App 選回唯音後，系統切英文應再次被修正。舊版記錄的「保留來源」不能當作明確英文選擇。
+
+暫停偵測、Bridge Pause、Remote／VM／Game／Disabled、非作用中 session 與 Secure Input 期間不得自動切換；解除後應恢復目標，不把期間的 ABC 當作新目標。另測 Secure Input 期間按本 App 切換快捷鍵，離開密碼欄位後才完成切換。多個工具同時控制來源時，仍須觀察有界重試與衝突冷卻，確認沒有反覆切換迴圈。
 
 ## 8. 資源／封裝
 

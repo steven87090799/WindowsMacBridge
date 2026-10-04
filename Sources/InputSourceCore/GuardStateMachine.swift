@@ -20,17 +20,17 @@ public enum SourceChangeResponse: Equatable, Sendable {
 
 public enum SourceNotificationDecision: Equatable, Sendable {
     case ownSelectionConfirmed
-    case preserveExternalSelection
+    case externalChange
     case unchanged
 
-    /// TIS provides no initiator. A different notification cancels pending
-    /// intent even when the user has selected the same source they started on.
+    /// TIS provides no initiator. An external notification is an observation,
+    /// never authorization to replace the target chosen inside this app.
     public static func evaluate(current: String?, pendingTarget: String?,
                                 waitingForExplicitSelection: Bool, lastObserved: String?) -> Self {
         guard let current else { return .unchanged }
         if current == pendingTarget { return .ownSelectionConfirmed }
         if current != lastObserved || pendingTarget != nil || waitingForExplicitSelection {
-            return .preserveExternalSelection
+            return .externalChange
         }
         return .unchanged
     }
@@ -39,20 +39,21 @@ public enum SourceNotificationDecision: Equatable, Sendable {
 /// The small, deterministic policy core. All macOS event handling and TIS calls
 /// live in the app target; this type makes desired-state and retry rules testable.
 public struct GuardStateMachine: Sendable {
-    public private(set) var desired: DesiredInputSource = .vChewing
+    public private(set) var desired: DesiredInputSource
     public private(set) var isEnabled: Bool
     public private(set) var debounceMilliseconds: Int
     public let maximumSelectionAttempts: Int
-    public private(set) var preservedSelection: ObservedInputSource?
     private(set) var selectionAttempts = 0
     private var hasMismatchTransaction = false
 
     public init(
         isEnabled: Bool = true,
+        desired: DesiredInputSource = .vChewing,
         debounceMilliseconds: Int = 400,
         maximumSelectionAttempts: Int = 3
     ) {
         self.isEnabled = isEnabled
+        self.desired = desired
         self.debounceMilliseconds = max(0, debounceMilliseconds)
         self.maximumSelectionAttempts = max(1, maximumSelectionAttempts)
     }
@@ -65,26 +66,21 @@ public struct GuardStateMachine: Sendable {
 
     @discardableResult
     public mutating func request(_ source: DesiredInputSource) -> DesiredInputSource {
-        preservedSelection = nil
         desired = source
         selectionAttempts = 0
         hasMismatchTransaction = true
         return desired
     }
 
-    /// Enabling detection keeps the user's last choice. Only an explicit source
-    /// request releases a preserved external selection.
+    /// Pause/resume retains the app's explicit target, not the current source.
     public mutating func setEnabled(_ enabled: Bool) {
         isEnabled = enabled
         selectionAttempts = 0
         hasMismatchTransaction = false
     }
 
-    public mutating func preserveExternalSelection(_ source: ObservedInputSource) {
-        preservedSelection = source
-        if source == .vChewing { desired = .vChewing }
-        if source == .abc { desired = .abc }
-        selectionSucceeded()
+    public mutating func observeExternalSelection(_ source: ObservedInputSource) -> SourceChangeResponse {
+        observe(source, isInternalSwitch: false)
     }
 
     public mutating func setDebounce(milliseconds: Int) {
@@ -96,9 +92,6 @@ public struct GuardStateMachine: Sendable {
         isInternalSwitch: Bool
     ) -> SourceChangeResponse {
         guard isEnabled, !isInternalSwitch else { return .ignored }
-        if let preservedSelection {
-            return current == preservedSelection ? .alreadySatisfied : .ignored
-        }
         guard current != desired.observedSource else {
             selectionAttempts = 0
             hasMismatchTransaction = false
@@ -112,7 +105,7 @@ public struct GuardStateMachine: Sendable {
     /// Returns the 1-based attempt number, or nil once the bounded retry budget
     /// is exhausted. Delays after attempt one follow 400, 800, 1600 ms.
     public mutating func beginSelectionAttempt() -> Int? {
-        guard isEnabled, preservedSelection == nil, hasMismatchTransaction, selectionAttempts < maximumSelectionAttempts else { return nil }
+        guard isEnabled, hasMismatchTransaction, selectionAttempts < maximumSelectionAttempts else { return nil }
         selectionAttempts += 1
         return selectionAttempts
     }
