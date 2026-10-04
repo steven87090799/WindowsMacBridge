@@ -267,13 +267,44 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     }
 }
 
+/// One AX element on the focus chain, from the focused element up to its window.
+struct FinderAXNode: Sendable, Equatable {
+    var role: String
+    var subrole: String = ""
+    var identifier: String = ""
+    var description: String = ""
+    /// A selected child of this element exposes a file URL (read for containers only).
+    var selectedFileURL = false
+}
+
 enum FinderFocusReader {
-    static func classify(role: String, fileSelection: Bool, sidebar: Bool) -> FinderFocus {
-        if [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole].contains(role) { return .text }
-        if !sidebar && fileSelection { return .files }
-        return .unknown
+    /// Roles that host Finder's file items in list, column, icon and gallery views.
+    static let contentRoles: Set<String> = [kAXOutlineRole, kAXTableRole, kAXBrowserRole, kAXListRole, "AXCollection"]
+    static let textRoles: Set<String> = [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole]
+
+    /// Positive-evidence classification of a focus chain (focused element first,
+    /// window last). `complete` is false when the walk failed or timed out.
+    static func classify(_ chain: [FinderAXNode], complete: Bool) -> FinderFocus {
+        // Text editing wins even on a partial chain: never turn typing into a file action.
+        if chain.contains(where: { textRoles.contains($0.role) || $0.subrole == kAXSearchFieldSubrole }) { return .text }
+        guard complete, let window = chain.last, window.role == kAXWindowRole else { return .unknown }
+        if window.subrole != kAXStandardWindowSubrole { return .chrome }      // dialogs, panels, unknown windows
+        if chain.contains(where: { $0.role == kAXSheetRole || $0.role == kAXToolbarRole }) { return .chrome }
+        func mentionsSidebar(_ node: FinderAXNode) -> Bool {
+            node.subrole == "AXSourceList" || node.identifier.range(of: "sidebar", options: .caseInsensitive) != nil ||
+                node.description.range(of: "sidebar", options: .caseInsensitive) != nil
+        }
+        if chain.contains(where: mentionsSidebar) { return .sidebar }
+        // File content: a content container inside a scroll area (column view: a browser).
+        guard let index = chain.firstIndex(where: { contentRoles.contains($0.role) }) else { return .unknown }
+        let container = chain[index]
+        guard container.role == kAXBrowserRole ||
+              chain[(index + 1)...].contains(where: { $0.role == kAXScrollAreaRole || $0.role == kAXBrowserRole }) else { return .unknown }
+        return chain[...index].contains(where: \.selectedFileURL) ? .files : .folder
     }
-    /// Runs on a worker. Reads roles/parents only, never selected text or document values.
+
+    /// Runs on a worker. Reads roles/identifiers/descriptions of the focus chain and
+    /// one selected child's URL, never selected text or document values.
     static func read(pid: Int32) -> FinderFocus {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.03)
@@ -282,34 +313,40 @@ enum FinderFocusReader {
               let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return .unknown }
         var element = unsafeDowncast(focused, to: AXUIElement.self)
         let deadline = ProcessInfo.processInfo.systemUptime + 0.25
-        var fileSelection = false
-        for _ in 0..<5 {
-            guard ProcessInfo.processInfo.systemUptime < deadline else { return .unknown }
+        var chain: [FinderAXNode] = []
+        func string(_ element: AXUIElement, _ attribute: String) -> String {
+            var value: CFTypeRef?
+            return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? (value as? String ?? "") : ""
+        }
+        for _ in 0..<10 {
+            guard ProcessInfo.processInfo.systemUptime < deadline else { return classify(chain, complete: false) }
             AXUIElementSetMessagingTimeout(element, 0.01)
             var value: CFTypeRef?
             guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &value) == .success,
-                  let role = value as? String else { return .unknown }
-            if classify(role: role, fileSelection: false, sidebar: false) == .text { return .text }
-            // Reaching the window without text or sidebar is positive file-view evidence.
-            if role == kAXWindowRole { return fileSelection ? .files : .folder }
-            var identifier: CFTypeRef?
-            _ = AXUIElementCopyAttributeValue(element, kAXIdentifierAttribute as CFString, &identifier)
-            if (identifier as? String)?.localizedCaseInsensitiveContains("sidebar") == true { return .unknown }
-            var selection: CFArray?
-            // One selected child, never the complete file collection.
-            if AXUIElementCopyAttributeValues(element, kAXSelectedChildrenAttribute as CFString, 0, 1, &selection) == .success,
-               let selected = (selection as? [AXUIElement])?.first {
-                AXUIElementSetMessagingTimeout(selected, 0.01)
-                var url: CFTypeRef?
-                if AXUIElementCopyAttributeValue(selected, kAXURLAttribute as CFString, &url) == .success,
-                   let value = url as? URL, value.isFileURL { fileSelection = true }
+                  let role = value as? String else { return classify(chain, complete: false) }
+            var node = FinderAXNode(role: role, subrole: string(element, kAXSubroleAttribute),
+                                    identifier: string(element, kAXIdentifierAttribute))
+            if contentRoles.contains(role) || role == kAXScrollAreaRole {
+                node.description = string(element, kAXDescriptionAttribute)
+                var selection: CFArray?
+                // One selected child, never the complete file collection.
+                if contentRoles.contains(role),
+                   AXUIElementCopyAttributeValues(element, kAXSelectedChildrenAttribute as CFString, 0, 1, &selection) == .success,
+                   let selected = (selection as? [AXUIElement])?.first {
+                    AXUIElementSetMessagingTimeout(selected, 0.01)
+                    var url: CFTypeRef?
+                    if AXUIElementCopyAttributeValue(selected, kAXURLAttribute as CFString, &url) == .success,
+                       let value = url as? URL, value.isFileURL { node.selectedFileURL = true }
+                }
             }
+            chain.append(node)
+            if role == kAXWindowRole { return classify(chain, complete: true) }
             var parent: CFTypeRef?
             guard AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &parent) == .success,
-                  let parent, CFGetTypeID(parent) == AXUIElementGetTypeID() else { return .unknown }
+                  let parent, CFGetTypeID(parent) == AXUIElementGetTypeID() else { return classify(chain, complete: false) }
             element = unsafeDowncast(parent, to: AXUIElement.self)
         }
-        return .unknown
+        return classify(chain, complete: false)
     }
 }
 
