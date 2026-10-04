@@ -80,3 +80,20 @@ struct LifecycleTests {
         #expect(lifecycle.phase == .inactive)
     }
 }
+
+struct HeldSafetyPolicyTests {
+    @Test func neutralIdleHasNoDeadline() {
+        #expect(HeldSafetyPolicy.deadline(capturing: true, heldOutput: false, pointingButtons: 0, outstandingReports: 0) == nil)
+        #expect(HeldSafetyPolicy.deadline(capturing: false, heldOutput: true, pointingButtons: 1, outstandingReports: 9) == nil)
+    }
+    @Test func onlyAPointingButtonHeldStillArmsTheGuard() {
+        #expect(HeldSafetyPolicy.deadline(capturing: true, heldOutput: false, pointingButtons: 1, outstandingReports: 0) == HeldSafetyPolicy.heldDeadline)
+    }
+    @Test func finalKeyUpOrButtonUpStillOutstandingArmsTheShortDeadline() {
+        // keydown -> keyup (or button down -> up): nothing is held any more, but the
+        // release report has not been completed by the driver.
+        #expect(HeldSafetyPolicy.deadline(capturing: true, heldOutput: false, pointingButtons: 0, outstandingReports: 1) == HeldSafetyPolicy.outstandingDeadline)
+        #expect(HeldSafetyPolicy.deadline(capturing: true, heldOutput: true, pointingButtons: 1, outstandingReports: 256) == HeldSafetyPolicy.outstandingDeadline)
+        #expect(HeldSafetyPolicy.outstandingDeadline > 0.5 && HeldSafetyPolicy.outstandingDeadline < HeldSafetyPolicy.heldDeadline)
+    }
+}

@@ -394,13 +394,23 @@ final class DeviceCapture {
         }
         scheduleHeldSafety()
     }
+    /// One-shot loss guard (HeldSafetyPolicy): held keys/modifiers/buttons or
+    /// reports the driver has not completed (a final key-up or button-up
+    /// included). An armed deadline is reused rather than re-allocated per HID
+    /// value; it re-arms from tick() only while something is still pending, and a
+    /// stalled driver (no completion for 500 ms) makes tick() fail closed.
     private func scheduleHeldSafety() {
-        heldSafety?.invalidate(); heldSafety = nil
         let held = report.modifiers != 0 || report.fn || report.key_count != 0 || report.consumer_count != 0 ||
             report.top_case_count != 0 || report.vendor_count != 0 || report.desktop_count != 0
-        guard config.enabled, devices.contains(where: { $0.seized }), held else { return }
-        // Only outstanding held input needs a loss guard. Neutral idle has no timer.
-        let timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: false) { [weak self] _ in self?.tick() }
+        let deadline = HeldSafetyPolicy.deadline(
+            capturing: config.enabled && devices.contains(where: { $0.seized }), heldOutput: held,
+            pointingButtons: pointing.buttons, outstandingReports: client.map { wmb_virtual_hid_outstanding($0) } ?? 0)
+        guard let deadline else { heldSafety?.invalidate(); heldSafety = nil; return }
+        if let heldSafety, heldSafety.isValid { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: deadline, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.heldSafety = nil; self.tick()
+        }
         timer.tolerance = 0.1; heldSafety = timer
     }
     private func received(_ result: IOReturn, value: IOHIDValue) {

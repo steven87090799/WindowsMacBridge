@@ -225,10 +225,13 @@ extern "C" WMBVirtualHID* wmb_virtual_hid_create() {
         return nullptr;
     }
 }
+extern "C" bool wmb_output_stalled(uint32_t outstanding, int64_t last_progress_ns, int64_t now_ns) {
+    return outstanding > 0 && now_ns - last_progress_ns > 500000000;
+}
 extern "C" uint32_t wmb_virtual_hid_status(const WMBVirtualHID* client) {
     if (!client) return WMB_CONNECTION_FAULT;
     // Never keep a physical keyboard seized while output service replies are stalled.
-    if (client->outstanding.load() > 0 && now_ns() - client->progress.load() > 500000000) return WMB_CONNECTION_FAULT;
+    if (wmb_output_stalled(client->outstanding.load(), client->progress.load(), now_ns())) return WMB_CONNECTION_FAULT;
     return client->status.load();
 }
 extern "C" uint32_t wmb_virtual_hid_outstanding(const WMBVirtualHID* client) {
