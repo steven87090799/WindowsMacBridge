@@ -59,13 +59,18 @@ private final class FakeHelper: NSObject, HIDHelperProtocol, NSXPCListenerDelega
     while !condition(), ProcessInfo.processInfo.systemUptime < deadline { try await Task.sleep(for: .milliseconds(10)) }
 }
 
-@MainActor struct HIDReleaseStateMachineTests {
+// Serialized: each test drives real XPC on the MainActor; running all of them
+// at once starves configure replies on small CI runners.
+@MainActor @Suite(.serialized) struct HIDReleaseStateMachineTests {
     private func client(_ helper: FakeHelper, _ liveness: FakeLiveness, timeout: TimeInterval = 3,
                         created: ((NSXPCConnection) -> Void)? = nil) -> HIDBackendClient {
-        HIDBackendClient(connectionFactory: {
+        let client = HIDBackendClient(connectionFactory: {
             let connection = NSXPCConnection(listenerEndpoint: helper.listener.endpoint)
             created?(connection); return connection
         }, stopAcknowledgementTimeout: timeout, liveness: liveness.value)
+        // The fake replies at once; only a starved CI MainActor can miss 1.5 s.
+        client.configureReplyTimeout = 30
+        return client
     }
     /// Configure and wait for the reply so the lease knows the helper PID.
     private func owned(_ client: HIDBackendClient, _ helper: FakeHelper) async throws {
@@ -186,8 +191,9 @@ private final class FakeHelper: NSObject, HIDHelperProtocol, NSXPCListenerDelega
     // Slot-level transitions: the gate BridgeController feeds into RuntimePolicy.
     private func slot(_ helper: FakeHelper, _ liveness: FakeLiveness, timeout: TimeInterval = 3) -> HIDBackendSlot {
         HIDBackendSlot(factory: {
-            HIDBackendClient(connectionFactory: { NSXPCConnection(listenerEndpoint: helper.listener.endpoint) },
-                             stopAcknowledgementTimeout: timeout, liveness: liveness.value)
+            let client = HIDBackendClient(connectionFactory: { NSXPCConnection(listenerEndpoint: helper.listener.endpoint) },
+                                          stopAcknowledgementTimeout: timeout, liveness: liveness.value)
+            client.configureReplyTimeout = 30; return client
         })
     }
     private func policy(_ slot: HIDBackendSlot, backend: InputBackend) -> RuntimePolicySnapshot {
@@ -248,9 +254,12 @@ private final class FakeHelper: NSObject, HIDHelperProtocol, NSXPCListenerDelega
         let slot = HIDBackendSlot(factory: {
             let client = HIDBackendClient(connectionFactory: { NSXPCConnection(listenerEndpoint: helper.listener.endpoint) },
                                           liveness: liveness.value)
-            lastClient = client; return client
+            client.configureReplyTimeout = 30; lastClient = client; return client
         })
-        for _ in 0..<1000 { slot.synchronize(wanted: true); slot.synchronize(wanted: false) }
+        for cycle in 0..<1000 {
+            slot.synchronize(wanted: true); slot.synchronize(wanted: false)
+            if cycle % 50 == 49 { await Task.yield() }   // do not starve other MainActor tests
+        }
         #expect(slot.retiringCount == 0 && slot.active == nil && !slot.releasePending)
         #expect(lastClient == nil, "retired clients must be released")
         #expect(liveness.exitHandlers.isEmpty && helper.configurations == 0)

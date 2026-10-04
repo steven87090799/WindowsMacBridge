@@ -141,6 +141,9 @@ private final class HIDConnectionLifetime: @unchecked Sendable {
     private var requestTimeout: DispatchWorkItem? { get { lifetime.requestTimeout } set { lifetime.requestTimeout = newValue } }
     private var inFlight = false
     private var sentAt: Double = 0
+    /// Configure reply deadline. Tests on a starved MainActor raise it; the
+    /// production value is unchanged.
+    var configureReplyTimeout: TimeInterval = 1.5
     public override init() { liveness = .system; super.init() }
     public init(connectionFactory: @escaping @MainActor () -> NSXPCConnection,
                 stopAcknowledgementTimeout: TimeInterval = 3, liveness: HIDHelperLiveness = .system) {
@@ -397,7 +400,7 @@ private final class HIDConnectionLifetime: @unchecked Sendable {
             self.disconnect(); self.status.state = "進階背景元件回應逾時；請重新啟動引擎。"
             self.onOwnershipChange?()
         } }
-        requestTimeout = timeout; DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: timeout)
+        requestTimeout = timeout; DispatchQueue.main.asyncAfter(deadline: .now() + configureReplyTimeout, execute: timeout)
         let sentGeneration = generation
         let sentActionEpoch = actionEpoch
         let proxy = connection.remoteObjectProxyWithErrorHandler { @Sendable [weak self] _ in
