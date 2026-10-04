@@ -27,7 +27,6 @@ public struct InputSourceStatus: Equatable, Sendable {
     public var detectionPauseUntil: Date?
     public var detectionPauseIndefinite = false
     public var pauseDuration = GuardPauseDuration.fifteenMinutes
-    public var preservedSourceIdentifier: String?
     public var statistics = InputSourceStatistics()
     public init() {}
 }
@@ -50,9 +49,13 @@ public struct InputSourceStatus: Equatable, Sendable {
     private let defaults = UserDefaults.standard
     private let hotkeyEnabledKey = "inputSource.hotkeyEnabled"
 
-    public init() {
+    public convenience init() {
         AppSettings.registerDefaults()
-        controller = GuardController()
+        self.init(controller: GuardController())
+    }
+
+    init(controller: GuardController) {
+        self.controller = controller
         controller.selectionAllowed = { [weak self] in
             guard let self else { return false }
             return self.started && self.suspension == nil && self.liveSelectionAllowed()
@@ -79,11 +82,13 @@ public struct InputSourceStatus: Equatable, Sendable {
     }
 
     public func updateRuntimePolicy(_ policy: RuntimePolicySnapshot, protection reason: InputSourceSuspension?) {
-        if hostPolicy != policy.sourceWorkPolicy {
+        let changed = hostPolicy != policy.sourceWorkPolicy
+        if changed {
             hostPolicy = policy.sourceWorkPolicy
             controller.invalidateHostWork(); hotkey?.discardPending()
         }
         updateProtection(reason)
+        if changed, started, suspension == nil { controller.reconcileAfterHostPolicyChange() }
     }
 
     public func updateProtection(_ reason: InputSourceSuspension?) {
@@ -101,7 +106,10 @@ public struct InputSourceStatus: Equatable, Sendable {
         guard started, suspension == nil, liveSelectionAllowed() else { return }
         issue = nil; controller.request(source); emit()
     }
-    public func toggleSource() { select(controller.desired == .vChewing ? .abc : .vChewing) }
+    public func toggleSource() {
+        guard started, suspension == nil, liveSelectionAllowed() else { return }
+        issue = nil; controller.toggleDesiredSource(); emit()
+    }
     public func setHotkeyEnabled(_ enabled: Bool) {
         defaults.set(enabled, forKey: hotkeyEnabledKey); synchronizeHotkey(); emit()
     }
@@ -160,7 +168,6 @@ public struct InputSourceStatus: Equatable, Sendable {
         result.detectionPauseUntil = controller.detectionPauseUntil
         result.detectionPauseIndefinite = controller.detectionPauseIndefinite
         result.pauseDuration = AppSettings.pauseDuration
-        result.preservedSourceIdentifier = controller.preservedSourceIdentifier
         result.statistics = DiagnosticMetrics.shared.statistics
         return result
     }

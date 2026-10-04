@@ -10,7 +10,15 @@ struct InputSourceInfo {
     let sourceType: String?
     let isEnabled: Bool
     let isSelectable: Bool
-    fileprivate let reference: TISInputSource
+    fileprivate let reference: TISInputSource?
+
+    init(identifier: String, bundleIdentifier: String? = nil, localizedName: String? = nil,
+         sourceType: String? = nil, isEnabled: Bool = true, isSelectable: Bool = true,
+         reference: TISInputSource? = nil) {
+        self.identifier = identifier; self.bundleIdentifier = bundleIdentifier
+        self.localizedName = localizedName; self.sourceType = sourceType
+        self.isEnabled = isEnabled; self.isSelectable = isSelectable; self.reference = reference
+    }
 
     var summary: String {
         "\(identifier) (\(localizedName ?? "未命名"), \(sourceType ?? "類型未提供"), \(isEnabled ? "已啟用" : "未啟用")\(isSelectable ? "" : ", 不可選擇"))"
@@ -28,7 +36,21 @@ struct InputSourceDiscovery {
     let vChewingCandidates: [InputSourceInfo]
 }
 
-final class InputSourceManager {
+protocol InputSourceProviding {
+    var discovery: InputSourceDiscovery { get }
+    var traditionalIdentifier: String? { get }
+    var abcIdentifier: String? { get }
+    func rediscover(logChanges: Bool) -> InputSourceDiscovery
+    func currentSource() -> CurrentInputSourceInfo
+    func select(_ source: InputSourceInfo) -> OSStatus
+}
+
+extension InputSourceProviding {
+    func rediscover() -> InputSourceDiscovery { rediscover(logChanges: true) }
+    var currentIdentifier: String? { currentSource().identifier }
+}
+
+final class InputSourceManager: InputSourceProviding {
     private var lastLoggedFingerprint: String?
     private(set) var discovery = InputSourceDiscovery(
         traditional: nil,
@@ -92,8 +114,8 @@ final class InputSourceManager {
     var currentName: String? { currentSource().localizedName }
 
     func select(_ source: InputSourceInfo) -> OSStatus {
-        guard source.isEnabled, source.isSelectable else { return OSStatus(paramErr) }
-        return TISSelectInputSource(source.reference)
+        guard source.isEnabled, source.isSelectable, let reference = source.reference else { return OSStatus(paramErr) }
+        return TISSelectInputSource(reference)
     }
 
     var traditionalIdentifier: String? { discovery.traditional?.identifier }

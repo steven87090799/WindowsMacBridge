@@ -13,7 +13,6 @@ enum AppSettings {
     static let pauseDurationKey = "inputSource.pauseDuration"
     static let pauseUntilKey = "inputSource.pauseUntil"
     static let pauseIndefiniteKey = "inputSource.pauseIndefinite"
-    static let preservedSourceKey = "inputSource.preservedSourceIdentifier"
 
     static func registerDefaults() {
         defaults.register(defaults: [
@@ -44,8 +43,6 @@ enum AppSettings {
                             indefinite: defaults.bool(forKey: pauseIndefiniteKey))
     }
 
-    static var preservedSourceIdentifier: String? { defaults.string(forKey: preservedSourceKey) }
-
     static func setPauseDuration(_ value: GuardPauseDuration) {
         defaults.set(value.rawValue, forKey: pauseDurationKey)
     }
@@ -54,11 +51,6 @@ enum AppSettings {
         if let until = value.until { defaults.set(until, forKey: pauseUntilKey) }
         else { defaults.removeObject(forKey: pauseUntilKey) }
         defaults.set(value.indefinite, forKey: pauseIndefiniteKey)
-    }
-
-    static func setPreservedSourceIdentifier(_ value: String?) {
-        if let value { defaults.set(value, forKey: preservedSourceKey) }
-        else { defaults.removeObject(forKey: preservedSourceKey) }
     }
 
     static var hotkeyPreset: HotkeyPreset {
