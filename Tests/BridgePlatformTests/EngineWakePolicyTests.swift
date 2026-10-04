@@ -27,6 +27,15 @@ struct EngineWakePolicyTests {
             #expect(InputEngine.requiresHostWake(previous: previous, next: next, everyChange: false))
         }
     }
+    @Test func keyEdgesReadPermissionsAtMostOncePerIntervalButLifecycleAlwaysDoes() {
+        let interval = InputEngine.keyEdgeAuthorizationInterval
+        #expect(!InputEngine.authorizationCheckDue(requested: false, keyEdgeOnly: true, now: 10, last: 10 - interval / 2))
+        #expect(InputEngine.authorizationCheckDue(requested: false, keyEdgeOnly: true, now: 10, last: 10 - interval))
+        // Configuration changes, host maintenance and tap-disable events force a read.
+        #expect(InputEngine.authorizationCheckDue(requested: true, keyEdgeOnly: true, now: 10, last: 10))
+        #expect(InputEngine.authorizationCheckDue(requested: false, keyEdgeOnly: false, now: 10, last: 10))
+        #expect(interval <= 1.0)
+    }
     @Test func completedCalibrationReportsItselfSoTheHostIsWokenForIt() {
         let inbox = RemoteCalibrationInbox()
         #expect(!inbox.observe(processID: 7, key: 8, phase: .down, flags: .control, repeatKey: false))
