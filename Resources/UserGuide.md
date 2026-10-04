@@ -40,6 +40,6 @@ UC 與 Remote 不是相同來源契約，來源 PID／目標 App 可能缺失；
 
 一般設定 → 展開「進階選項」→ 明確勾選「解鎖進階後端模式」。之後才顯示後端、安裝／移除、Driver、指定鍵盤及詳細診斷。勾選本身不自動提權；選 HID 後，用面板的安裝按鈕準備背景元件，再逐項核准輸入監控與 Driver。所有安裝材料仍在同一 App，不要另外找 HID Helper.app。
 
-系統 Driver 的官方名稱是 `.Karabiner-VirtualHIDDevice-Manager`；沒有自己的 Developer／DriverKit 簽署資格不能冒用或改寫該名稱。共用 Driver 不會因為退出一般模式或移除 WindowsMacBridge 的 root runtime 被刪除。切回一般模式先釋放硬件 ownership／關閉 XPC；舊 HID 確認停止（或連線結束）之前，兩種後端都不翻譯，最多等 1.5 秒。若背景元件在期限內沒有回覆，App 不推定鍵盤已釋放：選單顯示「Helper 未確認釋放鍵盤」，確認鍵盤正常後按「恢復／重啟引擎」。緊急暫停組合 Ctrl+Option+Command+P 會立即交還實體鍵盤。HID 斷線／Driver teardown 仍需實機驗收。
+系統 Driver 的官方名稱是 `.Karabiner-VirtualHIDDevice-Manager`；沒有自己的 Developer／DriverKit 簽署資格不能冒用或改寫該名稱。共用 Driver 不會因為退出一般模式或移除 WindowsMacBridge 的 root runtime 被刪除。切回一般模式先釋放硬件 ownership／關閉 XPC；舊 HID 確認停止之前，兩種後端都不翻譯，最多等 3 秒。只有背景元件回覆已停止、該連線從未擷取，或背景元件確定已結束，才算釋放；連線中斷或在期限內沒有回覆時，App 不推定鍵盤已釋放：選單顯示「Helper 未確認釋放鍵盤」，確認鍵盤正常後按「恢復／重啟引擎」。緊急暫停組合 Ctrl+Option+Command+P 會立即交還實體鍵盤。HID 斷線／Driver teardown 仍需實機驗收。
 
 暫停可用選單列；暫停與正常退出會取消輸入輔助及未完成截圖。診斷只在進階模式明確開啟，5 分鐘到期，記錄規則／時間，不記錄輸入文字。

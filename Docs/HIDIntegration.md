@@ -73,4 +73,4 @@ Ownership 由已驗證的 XPC 連線維持（沒有 heartbeat 或固定 timer；
 
 Helper IPC 升至 version 4：加入 bounded per-device preference／status 與獨立 actionGeneration。physical generation 不隨 remote/device preference 改變；device preference 的晚到動作由 action epoch 拒絕。remote producer 各自有 session／policy gate；metadata job completion 也驗證原 host generation／active epoch。沒有網路握手。
 
-統一 runtime snapshot 與 IPC generation 驗證所有回覆／動作。HID 提供四組 screenshot shortcuts，無第二套截圖 EventTap；所有 App policy 失效立即取消工作。HID → EventTap 先送 stop，收到 physical close／VirtualHID teardown 回覆才解除 ownership gate。1.5 秒 timeout 顯示錯誤並保持新後端停用，不能以逾時推定已釋放。這不是 Driver 實際送達 acknowledgement，需實機測失聯／kill。
+統一 runtime snapshot 與 IPC generation 驗證所有回覆／動作。HID 提供四組 screenshot shortcuts，無第二套截圖 EventTap；所有 App policy 失效立即取消工作。HID → EventTap 先送 stop，收到 physical close／VirtualHID teardown 回覆才解除 ownership gate。3 秒 deadline；只有 stop ACK、從未送出 configure，或 helper process 確定結束（kqueue exit、ESRCH、PID 重用）才算釋放。XPC invalidation／interruption／proxy error 與逾時都鎖定 releaseUnconfirmed，保持新後端停用，直到使用者按「恢復／重啟引擎」；逾時後的晚到 ACK 不會解除。這不是 Driver 實際送達 acknowledgement，需實機測失聯／kill。

@@ -1,15 +1,120 @@
-# Final production review — 2026-10-03
+# Final production review — 2026-10-03 (revision 2: 2026-10-04)
 
 | Item | Value |
 |---|---|
 | Repository | https://github.com/steven87090799/WindowsMacBridge |
-| Base | `main` @ `caa128e4c088ae122e6b711fbfe691bc64ad9a46` (PR #12), 0.6.0 build 45 |
-| Branch | `fix/final-production-hardening-20261003` |
-| Result | 0.6.0 build 46; final SHA = PR head (this file is part of the last commit) |
+| Base | `main` @ `caa128e4c088ae122e6b711fbfe691bc64ad9a46` (PR #12), 0.6.0 build 45; later merged `main` @ `2e1b21ffc557e3c5c0e4bc10b84342c765495041` (input source guard intent, build 46) |
+| Branch / PR | `fix/final-production-hardening-20261003`, PR #13 |
+| Result | 0.6.0 build 47 (main shipped different content as 46); final SHA = PR head (this file is part of the last commit) |
 | Toolchain | Swift 6.4 (swift-tools-version 6.0), macOS 27.0.1 arm64, Command Line Tools (no Xcode) |
 | Deployment | macOS 14+, arm64 only |
 
 Historical `Docs/*-2026-*.md` files are evidence of earlier states, not proof of current behaviour. Every claim below was re-checked against this branch's code; anything that needs hardware, TCC approval, a second Mac, a Windows host or the DriverKit driver is marked **NOT VERIFIED ON REAL HARDWARE**.
+
+## 0. Revision 2 — re-review of revision 1 (2026-10-04)
+
+Revision 1 (head `22eab5e`) was re-read finding by finding against the code. Several items it marked fixed were only partly fixed or wrong. Each is reopened in place (status column below) and completed by a new finding, never by overwriting the original record.
+
+### New findings (revision 2)
+
+| ID | Sev | Component | Problem | Root cause | Fix | Tests |
+|---|---|---|---|---|---|---|
+| WMB-51 | P1 | HID stop semantics (`HIDBackendClient`) | XPC invalidation, interruption or a proxy error before the stop reply released the HID→EventTap gate ("擷取已交還系統"); an active lease's invalidation "stopped" over the dead connection and its error lifted the gate; a second pending lease was silently invalidated; an ACK cleared any earlier unknown state | Transport loss treated as proof that DeviceCapture closed the seized devices | Per-lease record (configure sent, helper PID + start time). Outcomes: `acknowledged`, `neverOwned`, `helperExited` (kqueue exit event, ESRCH, PID reuse) confirm release; `timedOut`, `transportLost` latch `releaseUnconfirmed` until "恢復／重啟引擎". Late replies/exit events/deadlines for retired stops are ignored; an ACK never clears an earlier unknown state; deadline 3 s | `HIDReleaseStateMachineTests` (14): ACK, timeout, invalidation before ACK, active-lease loss, interruption (helper gone / alive), helper exit event, late ACK, old-connection callbacks, never-configured lease, HID→EventTap, HID→off, HID→HID restart, timeout + explicit restart, 1000 enable/disable cycles |
+| WMB-52 | P1 | HID loss guard (`DeviceCapture`, `VirtualHID`) | The one-shot held-safety deadline ignored a held pointing button and reports the driver had not completed (a final key-up or button-up) | Deadline keyed only on keyboard report contents | `HeldSafetyPolicy`: one deadline while anything is held or output is outstanding (0.6 s when outstanding, 1 s when held), none at neutral idle; the armed timer is reused instead of re-allocated per HID value; the 500 ms stall rule is a pure tested C function, so a driver that stops completing fails closed on the next tick | `HeldSafetyPolicyTests` (3), `OutputStallTests` (3) |
+| WMB-53 | P1 | Finder focus (`FinderFocusReader`) | Reaching the Finder window with no text/sidebar on the way meant `.folder`, so toolbar, sheets, dialogs and unrecognised chrome counted as file content (Ctrl+V move, New/Parent Folder) | "Not text" inferred as file content | Positive-evidence chain classifier: text fields win; non-standard windows, sheets, toolbars → `.chrome`; sidebar (identifier, description, source-list subrole) → `.sidebar`; `.files`/`.folder` need an outline/table/list/browser content container in a scroll area, `.files` a selected item with a file URL; timeout/incomplete → `.unknown` | `FinderFocusReaderTests` (8 AX hierarchy fixtures: list/grid/browser selection, empty folder, search, rename, sidebar ×3, toolbar, sheet, dialog, window-only, timeout, incomplete) |
+| WMB-54 | P1 | Screenshot read (`ScreenshotImagePreparation`) | Size checked with `attributesOfItem`, then ImageIO reopened the path and `Data(contentsOf:)` read it again: a replaced/grown file bypassed the 64 MiB budget | Three opens of a mutable path | `BoundedImageFile`: one `O_NOFOLLOW|O_CLOEXEC|O_NONBLOCK` descriptor, regular file within limit, hard-bounded read into one immutable buffer, re-`fstat`; ImageIO/PDF parse that buffer; PNG fast path keeps the original bytes; never mapped | `ScreenshotBoundedReadTests` (9): ≤64 MiB PNG, >64 MiB (sparse) without allocation, path replaced after validation, truncate and grow races, symlink, FIFO, directory, malformed PNG, 100000² dimension bomb, 200000² PDF media box, cancellation before decode/encode, 60 repeated preparations |
+| WMB-55 | P1 | Installer publish (`InstallBackend.sh`) | `[[ ! -e ]]` then `mv -h` still raced: a directory created in between received the bundle inside it; rollback moved whatever occupied the path (and the stage cleanup later deleted it) | Check-then-act; `mv` is not a no-clobber primitive | Verified payload App performs `renamex_np(RENAME_EXCL)` (`--publish-exclusive`): EEXIST for any file/dir/symlink, never follows the destination; refuses up front if stage and /Applications differ in volume. Device:inode of the snapshotted App, the published bundle and any restore copy are recorded; only those are retired/moved; a foreign object stays untouched (recovery pending when a previous App must be restored) | `ExclusivePublishTests` (4, real filesystem); installer: directory/symlink appearing at publish, publish race with an existing App, foreign object replacing the published App before rollback, concurrent installer with a live journal owner |
+| WMB-56 | P2 | Input thread (`InputEngine`) | Every routed key edge still ran AX/Input Monitoring/posting/Secure Input reads in `tick()` and re-allocated the remote expiry `Timer` | WMB-14 removed only the MainActor wake | Permission reads on key-edge ticks at most once per second; config changes, host maintenance, missing tap and tap-disable events force a read; Secure Input still checked per event in the callback; expiry timer re-armed only when its deadline changes | `keyEdgesReadPermissionsAtMostOncePerIntervalButLifecycleAlwaysDoes` |
+| WMB-57 | P2 | Input source guard | While an explicit selection waited for Secure Input to end, the recovery timer re-armed at 30 s indefinitely | Backoff never terminated | One bounded pass (~66 s), then the request is dropped and logged | `secureInputWaitIsOneBoundedPassNotAStandingPoll` |
+
+### Status of revision-1 findings after re-verification
+
+| Findings | Status now |
+|---|---|
+| WMB-01, 09, 16 | Fixed; loss guard completed by WMB-52. Hardware: NOT VERIFIED |
+| WMB-02, 05, 07, 08 | Code fixed; WMB-08's premise (CGSession NULL in a LaunchDaemon) is documented behaviour, UNCONFIRMED on this machine. Hardware: NOT VERIFIED |
+| WMB-03, 04, 10, 11, 13, 15, 17–21, 23, 25–31 | Re-read: fixed as described, tests still pass after merging main |
+| **WMB-06** | **Partially fixed in revision 1** (timeout latched, but transport loss released the gate) → completed by WMB-51 |
+| WMB-12 | Fixed; destructive Finder actions now also require WMB-53 positive evidence. Finder's own confirmation: NOT VERIFIED ON REAL HARDWARE |
+| **WMB-14** | **Partially fixed** (MainActor wake only) → completed by WMB-56 |
+| **WMB-22** | **Incorrectly closed** (check-then-`mv -h` still raced) → fixed by WMB-55 |
+| **WMB-24** | **Partially fixed** (`.folder` inferred from a window ancestor) → fixed by WMB-53 |
+| WMB-27, 28 | Fixed; merged with main's guard-intent rewrite (main independently fixed the `stop()` reset); WMB-57 added |
+| WMB-32–38 | Still open (hardware / design), unchanged |
+| WMB-39–50 | Fixed; WMB-47 (unmapped PNG read) stands, the separate TOCTOU is WMB-54 |
+
+### Corrections to revision-1 statements
+
+| Statement | Verdict | Correction |
+|---|---|---|
+| "No repeating Timer, DispatchSourceTimer, Task.sleep loop or polling remains in any process" (§4) | **Over-claimed** | No permanent or fixed-rate idle polling exists in the steady state. Bounded loops/deadlines remain by design: Finder cut acknowledgement (≤20 × 20 ms after Ctrl+X), HID held-safety one-shot that re-arms only while something is held/outstanding, guard retry/verification/Secure-Input backoff (bounded, now including WMB-57), HID request/stop/permission deadlines, screenshot job deadline, `--probe-driver` CLI loop (diagnostic only) |
+| "installer logs and `PreviousApplication.*` not pruned" (open P3) | **Wrong in part** | Install keeps at most two owned backups; uninstall leaves `PreviousApplication.*` and `Licenses` behind. Installer logs are not pruned |
+| WMB-06 / WMB-22 / WMB-24 "fixed" | **Partially correct / incorrect** | See status table above |
+| "a timeout fails closed"; installer, sanitizer, packaging results; open items list | Correct | — |
+| Runtime CPU/RSS "NOT RUN" | Correct | Still NOT MEASURED (see below) |
+
+### Revision 2 evidence
+
+**CPU / wakeups / power** (code-level; no runtime numbers are claimed):
+
+| Area | Status | Evidence |
+|---|---|---|
+| Per-key MainActor tick + SwiftUI publish | Improved (rev 1, WMB-14) | `EngineWakePolicyTests` |
+| Per-key AX/TCC/Secure Input reads on the input thread | Improved (WMB-56): ≤1/s on key edges, forced on lifecycle events | policy test |
+| Remote expiry `Timer` re-allocation per key while a remote key is held | Improved (WMB-56) | code review |
+| HID held-safety `Timer` re-allocation per HID value | Improved (WMB-52): armed timer reused | code review |
+| HID loss guard | Coverage increased (WMB-52) at the cost of one deferred one-shot wake ≤0.6–1 s after activity ends; neutral idle still has no timer | `HeldSafetyPolicyTests` |
+| Guard Secure Input wait | Bounded (WMB-57): standing 30 s poll removed | guard test |
+| Screenshot taps on the main run loop | Not changed: callbacks are fixed-cost (routing lookup, shortcut state machine); moving them would add a thread and cross-thread state without a measured benefit (WMB-36 stays open) | code review |
+| Runtime idle/typing/modifier/remote/screenshot/Advanced-HID CPU, RSS, threads, wakeups, fds, timer counts | **NOT MEASURED**: `scripts/monitor-runtime.py` needs build 47 installed in /Applications with TCC re-approved for its new ad-hoc identity; Advanced HID also needs the Driver and an admin install | — |
+
+**Memory**: the screenshot path now holds at most one encoded snapshot (≤64 MiB) + decoded bitmap (≤144 MiB) + PNG output (≤64 MiB) transiently, then the pasteboard's copy; the PNG fast path holds only the snapshot. 60 repeated preparations stay within the test bound (`repeatedPreparationDoesNotGrowMemoryWithCaptureCount`). 1000 HID enable/disable cycles retain no client, lease, connection or exit watch (`thousandEnableDisableCyclesRetainNoClientsOrWatches`). No "zero leak" claim is made.
+
+**Binary size** (release, same scripts, `caa128e` vs this branch):
+
+| Artifact | caa128e | Branch | Δ |
+|---|---|---|---|
+| Main executable (also the root runtime copy) | 4,610,432 B | 4,731,360 B | +120,928 B (+2.6%) |
+| Development .app | 4,844 KiB | 4,964 KiB | +120 KiB |
+| Single App (with payload) | 19,408 KiB | 19,532 KiB | +124 KiB |
+| FinderSync extension executable | 91,552 B | 91,552 B | 0 |
+| DriverProcessRunner | 35,696 B | 35,696 B | 0 |
+| Release ZIP | 7,531,188 B | 7,574,841 B | +43,653 B |
+| DMG | 10,279,331 B | 11,256,912 B | +977,581 B — contents differ by +124 KiB (same 985 files); the rest is hdiutil image packing, not shipped content |
+
+The program did not get smaller; it grew by the added safety code.
+
+**Validation run (revision 2, head before this report commit)**:
+
+| Gate | Result |
+|---|---|
+| `bash scripts/test.sh` | pass — BridgeCore 149, BridgePlatform 173, InputSourceCore 40, InputSourceSupport 14, VirtualHID 33 |
+| `bash scripts/test.sh -c release` | pass (same counts) |
+| `python3 -m unittest discover -s Tests/InstallerTests -v` | 49/49 pass |
+| `python3 -m unittest discover -s Tests/MonitoringTests -v` | 5/5 pass |
+| `build-app.sh`, `package-single-app.sh`, `package-app-dmg.sh` | pass; self-check `0.6.0 (47)` |
+| `codesign --verify --deep --strict` (single App) | pass |
+| Real bootstrap on the packaged App (no admin) | sealed `InstallBackend.sh` reached, refused at EUID 77 |
+| `--publish-exclusive` CLI argument validation | refuses an unexpected destination (EINVAL, exit 73) |
+| `git diff --check`, `bash -n`, `plutil -lint`, workflow YAML | pass |
+| Swift concurrency | targets build in Swift 6 language mode (HIDRuntime, InputSourceSupport and their tests stay in Swift 5 mode as before); no new warnings |
+| ThreadSanitizer | pass — `scripts/test.sh --sanitize=thread`, all 409 tests, no reports |
+| AddressSanitizer | pass — `scripts/test.sh --sanitize=address`, all 409 tests, no reports. The first run failed only `repeatedPreparationDoesNotGrowMemoryWithCaptureCount`: ASan's 256 MiB free-quarantine inflates process footprint. The test now fills the quarantine before measuring (only when the ASan runtime is present); the +128 MiB bound is unchanged |
+| `git archive HEAD` build without `.git` | pass — `build-app.sh` from a `git archive` export reports `0.6.0 (47)`, Git `archive` |
+| Clipboard write failure in the capture pipeline | no automated test: NSPasteboard cannot be made to fail without refactoring; the failure branch reports and never claims success (code review) |
+
+### Merge readiness
+
+**NOT READY FOR MERGE.** Every automated gate above passes, but the changes this branch makes to input ownership, Finder actions and the root installer have no real-device evidence yet:
+
+1. Normal mode on a real Mac: Windows shortcuts while typing; recovery after leaving a password field inside the same App (WMB-05).
+2. Finder on a real Finder AX tree: Ctrl+X → Ctrl+V move (including into an empty folder), F2, Delete, Shift+Delete with Finder's own confirmation, New/Parent Folder; search/rename/sidebar/toolbar must not trigger file actions. The positive-evidence roles (WMB-53) are based on public AX roles and are UNCONFIRMED against Finder; if they differ, those actions fall back to plain keys (fail-safe but a functional regression).
+3. MacBook Fn/Ctrl on a built-in keyboard (WMB-04).
+4. If Advanced HID ships: official Driver capture, emergency chord, HID→EventTap handoff and the "Helper 未確認釋放鍵盤" latch, composite pointer, Secure Input recapture, driver restart during stop, descriptor acceptance (WMB-32).
+5. If the bundled installer ships: administrator install, upgrade, interrupted-install recovery, Finder-tagged rollback, Karabiner coexistence, uninstall.
+6. Idle and typing CPU/RSS/footprint with `scripts/monitor-runtime.py`.
+
+Items 1–3 block merging the default (normal) mode; 4–5 block enabling Advanced mode or the installer for users.
 
 ## 1. Architecture (rebuilt from code)
 
@@ -92,7 +197,7 @@ Severity follows the brief: P0 keyboard unusable / root execution / stuck state;
 | WMB-03 | P0 | Root installer | `LaunchEmbeddedInstall.sh`, `LaunchEmbeddedUninstall.sh` | Root ran `InstallBackend.sh` in place from user-owned `$TMPDIR`; payload bound only by a user-built manifest | Trust boundary placed after a same-UID-writable staging step | Same-user code could alter the script mid-run (bash reads incrementally) or the plists/runner → root | Fixed bootstrap: root copies App to 0700 stage, `codesign --verify --strict -R '=identifier …'`, builds payload from sealed `BackendPayload`, runs sealed copy | `test_root_bootstrap.py` (4); real `osascript` + real `codesign` run on the packaged bundle (sealed script reached, refused at EUID, stage removed) |
 | WMB-04 | P1 | MacBook Fn/Ctrl | `NativeMacBookKeyboardBackend.services` | Swap never applied on this MacBook | Total service count (129 on macOS 27) checked against the keyboard bound 128 | Feature unusable on current Apple Silicon portables | Separate scan (4096) and keyboard (128) bounds | Existing native test failed on main here; passes now |
 | WMB-05 | P1 | EventTap / Secure Input | `RuntimePolicy`, `InputEngine`, `BridgeController.publish` | After a publish observed Secure Input, translation stayed off in the same App until an App switch | `permitsInput` disabled the engine → tap destroyed; its next event was the only end-of-Secure-Input signal | Ctrl shortcuts silently stop after login forms | Keep the tap when Secure Input is the only blocker (`awaitsSecureInputEnd`) | `secureInputKeepsTheTapSoItsEndIsObservedWithoutAnAppSwitch` |
-| WMB-06 | P1 | Backend handoff | `BridgeController.synchronizeHIDMode`, `RuntimePolicy`, `HIDBackendClient` | HID→EventTap started the tap while the root service could still own the keyboard; a timed-out stop was treated as release | Client dropped immediately (stop + deadline destroyed); gate applied only to HID backend | Double translation window; violated HIDIntegration.md contract | `HIDBackendSlot` keeps retiring clients; gate both backends; timeout latches `releaseUnconfirmed` until "恢復／重啟引擎" | 2 real-XPC slot tests + updated policy tests |
+| WMB-06 (partial; see WMB-51) | P1 | Backend handoff | `BridgeController.synchronizeHIDMode`, `RuntimePolicy`, `HIDBackendClient` | HID→EventTap started the tap while the root service could still own the keyboard; a timed-out stop was treated as release | Client dropped immediately (stop + deadline destroyed); gate applied only to HID backend | Double translation window; violated HIDIntegration.md contract | `HIDBackendSlot` keeps retiring clients; gate both backends; timeout latches `releaseUnconfirmed` until "恢復／重啟引擎" | 2 real-XPC slot tests + updated policy tests |
 | WMB-07 | P1 | VirtualHID (root) | `VirtualHID.cpp` | Null dereference during teardown | libc++ nulls `unique_ptr` before `~client()`; `connected` callback reloads `state->client` | Root helper crash on daemon reconnect during stop | Capture raw client; declare `client` last (destroyed first) | Code review; hardware NOT VERIFIED |
 | WMB-08 | P1 | Root session gate | `DeviceCapture.sessionActive` | Session check could never pass in a LaunchDaemon; checked by IPC per HID value; Secure Input latched a permanent fault | `CGSessionCopyCurrentDictionary` returns NULL outside a Quartz GUI session (documented); fault used for transient state | Advanced capture possibly never starts; restart needed after any password field | App-reported session + console UID (configd-notified); transient release for Secure Input/session | Behaviour change is doc-based; **UNCONFIRMED on hardware** |
 | WMB-09 | P1 | HID pointing readiness | `DeviceCapture.tick` | Composite device stayed seized after virtual pointing became unready | Readiness checked only at seize | Pointer dead while seized | Release and recapture only ready devices | Code review |
@@ -100,7 +205,7 @@ Severity follows the brief: P0 keyboard unusable / root execution / stuck state;
 | WMB-11 | P1 | Rollback | `InstallBackend.sh` | Finder tag on installed App made rollback and every later recovery fail | `ditto`/`mv` kept `com.apple.FinderInfo`; `--strict` rejects it | Wedged recovery, uninstall refused | Attribute-free snapshot verified before switching; restore from it | `test_finder_tagged_retired_app_rolls_back_from_the_verified_snapshot`, `test_unverifiable_installed_app_is_never_switched` |
 | WMB-12 | P1 | Finder permanent delete | `ShortcutActionDispatcher` | Confirmed Shift+Delete never executed; modal blocked other actions | Clicking the alert activated this accessory App, failing the Finder-frontmost check | Feature broken; queued actions expired | Delegate to Finder's Delete Immediately (always confirms) | Code review; manual check listed |
 | WMB-13 | P2 | Tap coverage | `KeyboardEventTapCoverage` | Fixed 128-entry tap list | API reports filled count | Readiness false negative on busy systems | Size from live total, reject full buffer | `registryQueryIsSizedFromTheLiveTotalAndRejectsTruncation` (+ live probe) |
-| WMB-14 | P2 | CPU / wakeups | `InputEngine`, `BridgeController` | Every keystroke woke the MainActor for a full tick + publish | Counters part of the change test | 4 TCC reads, policy, `proc_pidinfo` loop, SwiftUI invalidation per key | Counter-only changes silent; diagnostics/neutral-wait keep edges; calibration explicit | `EngineWakePolicyTests` (3) |
+| WMB-14 (partial; see WMB-56) | P2 | CPU / wakeups | `InputEngine`, `BridgeController` | Every keystroke woke the MainActor for a full tick + publish | Counters part of the change test | 4 TCC reads, policy, `proc_pidinfo` loop, SwiftUI invalidation per key | Counter-only changes silent; diagnostics/neutral-wait keep edges; calibration explicit | `EngineWakePolicyTests` (3) |
 | WMB-15 | P2 | Remote lifecycle | `RemoteSourceRegistry` | Producer death noticed late (daemons never) | Polling on unrelated ticks | Stale gate, delayed release of held remote keys | kqueue exit sources, birth re-check after arming | Live probe of dispatch semantics; existing remote suites |
 | WMB-16 | P2 | HID pointing | `DeviceCapture`, `VirtualHID` | Backlog of pointer reports latched a fault | Outstanding>256 treated as output failure | Manual restart after a stall | Drop motion above 64 outstanding; buttons always post | Code review |
 | WMB-17 | P2 | HID capture | `CaptureLifecycle`, `DeviceCapture` | Key pressed between observe and seize → permanent fault | Neutral race mapped to `faulted` | Manual restart | `captureAborted` + ≤3 bounded retries | `keyPressedDuringSeizeAbortsWithoutRequiringRestart` |
@@ -108,9 +213,9 @@ Severity follows the brief: P0 keyboard unusable / root execution / stuck state;
 | WMB-19 | P2 | Root lifecycle | `InputService` | Helper stayed resident after a rejected lookup; idle-exit could fire under a new owner | Idle exit armed only on accepted invalidation | Resident root process; spurious disconnect | Arm at start/rejection; re-check idleness after teardown; `_exit` on SIGTERM | Code review |
 | WMB-20 | P2 | Root status | `DeviceCapture` fault paths | Released devices but never published status or retired the client | No tick after fault | Stale UI state | `failClose()` schedules a tick | Code review |
 | WMB-21 | P2 | Shared Driver | `DriverTransaction.sh` | Recovery could downgrade/delete a Driver Karabiner started using after an interrupted install | Version treated as ownership | Breaks a foreign product | Refuse and keep recovery pending; path overridable for tests | `test_recovery_leaves_the_shared_driver_alone_once_karabiner_also_uses_it` |
-| WMB-22 | P2 | Install publish | `InstallBackend.sh` | `mv` into `/Applications` could move the bundle into a directory/symlink | Check far from use | Misplaced App | Re-check + `mv -h` at publish | Installer suite |
+| WMB-22 (incorrectly closed; see WMB-55) | P2 | Install publish | `InstallBackend.sh` | `mv` into `/Applications` could move the bundle into a directory/symlink | Check far from use | Misplaced App | Re-check + `mv -h` at publish | Installer suite |
 | WMB-23 | P2 | Recovery UX | `InstallBackend.sh`, `UninstallBackend.sh`, `BridgeController.summary` | Silent `return 1`s; "reopen the App" never resumes recovery | Missing messages | User stuck | Reasons printed; text points to the install action | Installer suite |
-| WMB-24 | P2 | Finder move | `ShortcutActionDispatcher`, `FinderActionPolicy` | Ctrl+V moved files when AX focus read failed | `focus != .text` treated unknown as file view | Surprise file move from a text context | `.folder` positive evidence; unknown pastes | `armedCutMovesOnlyOnPositiveFileViewEvidence` |
+| WMB-24 (partial; see WMB-53) | P2 | Finder move | `ShortcutActionDispatcher`, `FinderActionPolicy` | Ctrl+V moved files when AX focus read failed | `focus != .text` treated unknown as file view | Surprise file move from a text context | `.folder` positive evidence; unknown pastes | `armedCutMovesOnlyOnPositiveFileViewEvidence` |
 | WMB-25 | P2 | Screenshot privacy | `ScreenshotManager` | Quit/crash left captured PNG in `$TMPDIR` | Cleanup only in completion | Screen contents on disk | Remove on stop; sweep own leftovers at launch (production only) | Runtime suites |
 | WMB-26 | P2 | Screenshot driver | `ScreenshotCaptureDriver` | Final stderr read blocked until EOF | Inherited write end | Capture slot held until relaunch | Non-blocking final read | `inheritedDiagnosticPipeCannotStallCompletionAndTheCaptureSlot` |
 | WMB-27 | P2 | Input source idle cost | `GuardController` | Guard off: full TIS enumeration + 3 log lines per protected-App/Secure Input round trip | Unconditional rediscover/log | Main-thread work, log churn | Rediscover only when changes were missed; log only when enabled | Input source suites |
@@ -131,7 +236,7 @@ Severity follows the brief: P0 keyboard unusable / root execution / stuck state;
 | WMB-36 | P2 | Screenshot taps run on the main run loop (latency coupling) | Moving taps off MainActor is a subsystem refactor; WMB-14 removed the per-key main-thread work that amplified it | latency measurement |
 | WMB-37 | P2 | Virtual-device exclusion relies on names/vendor | `IOHIDUserDevice` exclusion would also exclude Bluetooth LE keyboards | hardware |
 | WMB-38 | P2 | Ad-hoc signing: no publisher authenticity; shared Driver has no ownership marker | Needs Developer ID / installer design | release process |
-| — | P3 | Inert FinderSync extension still packaged; vendor 0x16c0 excludes all V-USB keyboards; installer logs and `PreviousApplication.*` not pruned; legacy `Install/Uninstall/Stop/ActivateDriver.command` scripts are unpackaged and stale | Low risk, packaging churn | — |
+| — | P3 | Inert FinderSync extension still packaged; vendor 0x16c0 excludes all V-USB keyboards; installer logs not pruned; uninstall leaves `PreviousApplication.*` (install keeps ≤2) and `Licenses`; legacy `Install/Uninstall/Stop/ActivateDriver.command` scripts are unpackaged and stale | Low risk, packaging churn | — |
 
 ## 3. Karabiner comparison (device_grabber principles)
 
@@ -159,7 +264,7 @@ Severity follows the brief: P0 keyboard unusable / root execution / stuck state;
 | GuardController | retries/verification/Secure Input backoff | one-shot, bounded | only after explicit selection or guard on | same | none | guard-off enumeration removed (WMB-27) |
 | ScreenshotManager | capture job | one-shot 120 s | only during capture | same | none | unchanged |
 
-No repeating `Timer`, `DispatchSourceTimer`, `Task.sleep` loop or polling remains in any process. Normal mode does not instantiate `HIDBackendClient`, open XPC, probe the Driver or read `IOHIDCheckAccess`; `BundledBackendInstaller` identity checks are lazy and gated on `usesHID`.
+(Revision 2 correction) No permanent or fixed-rate idle polling exists in the normal steady state; the bounded loops and one-shot deadlines that remain are listed in §0. Normal mode does not instantiate `HIDBackendClient`, open XPC, probe the Driver or read `IOHIDCheckAccess`; `BundledBackendInstaller` identity checks are lazy and gated on `usesHID`.
 
 Runtime measurement (`scripts/monitor-runtime.py`) was **NOT RUN** for this build: it needs the build installed in `/Applications` with TCC re-approved for the new ad-hoc identity, which this review does not do. No CPU/RSS numbers are claimed.
 
