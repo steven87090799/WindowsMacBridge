@@ -22,8 +22,33 @@ bridge_preserve_stage=0
 bridge_journal_tmp=''
 bridge_driver_changed=0
 [[ ! -d "$bridge_root" ]] || bridge_root_existed=1
+bridge_identity() { /usr/bin/stat -f '%d:%i' "$1" 2>/dev/null; }
+# Exact-path, no-clobber, no-follow publish (renamex_np RENAME_EXCL) by the
+# verified payload App: never moves into a directory or through a symlink that
+# appeared at the destination, and never replaces anything there.
+bridge_publish_exclusive() {
+    "$bridge_payload/WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge" --publish-exclusive "$1" "$2"
+}
+# Rollback may move only the bundle this transaction published or the App it
+# found and snapshotted; anything else at the path is foreign and left alone.
+bridge_owns_app_path() {
+    local bridge_found bridge_id
+    bridge_found="$(bridge_identity "$bridge_app")" && [[ -n "$bridge_found" ]] || return 1
+    for bridge_id in published original restored; do
+        if [[ -f "$bridge_stage/$bridge_id.identity" && "$bridge_found" == "$(/bin/cat "$bridge_stage/$bridge_id.identity")" ]]; then return 0; fi
+    done
+    # Snapshots from installers that predate identity records: only our own bundle.
+    [[ ! -f "$bridge_stage/published.identity" && ! -f "$bridge_stage/original.identity" && ! -f "$bridge_stage/restored.identity" &&
+       -d "$bridge_app" && ! -L "$bridge_app" &&
+       "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bridge_app/Contents/Info.plist" 2>/dev/null)" == local.WindowsMacBridge ]]
+}
 bridge_restore_application() {
     local bridge_restore="$bridge_stage/retired-application.app" bridge_rejected
+    # Interrupted before the App was retired: the original is still in place.
+    if [[ "$bridge_app_saved" == 1 && -f "$bridge_stage/original.identity" &&
+          "$(bridge_identity "$bridge_app")" == "$(/bin/cat "$bridge_stage/original.identity")" ]]; then
+        return 0
+    fi
     if [[ "$bridge_app_saved" == 1 ]]; then
         # mv keeps Finder tags (com.apple.FinderInfo), which fail strict
         # verification and used to wedge every later recovery. Older interrupted
@@ -35,12 +60,21 @@ bridge_restore_application() {
         fi
         /usr/bin/codesign --verify --strict "$bridge_restore" || { echo 'Previous App snapshot failed verification.' >&2; return 1; }
     fi
-    if [[ -e "$bridge_app" ]]; then
-        bridge_rejected="$(/usr/bin/mktemp -d "$bridge_stage/rejected.XXXXXX")" || return 1
-        /bin/mv "$bridge_app" "$bridge_rejected/WindowsMacBridge.app" || return 1
+    if [[ -e "$bridge_app" || -L "$bridge_app" ]]; then
+        if bridge_owns_app_path; then
+            bridge_rejected="$(/usr/bin/mktemp -d "$bridge_stage/rejected.XXXXXX")" || return 1
+            /bin/mv "$bridge_app" "$bridge_rejected/WindowsMacBridge.app" || return 1
+        elif [[ "$bridge_app_saved" == 1 ]]; then
+            echo 'A foreign object now occupies the App path; it was left untouched and recovery stays pending.' >&2; return 1
+        else
+            # Fresh install: nothing of ours to restore, and the foreign object is not ours to move.
+            echo 'A foreign object occupies the App path; it was left untouched.' >&2
+        fi
     fi
     if [[ "$bridge_app_saved" == 1 ]]; then
-        /bin/mv "$bridge_restore" "$bridge_app" || return 1
+        bridge_identity "$bridge_restore" > "$bridge_stage/restored.identity"
+        bridge_publish_exclusive "$bridge_restore" "$bridge_app" || {
+            echo 'The App path was occupied while restoring; recovery stays pending.' >&2; return 1; }
     fi
 }
 bridge_rollback() {
@@ -188,6 +222,9 @@ bridge_recover_interrupted() {
 # Copy into a private root-owned snapshot before verifying or running payload files.
 /usr/bin/ditto --noextattr --norsrc "$bridge_source" "$bridge_stage/payload"
 bridge_payload="$bridge_stage/payload"
+# Exclusive publish is a rename; it cannot cross volumes and never falls back to copying.
+[[ "$(/usr/bin/stat -f '%d' "$bridge_stage")" == "$(/usr/bin/stat -f '%d' "$(/usr/bin/dirname "$bridge_app")")" ]] || {
+    echo 'Installer staging and the Applications folder are on different volumes; nothing was changed.' >&2; exit 1; }
 [[ -z "$(/usr/bin/find "$bridge_payload" -type l -print -quit)" ]] || { echo 'Symlink payload rejected.' >&2; exit 1; }
 cd "$bridge_payload"
 /usr/bin/shasum -a 256 -c PAYLOAD-SHA256SUMS >/dev/null
@@ -299,6 +336,7 @@ if [[ -d "$bridge_app" ]]; then
     /usr/bin/ditto --noextattr --norsrc "$bridge_app" "$bridge_stage/previous/WindowsMacBridge.app"
     /usr/bin/codesign --verify --strict "$bridge_stage/previous/WindowsMacBridge.app" || {
         echo 'The installed App cannot be snapshotted for rollback; nothing was switched.' >&2; exit 1; }
+    bridge_identity "$bridge_app" > "$bridge_stage/original.identity"
     bridge_app_saved=1
 fi
 bridge_driver_prepare
@@ -324,14 +362,19 @@ bridge_driver_switch
 /bin/mkdir -p "$bridge_root"
 /usr/sbin/chown root:wheel "$bridge_root"
 /bin/chmod 755 "$bridge_root"
-if [[ -d "$bridge_app" ]]; then
+if [[ -e "$bridge_app" || -L "$bridge_app" ]]; then
+    # Retire only the App that was snapshotted, never an object that replaced it.
+    [[ -f "$bridge_stage/original.identity" && "$(bridge_identity "$bridge_app")" == "$(/bin/cat "$bridge_stage/original.identity")" ]] || {
+        echo 'The installed App changed during installation; not switching.' >&2; exit 1; }
     /bin/mv "$bridge_app" "$bridge_stage/retired-application.app"
 fi
 bridge_app_changed=1
 # /Applications is admin-group writable: re-check immediately before publishing,
 # and never let mv move the bundle INTO a directory or symlink at that path.
-[[ ! -e "$bridge_app" && ! -L "$bridge_app" ]] || { echo 'Install destination reappeared; not publishing.' >&2; exit 1; }
-/bin/mv -h "$bridge_stage/next/WindowsMacBridge.app" "$bridge_app"
+# rename preserves the inode, so this identity marks exactly what we publish.
+bridge_identity "$bridge_stage/next/WindowsMacBridge.app" > "$bridge_stage/published.identity"
+bridge_publish_exclusive "$bridge_stage/next/WindowsMacBridge.app" "$bridge_app" || {
+    echo 'Install destination is occupied; not publishing.' >&2; exit 1; }
 for bridge_name in WindowsMacBridge.app BridgeHIDHelper.app; do
     if [[ -e "$bridge_root/$bridge_name" ]]; then
         /bin/mv "$bridge_root/$bridge_name" "$bridge_stage/retired-$bridge_name"

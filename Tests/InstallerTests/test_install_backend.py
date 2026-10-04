@@ -133,7 +133,38 @@ elif name == 'DriverProcessRunner':
 elif name == 'stat':
     if args[-2] == '%u': print('0')
     elif args[-2] == '%Lp': print(oct(pathlib.Path(args[-1]).stat().st_mode & 0o777)[2:])
+    elif args[-2] == '%d': print(os.stat(args[-1]).st_dev)
+    elif args[-2] == '%d:%i':
+        st = os.lstat(args[-1]); print(f'{st.st_dev}:{st.st_ino}')
 elif name == 'install': copy(args[-2],args[-1])
+'''
+
+# Fixture App binary: --controller-pin and the real exclusive rename
+# (renamex_np RENAME_EXCL), with a one-shot race injected at the publish point.
+APP_STUB = r'''#!/usr/bin/env python3
+import ctypes, os, pathlib, shutil, sys
+args = sys.argv[1:]
+if args[:1] == ['--controller-pin']:
+    print('new-pin'); sys.exit(0)
+if args[:1] == ['--publish-exclusive']:
+    src, dst = args[1], args[2]
+    root = pathlib.Path(os.environ['WMB_TEST_ROOT'])
+    race = os.environ.get('WMB_PUBLISH_RACE', '')
+    once = root/'publish-race-done'
+    if race in ('directory', 'symlink') and not once.exists():
+        once.touch()
+        if race == 'directory': os.mkdir(dst)
+        else: os.symlink(str(root/'elsewhere'), dst)
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.renamex_np(src.encode(), dst.encode(), 0x4) != 0:
+        sys.exit(73)
+    if race == 'foreign_after_publish' and not once.exists():
+        once.touch()
+        # Another administrator replaces the freshly published App.
+        os.rename(dst, str(root/'displaced-own.app'))
+        os.mkdir(dst); (pathlib.Path(dst)/'foreign').write_text('foreign')
+    sys.exit(0)
+sys.exit(64)
 '''
 
 class InstallBackendTests(unittest.TestCase):
@@ -149,7 +180,7 @@ class InstallBackendTests(unittest.TestCase):
                                         capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
-    def run_install(self, receipt='installed', fail='', existing=True, installed_driver_version='1.8.0', active_driver=True, driver_running=None, private_app_resource=False, protected_app=False, unified_runtime=False, codesign_reject=''):
+    def run_install(self, receipt='installed', fail='', existing=True, installed_driver_version='1.8.0', active_driver=True, driver_running=None, private_app_resource=False, protected_app=False, unified_runtime=False, codesign_reject='', publish_race=''):
         temp = tempfile.TemporaryDirectory(prefix='wmb-install-test-')
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
@@ -184,7 +215,7 @@ class InstallBackendTests(unittest.TestCase):
                 'CFBundleShortVersionString':'0.5.13','CFBundleVersion':'25'}))
             (target/'identity').write_text(value)
         executable = payload/'WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge'
-        executable.write_text('#!/bin/bash\nprintf "new-pin\\n"\n'); executable.chmod(0o755)
+        executable.write_text(APP_STUB); executable.chmod(0o755)
         if private_app_resource:
             folder = payload/'WindowsMacBridge.app/Contents/Resources/BackendPayload/Driver'
             folder.mkdir(parents=True)
@@ -258,7 +289,8 @@ class InstallBackendTests(unittest.TestCase):
             (payload/'PAYLOAD-SHA256SUMS').write_text(manifest)
         env = dict(os.environ, WMB_TEST_ROOT=str(root), WMB_DRIVER_SHA=DRIVER_SHA,
                    WMB_ROLLBACK_SHA=ROLLBACK_SHA, WMB_RECEIPT=receipt, WMB_FAIL=fail,
-                   WMB_APP_PROTECTED='1' if protected_app else '0', WMB_CODESIGN_REJECT=codesign_reject)
+                   WMB_APP_PROTECTED='1' if protected_app else '0', WMB_CODESIGN_REJECT=codesign_reject,
+                   WMB_PUBLISH_RACE=publish_race)
         result = subprocess.run(['/bin/bash',str(script),str(payload)], env=env, capture_output=True, text=True, timeout=20)
         return root, app, helper_root, daemons, result
 
@@ -487,6 +519,50 @@ class InstallBackendTests(unittest.TestCase):
         driver = root/'Library/Application Support/org.pqrs/Karabiner-DriverKit-VirtualHIDDevice'
         self.assertEqual((driver/'identity').read_text(), 'new-shared-driver')
         self.assertTrue((helper/'.install-recovery').exists())
+
+    def test_destination_directory_or_symlink_appearing_at_publish_is_never_entered(self):
+        for race in ['directory', 'symlink']:
+            root, app, helper, daemons, result = self.run_install(existing=False, publish_race=race)
+            self.assertNotEqual(result.returncode, 0, race)
+            self.assertIn('Install destination is occupied', result.stderr)
+            # Nothing was moved into the directory or through the link.
+            if race == 'directory':
+                self.assertEqual(list(app.iterdir()), [])
+            else:
+                self.assertTrue(app.is_symlink())
+                self.assertFalse((root/'elsewhere').exists())
+            self.assertFalse((helper/'.install-recovery').exists())
+
+    def test_existing_app_publish_race_keeps_the_original_app(self):
+        root, app, helper, daemons, result = self.run_install(publish_race='directory')
+        # The old App was retired before the race, so the transaction must roll back
+        # without touching the foreign directory.
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(app.is_dir())
+        self.assertFalse((app/'identity').exists() and (app/'identity').read_text() == 'new-app')
+
+    def test_rollback_never_moves_a_foreign_object_that_replaced_the_published_app(self):
+        root, app, helper, daemons, result = self.run_install(fail='bootstrap_helper', publish_race='foreign_after_publish')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('foreign object now occupies the App path', result.stderr)
+        self.assertEqual((app/'foreign').read_text(), 'foreign')
+        self.assertTrue((helper/'.install-recovery').exists(), 'recovery stays pending')
+
+    def test_concurrent_installer_cannot_switch_while_another_owns_the_journal(self):
+        root, app, helper, daemons, result = self.run_install(fail='kill_before_bootstrap')
+        self.assertEqual(result.returncode, -9)
+        journal = (helper/'.install-recovery').read_text().splitlines()
+        # Pretend the interrupted owner is still alive in this boot.
+        lines = journal[:]; lines[2] = str(os.getpid())
+        (helper/'.install-recovery').write_text('\n'.join(lines) + '\n')
+        env = dict(os.environ, WMB_TEST_ROOT=str(root), WMB_DRIVER_SHA=DRIVER_SHA, WMB_ROLLBACK_SHA=ROLLBACK_SHA,
+                   WMB_RECEIPT='installed', WMB_FAIL='')
+        before = sorted(p.name for p in app.parent.iterdir())
+        second = subprocess.run(['/bin/bash', str(root/'InstallBackend.sh'), str(root/'payload')],
+                                env=env, capture_output=True, text=True, timeout=20)
+        self.assertNotEqual(second.returncode, 0)
+        self.assertIn('Another installer may still be running', second.stderr)
+        self.assertEqual(sorted(p.name for p in app.parent.iterdir()), before)
 
     def test_corrupt_driver_phase_retains_the_protected_recovery_snapshot(self):
         root, _, helper, _, result = self.run_install(receipt='7.3.0',fail='kill_during_driver')

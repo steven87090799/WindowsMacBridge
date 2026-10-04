@@ -2,6 +2,7 @@ import Foundation
 import Darwin
 import VirtualHID
 import Security
+import HIDLifecycle
 
 public enum HIDRuntimeCommand {
     @MainActor public static func handle(_ arguments: [String]) -> Bool {
@@ -14,6 +15,12 @@ public enum HIDRuntimeCommand {
                   let hash = values[kSecCodeInfoUnique as String] as? Data, hash.count == 20,
                   let data = try? PropertyListSerialization.data(fromPropertyList: ["CDHash": hash], format: .xml, options: 0) else { exit(1) }
             FileHandle.standardOutput.write(data); return true
+        }
+        if arguments.count == 3 && arguments[0] == "--publish-exclusive" {
+            // Installer only: exact-path, no-clobber, no-follow publish (see ExclusivePublish).
+            let result = ExclusivePublish.rename(arguments[1], to: arguments[2])
+            if result != 0 { FileHandle.standardError.write(Data("publish refused: errno \(result)\n".utf8)) }
+            exit(result == 0 ? 0 : 73)
         }
         if arguments == ["--hid-service"] {
             guard geteuid() == 0, let service = InputService() else { print("Root-owned installation pin unavailable; no capture started."); exit(77) }
