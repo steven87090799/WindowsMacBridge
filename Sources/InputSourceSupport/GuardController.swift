@@ -18,7 +18,7 @@ final class GuardController {
         case inactiveSession
     }
 
-    private enum Configuration {
+    enum Configuration {
         static let maximumSelectionAttempts = 3
         static let verificationDelayMilliseconds = 400
         static let startupRetryDelaysMilliseconds = [1_000, 2_000, 4_000]
@@ -52,6 +52,8 @@ final class GuardController {
 
     private var secureRecoveryTimer: DispatchSourceTimer?
     private var secureRecoveryPollIndex = 0
+    /// One bounded pass while waiting for Secure Input to end (seconds).
+    private let secureRecoveryDelays: [Double]
     private var pendingExplicitSelection: DesiredInputSource?
 
     private var pendingInternalSourceID: String?
@@ -78,7 +80,9 @@ final class GuardController {
     init(inputSources: any InputSourceProviding = InputSourceManager(),
          selectionStore: GuardSelectionStore = GuardSelectionStore(defaults: .standard),
          isEnabled: Bool = AppSettings.guardEnabled,
-         secureInputEnabled: @escaping () -> Bool = { IsSecureEventInputEnabled() }) {
+         secureInputEnabled: @escaping () -> Bool = { IsSecureEventInputEnabled() },
+         secureRecoveryDelays: [Double] = Configuration.secureInputPollDelaysSeconds.map(Double.init)) {
+        self.secureRecoveryDelays = secureRecoveryDelays.isEmpty ? [2] : secureRecoveryDelays
         self.inputSources = inputSources
         self.selectionStore = selectionStore
         self.secureInputEnabled = secureInputEnabled
@@ -941,15 +945,12 @@ final class GuardController {
 
         isWaitingForSecureInputToEnd = true
 
-        let index = min(
-            secureRecoveryPollIndex,
-            Configuration.secureInputPollDelaysSeconds.count - 1
-        )
-        let delay = Configuration.secureInputPollDelaysSeconds[index]
+        let index = min(secureRecoveryPollIndex, secureRecoveryDelays.count - 1)
+        let delay = secureRecoveryDelays[index]
         let epoch = workEpoch
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(
-            deadline: .now() + .seconds(delay),
+            deadline: .now() + .milliseconds(Int(delay * 1000)),
             leeway: .milliseconds(500)
         )
         timer.setEventHandler { [weak self] in
@@ -960,9 +961,17 @@ final class GuardController {
             self.secureRecoveryPollIndex += 1
             self.checkForSecureInputEnd()
 
-            if self.isWaitingForSecureInputToEnd {
-                self.ensureSecureRecoveryTimer()
+            guard self.isWaitingForSecureInputToEnd else { return }
+            // Bounded: one pass through the backoff schedule (~66 s), never a
+            // standing 30 s poll for as long as Secure Input lasts.
+            if self.secureRecoveryPollIndex >= self.secureRecoveryDelays.count {
+                FileLogger.shared.log("Secure Input still active; stopped waiting. Select the input source again when needed.")
+                self.pendingExplicitSelection = nil
+                self.stopSecureRecoveryTimer()
+                self.onStateChange?()
+                return
             }
+            self.ensureSecureRecoveryTimer()
         }
 
         secureRecoveryTimer = timer
