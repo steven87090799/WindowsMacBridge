@@ -66,8 +66,11 @@ private final class TestInputSources: InputSourceProviding {
         fixture.sources.secure = true
         fixture.controller.request(.abc)              // explicit request while Secure Input is on
         #expect(fixture.sources.selections.isEmpty)
-        // Three 20 ms steps, each with the timer's 500 ms leeway: the schedule has run out.
-        try await Task.sleep(for: .milliseconds(2_500))
+        #expect(fixture.controller.isWaitingForSecureInputToEnd)
+        // Three 20 ms steps, each with the timer's 500 ms leeway; wait for the
+        // schedule to run out rather than guessing how long a loaded runner takes.
+        for _ in 0..<400 where fixture.controller.isWaitingForSecureInputToEnd { try await Task.sleep(for: .milliseconds(25)) }
+        #expect(!fixture.controller.isWaitingForSecureInputToEnd, "the wait must end after one pass")
         fixture.sources.secure = false
         try await Task.sleep(for: .milliseconds(300))
         // A standing poll would have selected ABC as soon as Secure Input ended.

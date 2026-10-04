@@ -58,7 +58,7 @@ final class GuardController {
 
     private var pendingInternalSourceID: String?
     private var pendingSelectionWasAutomatic = false
-    private var isWaitingForSecureInputToEnd = false
+    private(set) var isWaitingForSecureInputToEnd = false
     private var secureInputIsBlockingRecorded = false
     private var didReportRetryExhaustion = false
     private var startupRetryCount = 0

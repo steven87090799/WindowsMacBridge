@@ -95,7 +95,9 @@ private final class FakeHelper: NSObject, HIDHelperProtocol, NSXPCListenerDelega
     }
     @Test func helperInvalidatingDuringStopIsNotAReleaseUntilTheDeadline() async throws {
         let helper = FakeHelper(); defer { helper.shutdown() }
-        let liveness = FakeLiveness(); let client = client(helper, liveness, timeout: 0.5)
+        // Long enough that a slow runner cannot reach the deadline before the
+        // pending check below; the outcome is still decided by the deadline.
+        let liveness = FakeLiveness(); let client = client(helper, liveness, timeout: 3)
         try await owned(client, helper)
         client.releaseOwnership()
         try await eventually { helper.stopRequests > 0 }
