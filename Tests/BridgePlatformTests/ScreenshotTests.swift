@@ -11,6 +11,52 @@ struct ScreenshotShortcutTests {
         return try #require(CGEvent(keyboardEventSource: source, virtualKey: 1, keyDown: isDown))
     }
 
+    @Test func menuRecipientCanStartGlobalCaptureAndReleaseAfterTheMenuCloses() throws {
+        for (key, flags, behavior, kind): (UInt16, CGEventFlags, PrintScreenBehavior, ScreenshotKind) in [
+            (1, [.maskCommand, .maskShift], .snipping, .region),
+            (105, [], .snipping, .region),
+            (105, [], .fullScreenClipboard, .fullScreen),
+            (105, [.maskCommand], .snipping, .fullScreenSave)
+        ] {
+            var shortcut = ScreenshotShortcut(windowsKeyModifier: .command)
+            shortcut.printScreenBehavior = behavior
+            let down = try nativeEvent(isDown: true)
+            down.setIntegerValueField(.keyboardEventKeycode, value: Int64(key))
+            down.setIntegerValueField(.eventTargetUnixProcessID, value: 18)
+            down.flags = flags
+            #expect(shortcut.handle(type: .keyDown, event: down, foreground: 17, allowsCapture: true) == .capture)
+            #expect(shortcut.captureKind == kind)
+            down.setIntegerValueField(.keyboardEventAutorepeat, value: 1)
+            #expect(shortcut.handle(type: .keyDown, event: down, foreground: 17, allowsCapture: true) == .suppress)
+            let up = try nativeEvent(isDown: false)
+            up.setIntegerValueField(.keyboardEventKeycode, value: Int64(key))
+            up.setIntegerValueField(.eventTargetUnixProcessID, value: 0)
+            up.flags = []
+            #expect(shortcut.handle(type: .keyUp, event: up, foreground: 0, allowsCapture: false) == .suppress)
+            #expect(shortcut.handle(type: .keyUp, event: up, foreground: 0, allowsCapture: false) == .passThrough)
+        }
+    }
+
+    @Test func unownedOrProtectedScreenshotPressPassesThroughWithoutClaimingItsRelease() throws {
+        for (target, flags, allowed): (Int64, CGEventFlags, Bool) in [
+            (0, [.maskCommand, .maskShift], true),
+            (-1, [.maskCommand, .maskShift], true),
+            (18, [.maskCommand, .maskShift], false),
+            (18, [.maskAlternate], true) // Active-window PrintScreen requires foreground ownership.
+        ] {
+            var shortcut = ScreenshotShortcut(windowsKeyModifier: .command)
+            let down = try nativeEvent(isDown: true)
+            let key: Int64 = flags == [.maskAlternate] ? 105 : 1
+            down.setIntegerValueField(.keyboardEventKeycode, value: key)
+            down.setIntegerValueField(.eventTargetUnixProcessID, value: target)
+            down.flags = flags
+            #expect(shortcut.handle(type: .keyDown, event: down, foreground: 17, allowsCapture: allowed) == .passThrough)
+            let up = try nativeEvent(isDown: false)
+            up.setIntegerValueField(.keyboardEventKeycode, value: key)
+            #expect(shortcut.handle(type: .keyUp, event: up, foreground: 17, allowsCapture: true) == .passThrough)
+        }
+    }
+
     @Test func configuredPhysicalWindowsKeyDoesNotAcceptAltOrControl() throws {
         for selected in WindowsKeyModifier.allCases {
             var shortcut = ScreenshotShortcut(windowsKeyModifier: selected)

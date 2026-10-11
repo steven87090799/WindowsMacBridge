@@ -64,6 +64,23 @@ struct DestinationSemanticsTests {
         #expect(!DestinationSemanticPolicy.acceptsDelivery(target: 18, foreground: 17))
         #expect(!DestinationSemanticPolicy.acceptsDelivery(target: 17, foreground: 0))
     }
+    @Test func globalScreenshotsAcceptMenuRecipientsWithoutChangingAppSemantics() {
+        for kind: ScreenshotKind in [.region, .fullScreen, .fullScreenSave] {
+            #expect(DestinationSemanticPolicy.acceptsScreenshotDelivery(target: 18, foreground: 17, kind: kind))
+            #expect(DestinationSemanticPolicy.acceptsScreenshotDelivery(target: 17, foreground: 17, kind: kind))
+        }
+        #expect(!DestinationSemanticPolicy.acceptsDelivery(target: 18, foreground: 17))
+        #expect(!DestinationSemanticPolicy.acceptsScreenshotDelivery(target: 18, foreground: 17, kind: .activeWindow))
+        #expect(DestinationSemanticPolicy.acceptsScreenshotDelivery(target: 17, foreground: 17, kind: .activeWindow))
+    }
+    @Test func missingLocalDeliveryCannotCaptureTheUniversalControlSourceMac() {
+        for kind in ScreenshotKind.allCases {
+            for target: Int32 in [0, -1] {
+                #expect(!DestinationSemanticPolicy.acceptsScreenshotDelivery(target: target, foreground: 17, kind: kind))
+            }
+            #expect(!DestinationSemanticPolicy.acceptsScreenshotDelivery(target: 18, foreground: 0, kind: kind))
+        }
+    }
     @Test func missingRecipientCanOnlyContinueAnAlreadyOwnedNativeTabSession() {
         #expect(!DestinationSemanticPolicy.acceptsKeyDown(target: 0, foreground: 17, key: 8, nativeTabHeld: true))
         #expect(!DestinationSemanticPolicy.acceptsKeyDown(target: 0, foreground: 17, key: 48, nativeTabHeld: false))

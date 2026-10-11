@@ -24,6 +24,8 @@ TextEdit、Safari 各測 Ctrl+A/C/X/V/Z/Y/F/S/P、Ctrl+Tab、Ctrl+Shift+Tab、Ct
 
 Win+Shift+S／PrintScreen框選、Alt+PrintScreen當前窗口、Win+PrintScreen全屏存檔，完成後直接 Ctrl+V／Cmd+V。CmdShift3全屏、CmdShift4選區也複製；暫停或關閉功能後恢復系統原生行為。Esc取消保持原clipboard。框選尚未結束→Pause／換backend／鎖屏／切App／關功能再開，舊結果不得寫入。核准／撤銷 ScreenCapture 後結果不得顯示偽成功；磁碟／程序／解碼／編碼失敗各有錯誤。
 
+展開控制中心／選單列面板（包含螢幕共享面板），保持面板開啟，分別按 Win+Shift+S／PrintScreen；應可框選並貼上面板內容。全螢幕截圖也應可用，Alt+PrintScreen 仍只接受前景 App 的視窗。跨 Mac Universal Control 測試時，來源 Mac 不得因為沒有本機事件接收程序而啟動截圖。
+
 圖片預算覆蓋PNG／TIFF／PDF、PDF嵌圖與inline image，壓縮文件小不表示可無限解碼。記錄5K／4K多屏截圖時 **App＋screencapture＋WindowServer＋clipboard** 的峰值，分開 RSS 與 footprint；現有預算不是整體峰值保證。不要用自動化讀取使用者當前clipboard或屏幕作為測試素材。
 
 ## 5. 進階權限與Driver／安裝
