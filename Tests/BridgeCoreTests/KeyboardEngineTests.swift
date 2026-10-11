@@ -27,7 +27,7 @@ struct KeyboardEngineTests {
         }
     }
     @Test func testProtectedProfilesNeverTranslate() {
-        for mode in ApplicationMode.allCases where mode != .macOS {
+        for mode: ApplicationMode in [.remoteWindows, .virtualMachine, .game, .disabled] {
             var p = engine(mode); ctrlDown(&p)
             for key: UInt16 in [8, 7, 9, 0, 6, 15, 37, 13, 32, 40, 14, 48] {
                 #expect(p.process(.init(.down, keyCode: key, modifiers: .control)) == .passThrough)

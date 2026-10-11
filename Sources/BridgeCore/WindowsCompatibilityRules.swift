@@ -5,11 +5,17 @@ public enum WindowsCompatibilityRules {
                                            output: .init(keyCode: 13, modifiers: .command), action: .window(.close))
     public static let altF4Command = ShortcutRule(id: "windows.altF4", input: .init(keyCode: 118, modifiers: .command),
                                                   output: .init(keyCode: 13, modifiers: .command), action: .window(.close))
-    public static let general: [ShortcutRule] = [
+    public static let clipboard: [ShortcutRule] = [
         ShortcutRule(id: "windows.copy", input: .init(keyCode: 8, modifiers: [.control]), output: .init(keyCode: 8, modifiers: [.command])), // #13
         ShortcutRule(id: "windows.paste", input: .init(keyCode: 9, modifiers: [.control]), output: .init(keyCode: 9, modifiers: [.command])), // #14
         ShortcutRule(id: "windows.cut", input: .init(keyCode: 7, modifiers: [.control]), output: .init(keyCode: 7, modifiers: [.command])), // #15
         ShortcutRule(id: "windows.selectAll", input: .init(keyCode: 0, modifiers: [.control]), output: .init(keyCode: 0, modifiers: [.command])), // #16
+    ]
+    public static let terminalClipboard = clipboard + [
+        ShortcutRule(id: "terminal.interrupt", input: .init(keyCode: 8, modifiers: [.control, .shift]),
+                     output: .init(keyCode: 8, modifiers: [.control]))
+    ]
+    public static let general: [ShortcutRule] = clipboard + [
         ShortcutRule(id: "windows.undo", input: .init(keyCode: 6, modifiers: [.control]), output: .init(keyCode: 6, modifiers: [.command])), // #17
         ShortcutRule(id: "windows.redo", input: .init(keyCode: 16, modifiers: [.control]), output: .init(keyCode: 6, modifiers: [.command, .shift])), // #18
         ShortcutRule(id: "windows.save", input: .init(keyCode: 1, modifiers: [.control]), output: .init(keyCode: 1, modifiers: [.command])), // #19

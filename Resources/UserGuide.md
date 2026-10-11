@@ -1,10 +1,10 @@
-# WindowsMacBridge 0.6.0（build 47）
+# WindowsMacBridge 0.6.0（build 49）
 
 ## 安裝與使用
 
 1. 點兩下 DMG，先正常結束舊版，把 WindowsMacBridge.app 拖進「應用程式」取代，再開啟。
 2. 預設「一般模式」：權限頁逐項列出輔助功能、輸入監控、螢幕錄製與選用的登入時啟動。先核准前兩項；需要截圖再核准螢幕錄製。每次只按一列，核准 WindowsMacBridge 後回來重新檢查；需要時正常結束並重開 App。綠燈必須經本版 App 的原生檢查，不以舊版同名開關作為依據。
-3. 用 TextEdit 的測試文字試 Ctrl+A／C／V／Z。Terminal 的 Ctrl+C 保留中斷命令；IDE／Remote／VM／Game 依 App 規則保護。
+3. 本機 App、Terminal 與 IDE 都用 Ctrl+C／V／A／X 複製／貼上／全選／剪下。Terminal 用 Ctrl+Shift+C 中斷命令；其他 Unix Ctrl 操作保留。遠端 Windows 與 VM 保留 Ctrl 給 Windows 處理；Game、停用與暫停規則仍保持原按鍵。
 4. Win+Shift+S 或 PrintScreen 框選後直接貼上圖片；⌘⇧3／⌘⇧4 也直接複製，無需開縮圖。首次擷取可能要求螢幕錄製授權；這不是 HID／Root 授權。
 
 一般模式不自動安裝背景元件、不連線 root XPC、不捕捉 IOHID、不啟用 Driver。App 使用 ad-hoc 簽章，更新可能需要重新核准目前版本；沒有 Apple 公證。不要為此關閉 Gatekeeper／SIP 或重設其他 App 的權限。

@@ -93,9 +93,10 @@ struct DestinationSemanticsTests {
         target.configure(context: .init(processID: 17, bundleID: "com.apple.TextEdit", mode: .macOS), enabled: true, layoutSupported: true)
         target.reconcileNeutralHardware()
         _ = target.process(.init(.flagsChanged, keyCode: 59, modifiers: .control, modifierSide: .leftControl, modifierDown: true))
-        #expect(target.process(.init(.down, keyCode: 8, modifiers: .control)) == .rewrite(keyCode: 8, modifiers: .command, ruleID: "windows.copy"))
+        #expect(target.process(.init(.down, keyCode: 6, modifiers: .control)) == .rewrite(keyCode: 6, modifiers: .command, ruleID: "windows.undo"))
         target.invalidate(); target.reconcileNeutralHardware()
         target.configure(context: .init(processID: 18, bundleID: "com.apple.Terminal", mode: .terminal), enabled: true, layoutSupported: true)
-        #expect(target.process(.init(.down, keyCode: 8, modifiers: .control)) == .passThrough)
+        _ = target.process(.init(.flagsChanged, keyCode: 59, modifiers: .control, modifierSide: .leftControl, modifierDown: true))
+        #expect(target.process(.init(.down, keyCode: 6, modifiers: .control)) == .passThrough)
     }
 }

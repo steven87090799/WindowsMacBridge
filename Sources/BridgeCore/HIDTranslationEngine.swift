@@ -70,7 +70,7 @@ public struct HIDTranslationEngine: Sendable {
     public private(set) var faulted = false
     public private(set) var processed: UInt64 = 0, translated: UInt64 = 0
     public private(set) var lastRuleID: String?
-    public init() { _ = RuleEngine.windows; _ = RuleEngine.finder; _ = RuleEngine.browser; _ = RuleEngine.system; _ = HIDKeyMap.usage }
+    public init() { _ = RuleEngine.windows; _ = RuleEngine.clipboard; _ = RuleEngine.terminalClipboard; _ = RuleEngine.finder; _ = RuleEngine.browser; _ = RuleEngine.system; _ = HIDKeyMap.usage }
     public mutating func register(_ id: UInt64, builtIn isBuiltIn: Bool = false) -> Bool {
         if let i = devices.firstIndex(of: id) { return builtIn[i] == isBuiltIn }
         guard let i = devices.firstIndex(of: nil) else { return false }
@@ -145,7 +145,7 @@ public struct HIDTranslationEngine: Sendable {
             }
         }
     }
-    private var local: Bool { !transportOnly && context.mode == .macOS && layoutSupported && !manualPassThrough && !emergencyPaused }
+    private var local: Bool { !transportOnly && context.mode.allowsTranslation && layoutSupported && !manualPassThrough && !emergencyPaused }
     private func inputModifier(_ modifier: HIDModifier, slot: Int) -> HIDModifier {
         guard builtIn[slot] && macBookFnControlSwap && !manualPassThrough && !emergencyPaused else { return modifier }
         switch modifier {
@@ -194,6 +194,8 @@ public struct HIDTranslationEngine: Sendable {
         return result
     }
     private func match(key: UInt16, flags: Modifiers) -> ShortcutRule? {
+        if context.mode == .terminal { return RuleEngine.terminalClipboard.match(keyCode: key, modifiers: flags) }
+        if context.mode == .ide { return RuleEngine.clipboard.match(keyCode: key, modifiers: flags) }
         let system = windowsKeyModifier == .option ? RuleEngine.system : RuleEngine.systemCommand
         if let rule = system.match(keyCode: key, modifiers: flags) {
             if flags != windowsKeyModifier.flag { return rule }
@@ -293,7 +295,7 @@ public struct HIDTranslationEngine: Sendable {
         }
         var rule: ShortcutRule?
         if (local || transportOnly) && !waitingForNeutral, page == 7, Int(usage) < HIDKeyMap.carbon.count, let key = HIDKeyMap.carbon[Int(usage)] {
-            if local && actionsEnabled && screenshotEnabled, (key != 105 || usage == 0x46),
+            if local && context.mode == .macOS && actionsEnabled && screenshotEnabled, (key != 105 || usage == 0x46),
                let kind = WindowsScreenshotShortcuts.match(key: key, modifiers: flags,
                 windowsKey: windowsKeyModifier, printScreen: printScreenBehavior) {
                 press.trigger = flags; press.ownsModifiers = true; press.suppressed = true
@@ -306,7 +308,7 @@ public struct HIDTranslationEngine: Sendable {
             if rule?.action != nil && !actionsEnabled { rule = nil }
         }
         // Personal rule #77 is opt-in and retains its original Finder scope.
-        if local && finderEnabled && finderBrightnessEnterEnabled && context.bundleID == "com.apple.finder" &&
+        if local && context.mode == .macOS && finderEnabled && finderBrightnessEnterEnabled && context.bundleID == "com.apple.finder" &&
             !waitingForNeutral && page == 0x0c && usage == 0x6f {
             lastRuleID = "karabiner.77.brightness-enter"
             press.outputPage = 7; press.outputUsage = 0x28; translated &+= 1

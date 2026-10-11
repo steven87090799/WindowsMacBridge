@@ -1,6 +1,6 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 47）正式前整體強化版**，包含 build 46 輸入法守護修正（審查與修復紀錄：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）；[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與原始碼合併是不同階段。
+Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 49）候選版**，加入 Terminal／IDE 的 Windows 複製貼上快捷鍵與狀態欄面板截圖修正，並包含 build 46 輸入法守護修正（審查與修復紀錄：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）；[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與原始碼合併是不同階段。
 
 ## 一般模式與進階模式已分開
 
@@ -36,7 +36,8 @@ App使用ad-hoc簽章、尚無Apple公證；更新可能需要重新核准本版
 | MacBook Fn／左Ctrl | 關，明確開關只改本機builtIn鍵盤 |
 | Windows鍵位置 | Command，可選Option |
 | 唯音守護／Carbon切換熱鍵 | 各自關；守護開啟後維持本 App 明確選定的唯音／ABC，預設唯音 |
-| Terminal／IDE／Remote viewer／VM／Game | 依App profile保護Ctrl語意 |
+| Terminal／IDE | Ctrl+C／V／A／X 複製／貼上／全選／剪下；Terminal 用 Ctrl+Shift+C 中斷命令，其餘 Ctrl 操作保留 |
+| Remote viewer／VM／Game | 遠端 Windows／VM 保留 Ctrl 給 Windows 處理，Game 保持原按鍵 |
 | HID／VirtualHID／root runtime | 進階選配，默認關 |
 
 一般模式EventTap使用全部鍵盤，沒有可靠逐裝置ID。舊HID選擇不自動解鎖新進階模式，已有App規則、鍵位與明確功能選擇保留。Settings schema 6，損壞設置安全停用。

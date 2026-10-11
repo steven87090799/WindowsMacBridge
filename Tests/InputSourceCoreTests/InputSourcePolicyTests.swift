@@ -15,7 +15,8 @@ struct InputSourcePolicyTests {
     func localSourceSelectionDoesNotChangeShortcutPolicy(_ mode: ApplicationMode) {
         #expect(InputSourcePolicy.suspension(context: context(mode), isHostApp: false,
             paused: false, sessionActive: true) == nil)
-        #expect(mode.allowsTranslation == (mode == .macOS))
+        // Every local profile now translates clipboard chords; input-source policy is unchanged.
+        #expect(mode.allowsTranslation)
     }
     @Test func settingsCanSelectButPauseAndSessionSuspensionOverride() {
         let app = context(.disabled)

@@ -53,7 +53,7 @@ callback 不查 NSWorkspace、AX、JSON、檔案或網路；只讀已編譯 poli
 
 Remote／VM／Game／Disabled 與未支援來源直接交回原生實體 HID，避免破壞 Client 的獨占／指定裝置輸入。這時不在原生流攔截右 Option+P／緊急熱鍵，改用 Menu Bar；不同於原始 #1 的全情境攔截。返回本機需 neutral 後才接管。
 
-以下是有意保留的差異：Terminal/IDE 整個 HID passthrough，保護 Unix 和內嵌 terminal，原 JSON 只有一般 Ctrl rule 排除；manual passthrough 同時涵蓋 consumer，原 JSON 的 any:key_code 無法完整停用 consumer；Finder 未確認檔案焦點時不猜移動／改名。這些差異不能稱為原 Karabiner 行為逐位元等價。
+build 49 起，Terminal/IDE 的本機 HID 語意支援 Ctrl+C/V/A/X→Command+C/V/A/X，Terminal 額外支援 Ctrl+Shift+C→Ctrl+C 中斷；其餘 Unix/IDE Ctrl 操作保留。raw transport 仍只轉送原 Ctrl，由目的 Mac 套用前景 App 規則。manual passthrough 同時涵蓋 consumer，原 JSON 的 any:key_code 無法完整停用 consumer；Finder 未確認檔案焦點時不猜移動／改名。這些差異不能稱為原 Karabiner 行為逐位元等價。
 
 Context/PID/mode/layout/finder 或 restart 改變時先 invalidation；所有已輸出鍵/修飾鍵釋放，舊 physical holds suppress 至完全 neutral。模型的舊 hold 會 suppress；實際 Remote adapter 交回原生硬體，返回本機需 neutral，再接管，避免把旧的虛擬 Command 帶入 Remote。前景資料來自 user App 通知＋heartbeat，不是與 HID 原子同步；多媒體／fullscreen Client 特性仍需實測。
 

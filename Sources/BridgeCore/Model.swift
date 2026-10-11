@@ -68,15 +68,15 @@ public struct ModifierStateMachine: Sendable {
 
 public enum ApplicationMode: String, CaseIterable, Codable, Sendable {
     case macOS, terminal, remoteWindows, virtualMachine, game, ide, disabled
-    public var allowsTranslation: Bool { self == .macOS }
+    public var allowsTranslation: Bool { self == .macOS || self == .terminal || self == .ide }
     public var title: String {
         switch self {
         case .macOS: "Default macOS"
-        case .terminal: "Terminal — Pass-through"
+        case .terminal: "Terminal — Windows Clipboard"
         case .remoteWindows: "Remote Session — Pass-through"
         case .virtualMachine: "Virtual Machine — Pass-through"
         case .game: "Game — Pass-through"
-        case .ide: "IDE — Pass-through"
+        case .ide: "IDE — Windows Clipboard"
         case .disabled: "Disabled — Pass-through"
         }
     }
