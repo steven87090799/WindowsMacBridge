@@ -36,7 +36,7 @@ public struct KeyboardEventProcessor: Sendable {
     public private(set) var rules = RuleEngine.windows
     public var activePressCount: Int { pressCount }
     public var isAwaitingNeutral: Bool { awaitingNeutral }
-    public init() {}
+    public init() { _ = RuleEngine.clipboard; _ = RuleEngine.terminalClipboard }
 
     public mutating func configure(context newContext: ApplicationContext, enabled: Bool,
                                    layoutSupported: Bool, controlsEnabled: Bool = true,
@@ -216,6 +216,13 @@ public struct KeyboardEventProcessor: Sendable {
     }
 
     private func match(_ event: KeyboardEvent) -> ShortcutRule? {
+        // Share Windows clipboard chords in local apps without remapping other Unix/IDE controls.
+        if context.mode == .terminal {
+            return RuleEngine.terminalClipboard.match(keyCode: event.keyCode, modifiers: event.modifiers)
+        }
+        if context.mode == .ide {
+            return RuleEngine.clipboard.match(keyCode: event.keyCode, modifiers: event.modifiers)
+        }
         // Remote/VM/game protections precede every local action, not only Ctrl shortcuts.
         guard context.mode == .macOS else { return nil }
         if nativeAppSwitchEnabled && event.keyCode == 48 && event.modifiers.subtracting(.shift) == windowsKeyModifier.altFlag {

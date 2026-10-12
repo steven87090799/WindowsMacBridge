@@ -24,6 +24,8 @@ TextEdit、Safari 各測 Ctrl+A/C/X/V/Z/Y/F/S/P、Ctrl+Tab、Ctrl+Shift+Tab、Ct
 
 Win+Shift+S／PrintScreen框選、Alt+PrintScreen當前窗口、Win+PrintScreen全屏存檔，完成後直接 Ctrl+V／Cmd+V。CmdShift3全屏、CmdShift4選區也複製；暫停或關閉功能後恢復系統原生行為。Esc取消保持原clipboard。框選尚未結束→Pause／換backend／鎖屏／切App／關功能再開，舊結果不得寫入。核准／撤銷 ScreenCapture 後結果不得顯示偽成功；磁碟／程序／解碼／編碼失敗各有錯誤。
 
+展開控制中心／選單列面板（包含螢幕共享面板），保持面板開啟，分別按 Win+Shift+S／PrintScreen；應可框選並貼上面板內容。全螢幕截圖也應可用，Alt+PrintScreen 仍只接受前景 App 的視窗。跨 Mac Universal Control 測試時，來源 Mac 不得因為沒有本機事件接收程序而啟動截圖。
+
 圖片預算覆蓋PNG／TIFF／PDF、PDF嵌圖與inline image，壓縮文件小不表示可無限解碼。記錄5K／4K多屏截圖時 **App＋screencapture＋WindowServer＋clipboard** 的峰值，分開 RSS 與 footprint；現有預算不是整體峰值保證。不要用自動化讀取使用者當前clipboard或屏幕作為測試素材。
 
 ## 5. 進階權限與Driver／安裝
@@ -36,7 +38,7 @@ Win+Shift+S／PrintScreen框選、Alt+PrintScreen當前窗口、Win+PrintScreen�
 
 ## 7. 輸入法與App模式
 
-ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再測試複製。終端運行 `sleep 30` 後 Ctrl+C 應中斷，IDE內嵌Terminal同樣。手動App規則、快速切換、Pause應同步取消舊輸入法／AX／截圖任務。守護／切換熱鍵默認關閉；守護關閉時不修正系統輸入來源。
+ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再測試複製。在 TextEdit、Terminal、IDE 分別測左右 Ctrl+C／V／A／X 與原生 Command+C／V／A／X，確認複製、貼上、全選、剪下依 App 可用功能執行；先放開 Ctrl 再放開字母不得卡住修飾鍵。Terminal 運行 `sleep 30` 後 Ctrl+C 應維持複製用途，Ctrl+Shift+C 應中斷。IDE 內嵌 Terminal 另測其原生中斷操作。遠端 Windows／VM 的 Ctrl+C／V 保持原 Ctrl，兩種後端各自驗收。手動App規則、快速切換、Pause應同步取消舊輸入法／AX／截圖任務。守護／切換熱鍵默認關閉；守護關閉時不修正系統輸入來源。
 
 守護開啟後預設維持唯音繁體。用系統選單切成 ABC，應在設定延遲後回到唯音；切換本機 App、喚醒或重新啟動後仍應回到守護目標。用本 App 的 ABC 按鈕或唯音／ABC 快捷鍵選英文，應維持 ABC，並在重新啟動後保留此明確目標；本 App 選回唯音後，系統切英文應再次被修正。舊版記錄的「保留來源」不能當作明確英文選擇。
 

@@ -64,6 +64,23 @@ struct DestinationSemanticsTests {
         #expect(!DestinationSemanticPolicy.acceptsDelivery(target: 18, foreground: 17))
         #expect(!DestinationSemanticPolicy.acceptsDelivery(target: 17, foreground: 0))
     }
+    @Test func globalScreenshotsAcceptMenuRecipientsWithoutChangingAppSemantics() {
+        for kind: ScreenshotKind in [.region, .fullScreen, .fullScreenSave] {
+            #expect(DestinationSemanticPolicy.acceptsScreenshotDelivery(target: 18, foreground: 17, kind: kind))
+            #expect(DestinationSemanticPolicy.acceptsScreenshotDelivery(target: 17, foreground: 17, kind: kind))
+        }
+        #expect(!DestinationSemanticPolicy.acceptsDelivery(target: 18, foreground: 17))
+        #expect(!DestinationSemanticPolicy.acceptsScreenshotDelivery(target: 18, foreground: 17, kind: .activeWindow))
+        #expect(DestinationSemanticPolicy.acceptsScreenshotDelivery(target: 17, foreground: 17, kind: .activeWindow))
+    }
+    @Test func missingLocalDeliveryCannotCaptureTheUniversalControlSourceMac() {
+        for kind in ScreenshotKind.allCases {
+            for target: Int32 in [0, -1] {
+                #expect(!DestinationSemanticPolicy.acceptsScreenshotDelivery(target: target, foreground: 17, kind: kind))
+            }
+            #expect(!DestinationSemanticPolicy.acceptsScreenshotDelivery(target: 18, foreground: 0, kind: kind))
+        }
+    }
     @Test func missingRecipientCanOnlyContinueAnAlreadyOwnedNativeTabSession() {
         #expect(!DestinationSemanticPolicy.acceptsKeyDown(target: 0, foreground: 17, key: 8, nativeTabHeld: true))
         #expect(!DestinationSemanticPolicy.acceptsKeyDown(target: 0, foreground: 17, key: 48, nativeTabHeld: false))
@@ -76,9 +93,10 @@ struct DestinationSemanticsTests {
         target.configure(context: .init(processID: 17, bundleID: "com.apple.TextEdit", mode: .macOS), enabled: true, layoutSupported: true)
         target.reconcileNeutralHardware()
         _ = target.process(.init(.flagsChanged, keyCode: 59, modifiers: .control, modifierSide: .leftControl, modifierDown: true))
-        #expect(target.process(.init(.down, keyCode: 8, modifiers: .control)) == .rewrite(keyCode: 8, modifiers: .command, ruleID: "windows.copy"))
+        #expect(target.process(.init(.down, keyCode: 6, modifiers: .control)) == .rewrite(keyCode: 6, modifiers: .command, ruleID: "windows.undo"))
         target.invalidate(); target.reconcileNeutralHardware()
         target.configure(context: .init(processID: 18, bundleID: "com.apple.Terminal", mode: .terminal), enabled: true, layoutSupported: true)
-        #expect(target.process(.init(.down, keyCode: 8, modifiers: .control)) == .passThrough)
+        _ = target.process(.init(.flagsChanged, keyCode: 59, modifiers: .control, modifierSide: .leftControl, modifierDown: true))
+        #expect(target.process(.init(.down, keyCode: 6, modifiers: .control)) == .passThrough)
     }
 }

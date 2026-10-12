@@ -176,7 +176,7 @@ struct SettingsView: View {
                     .font(.headline)
                 if controller.status.fault != nil { Button("重新啟動引擎") { controller.resume() } }
                 Toggle("Windows 核心快捷鍵", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
-                explanation("複製、貼上、復原、全選、儲存、瀏覽器分頁與原生 Alt+Tab。Terminal、IDE、遠端視窗及遊戲保留各自的按鍵語意。")
+                explanation("複製、貼上、復原、全選、儲存、瀏覽器分頁與原生 Alt+Tab。Terminal 與 IDE 也使用 Ctrl+C／V／A／X；遠端 Windows 與虛擬機保留 Ctrl 給 Windows 處理。")
                 Toggle("MacBook 鍵盤模式（交換內建 Fn／地球鍵與左 Ctrl）", isOn: Binding(
                     get: { controller.settings.macBookFnControlSwap }, set: { controller.setMacBookFnControlSwap($0) }))
                 if controller.settings.macBookFnControlSwap {
@@ -345,7 +345,7 @@ struct SettingsView: View {
     private var profiles: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("App 規則").font(.title2)
-            explanation("規則依 App 的 bundle ID 套用到整個 App。Codex 新安裝預設 Default macOS，適合聊天與文字輸入；若使用內建終端機，改成 IDE 或移除規則，避免 Ctrl+C 被當成複製。")
+            explanation("規則依 App 的 bundle ID 套用到整個 App。本機 macOS、Terminal 與 IDE 都支援 Ctrl+C／V／A／X；Terminal 使用 Ctrl+Shift+C 中斷命令，其餘 Unix Ctrl 操作保留。")
             if let app = controller.targetApp {
                 HStack {
                     VStack(alignment: .leading) {
@@ -394,8 +394,8 @@ struct SettingsView: View {
     private func profileExplanation(_ mode: ApplicationMode) -> String {
         switch mode {
         case .macOS: "本機翻譯：將 Windows 快捷鍵轉為 macOS 操作；手動指定會覆寫此 App 原本的 Terminal／IDE 等保護。"
-        case .terminal: "保留 Unix 的 Ctrl+C／D／Z 等操作。HID 整個鍵盤原樣通過；EventTap 保留 Ctrl 與文字快捷鍵，仍提供部分本機系統動作。"
-        case .ide: "保留編輯器、除錯器與內嵌 Terminal 的原生 Ctrl 操作；若只用聊天／文字且需要 Ctrl+C／V，可改為 Default macOS。"
+        case .terminal: "Ctrl+C／V／A／X 對應複製／貼上／全選／剪下；Ctrl+Shift+C 中斷命令。其餘 Unix Ctrl 操作保留。"
+        case .ide: "Ctrl+C／V／A／X 對應複製／貼上／全選／剪下；其餘編輯器、除錯器與內嵌 Terminal 的 Ctrl 操作保留。"
         case .remoteWindows: "讓遠端 Client 收到原按鍵，停止本機翻譯、系統動作與輸入法守護。Windows 或 Mac 目標都適用；本 App 無法從 Client 的前景程序判斷連線目標，也不替 Client 設定轉送。"
         case .virtualMachine: "讓 VM 接收原按鍵，停止本機翻譯與輸入法切換；VM 是否捕捉 Alt+Tab 由虛擬機軟體控制。"
         case .game: "讓遊戲接收原按鍵，停止本機翻譯及輸入法切換，避免改動遊戲控制。"

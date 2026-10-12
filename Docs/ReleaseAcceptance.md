@@ -15,7 +15,7 @@ Core 規則與 down/up、repeat、左右 Ctrl、modifier 不一致、釋放 Ctrl
 1. 固定 `.app` 路徑，初次未授權 CPU、授權／撤權、啟用與停用。
 2. ABC／U.S.：TextEdit、Safari、Finder Copy/Paste；原生 Command 與 Ctrl-click。
 3. Ctrl+Y 在 NSTextView、WebKit、Electron 的 Redo；若不成立，停用該 App rule，不能任意增加注入。
-4. Terminal/iTerm/Ghostty Ctrl+C/D/Z/R/L/W/U/K/A/E；IDE integrated terminal 全程通行。
+4. Terminal/iTerm/Ghostty 與 IDE 測 Ctrl+C/V/A/X 的複製／貼上／全選／剪下；Terminal 用 Ctrl+Shift+C 中斷。Ctrl+D/Z/R/L/W/U/K/E 保留；IDE integrated terminal 另測原生中斷操作。
 5. 左右 Ctrl/Shift 同時按下、Ctrl 提早放開、repeat、快速交錯、啟動時 modifier 已按住。
 6. Ctrl 按住切換 App、Remote 全螢幕、Remote 回本機、至少兩台鍵盤、Bluetooth 斷線。
 7. 中文輸入法、Caps Lock 切換、ANSI/ISO、非 US 配置必須原樣通過。

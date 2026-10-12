@@ -231,8 +231,9 @@ struct HIDTranslationTests {
         for mode: ApplicationMode in [.terminal,.remoteWindows,.virtualMachine,.game,.ide,.disabled] {
             var e = engine(mode)
             _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)
-            _ = e.observe(device: 1, page: 7, usage: 6, down: true)
-            let out = output(&e); #expect(out.modifiers == 1); #expect(!out.fn); #expect(out.keys[0] == 6)
+            // Ctrl+Z stays native in Terminal/IDE; their clipboard chords are translated.
+            _ = e.observe(device: 1, page: 7, usage: 29, down: true)
+            let out = output(&e); #expect(out.modifiers == 1); #expect(!out.fn); #expect(out.keys[0] == 29)
             _ = e.observe(device: 1, page: 0x0c, usage: 0x6f, down: true)
             #expect(output(&e).consumerCount == 1)
         }

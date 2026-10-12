@@ -556,9 +556,6 @@ public struct ScreenshotStatus: Equatable, Sendable {
         let scope = BackendCapabilities.eventTap.supports(runtimePolicy?.input.deviceScope ?? .allKeyboards, preferences: physicalPreferences)
         let allowed = enabled && captureAllowed && trusted && scope && !awaitingNeutral && !IsSecureEventInputEnabled()
         let flags = InputEngine.modifiers(event.flags)
-        let localDelivery = DestinationSemanticPolicy.acceptsDelivery(
-            target: Int32(truncatingIfNeeded: event.getIntegerValueField(.eventTargetUnixProcessID)),
-            foreground: runtimePolicy?.input.foreground.processID ?? 0)
         if let index = nativeHeld.firstIndex(where: { $0?.0 == key && $0?.1 == evidence.processID }) {
             if type == .keyUp {
                 nativeHeld[index] = nil
@@ -568,7 +565,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
             }
             return nil // Only consume our own paired release/repeat.
         }
-        guard type == .keyDown, allowed, localDelivery,
+        guard type == .keyDown, allowed,
               event.getIntegerValueField(.keyboardEventAutorepeat) == 0 else { return Unmanaged.passUnretained(event) }
         let kind: ScreenshotKind?
         if (key == 20 || key == 21) && flags == [.command, .shift] {
@@ -577,7 +574,10 @@ public struct ScreenshotStatus: Equatable, Sendable {
             kind = WindowsScreenshotShortcuts.match(key: key, modifiers: flags,
                 windowsKey: shortcut.windowsKeyModifier, printScreen: shortcut.printScreenBehavior)
         } else { kind = nil } // Windows chords have their own paired shortcut ledger.
-        guard let kind, let index = nativeHeld.firstIndex(where: { $0 == nil }) else { return Unmanaged.passUnretained(event) }
+        guard let kind, DestinationSemanticPolicy.acceptsScreenshotDelivery(
+            target: Int32(truncatingIfNeeded: event.getIntegerValueField(.eventTargetUnixProcessID)),
+            foreground: runtimePolicy?.input.foreground.processID ?? 0, kind: kind),
+            let index = nativeHeld.firstIndex(where: { $0 == nil }) else { return Unmanaged.passUnretained(event) }
         nativeHeld[index] = (key, evidence.processID)
         if let token = capture.begin() {
             sourceJob = nil; nativeFileJob = false
@@ -634,11 +634,10 @@ public struct ScreenshotStatus: Equatable, Sendable {
             activeJob?.noteUserCancellation()
         }
         guard ScreenshotShortcut.supports(key) else { return Unmanaged.passUnretained(event) }
-        let localDelivery = DestinationSemanticPolicy.acceptsDelivery(
-            target: Int32(truncatingIfNeeded: event.getIntegerValueField(.eventTargetUnixProcessID)),
-            foreground: runtimePolicy?.input.foreground.processID ?? 0)
-        let physicalAllowed = localDelivery && BackendCapabilities.eventTap.supports(runtimePolicy?.input.deviceScope ?? .allKeyboards, preferences: physicalPreferences)
-        let decision = shortcut.handle(type: type, event: event, allowsCapture: captureAllowed && physicalAllowed && !awaitingNeutral)
+        let physicalAllowed = BackendCapabilities.eventTap.supports(runtimePolicy?.input.deviceScope ?? .allKeyboards, preferences: physicalPreferences)
+        let decision = shortcut.handle(type: type, event: event,
+            foreground: runtimePolicy?.input.foreground.processID ?? 0,
+            allowsCapture: captureAllowed && physicalAllowed && !awaitingNeutral)
         switch decision {
         case .passThrough: return Unmanaged.passUnretained(event)
         case .suppress: return nil

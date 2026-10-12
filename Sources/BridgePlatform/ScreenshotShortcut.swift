@@ -17,6 +17,23 @@ public struct ScreenshotShortcut: Sendable {
     public mutating func reset() { pressed = 0 }
     public static func supports(_ key: UInt16) -> Bool { key == keyCode || key == 105 }
 
+    /// Validate annotated local delivery before claiming a new screenshot press.
+    /// Releases remain paired even after the menu closes or modifiers change.
+    mutating func handle(type: CGEventType, event: CGEvent, foreground: Int32,
+                         allowsCapture: Bool) -> ScreenshotDecision {
+        var allowed = allowsCapture
+        if type == .keyDown {
+            let kind = WindowsScreenshotShortcuts.match(
+                key: UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode)),
+                modifiers: InputEngine.modifiers(event.flags),
+                windowsKey: windowsKeyModifier, printScreen: printScreenBehavior)
+            allowed = allowed && kind.map { DestinationSemanticPolicy.acceptsScreenshotDelivery(
+                target: Int32(truncatingIfNeeded: event.getIntegerValueField(.eventTargetUnixProcessID)),
+                foreground: foreground, kind: $0) } == true
+        }
+        return handle(type: type, event: event, allowsCapture: allowed)
+    }
+
     /// The same native event adapter used by the screenshot tap and regression tests.
     public mutating func handle(type: CGEventType, event: CGEvent, allowsCapture: Bool = true) -> ScreenshotDecision {
         // Check provenance before touching the held-key ledger, including key-up.

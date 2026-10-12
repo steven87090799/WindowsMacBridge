@@ -33,6 +33,8 @@ public struct RuleEngine: Sendable {
         return index == 0 ? nil : rules[Int(index) - 1]
     }
     public static let windows = try! RuleEngine(rules: WindowsCompatibilityRules.general)
+    public static let clipboard = try! RuleEngine(rules: WindowsCompatibilityRules.clipboard)
+    public static let terminalClipboard = try! RuleEngine(rules: WindowsCompatibilityRules.terminalClipboard)
     public static let browser = try! RuleEngine(rules: WindowsCompatibilityRules.browser)
     public static let browserCommandAlt = try! RuleEngine(rules: WindowsCompatibilityRules.browserCommandAlt)
     public static let finder = try! RuleEngine(rules: WindowsCompatibilityRules.finder)
