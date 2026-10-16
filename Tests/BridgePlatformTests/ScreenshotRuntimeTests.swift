@@ -112,7 +112,10 @@ private final class CaptureJobFixture: ScreenshotCaptureJob, @unchecked Sendable
     }
 }
 
-@MainActor struct ScreenshotProcessingRegressionTests {
+// These fixtures deliberately block a detached decoder until the main actor
+// releases it. Concurrent fixtures can exhaust Swift 6.1's cooperative pool on
+// small CI hosts; each test still exercises its own single-flight interleavings.
+@Suite(.serialized) @MainActor struct ScreenshotProcessingRegressionTests {
     @Test func completedCaptureProducesPasteableImageWithoutOpeningTheFile() async throws {
         let driver = CaptureDriverFixture()
         let board = NSPasteboard(name: .init("BridgeAutomaticCopy-\(UUID().uuidString)"))

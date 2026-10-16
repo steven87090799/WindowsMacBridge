@@ -98,18 +98,18 @@ time.sleep(30)
 import json, os, time
 pid = os.fork()
 if pid == 0:
-    time.sleep(4)
+    time.sleep(60)
     os._exit(0)
 with open(__file__ + '.child', 'w') as output: output.write(str(pid))
 print(json.dumps({'text':'completed'}), flush=True)
 """)
         defer { fixture.remove() }
-        let start = ProcessInfo.processInfo.systemUptime
         let result = await IsolatedScreenshotTextRecognizer(executable: fixture.executable).recognize(png: Data([1]))
         let marker = URL(fileURLWithPath: fixture.executable.path + ".child")
-        if let text = try? String(contentsOf: marker, encoding: .utf8), let child = Int32(text) { _ = kill(child, SIGTERM) }
+        let child = try #require(Int32(String(contentsOf: marker, encoding: .utf8)))
+        defer { _ = kill(child, SIGTERM) }
         #expect(result == .success("completed"))
-        #expect(ProcessInfo.processInfo.systemUptime - start < 3)
+        #expect(kill(child, 0) == 0, "completion must arrive while the descendant still holds stdout open")
     }
 
 }
