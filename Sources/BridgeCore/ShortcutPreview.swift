@@ -135,10 +135,16 @@ public enum ShortcutPreview {
     }
 
     public static let selectableKeys: [UInt16] = {
-        Array(Set((WindowsCompatibilityRules.general + WindowsCompatibilityRules.browser +
-            WindowsCompatibilityRules.finder + WindowsCompatibilityRules.finderExtras +
-            WindowsCompatibilityRules.system + WindowsCompatibilityRules.systemExtras +
-            WindowsCompatibilityRules.textNavigation).map(\.input.keyCode) + [48, 105, 118])).sorted()
+        // Keep inference bounded on Swift 6.1 as well as newer toolchains.
+        let groups: [[ShortcutRule]] = [WindowsCompatibilityRules.general, WindowsCompatibilityRules.browser,
+            WindowsCompatibilityRules.finder, WindowsCompatibilityRules.finderExtras,
+            WindowsCompatibilityRules.system, WindowsCompatibilityRules.systemExtras,
+            WindowsCompatibilityRules.textNavigation]
+        var keys: Set<UInt16> = [48, 105, 118]
+        for group in groups {
+            for rule in group { keys.insert(rule.input.keyCode) }
+        }
+        return keys.sorted()
     }()
 
     public static func label(_ chord: Shortcut) -> String {
