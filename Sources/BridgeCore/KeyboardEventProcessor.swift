@@ -216,15 +216,13 @@ public struct KeyboardEventProcessor: Sendable {
     }
 
     private func match(_ event: KeyboardEvent) -> ShortcutRule? {
-        // Share Windows clipboard chords in local apps without remapping other Unix/IDE controls.
-        if context.mode == .terminal {
-            return RuleEngine.terminalClipboard.match(keyCode: event.keyCode, modifiers: event.modifiers)
-        }
-        if context.mode == .ide {
-            return RuleEngine.clipboard.match(keyCode: event.keyCode, modifiers: event.modifiers)
+        // Terminal shares the full local Windows rules; keep its explicit interrupt chord.
+        if context.mode == .terminal,
+           let terminal = RuleEngine.terminalClipboard.match(keyCode: event.keyCode, modifiers: event.modifiers) {
+            return terminal
         }
         // Remote/VM/game protections precede every local action, not only Ctrl shortcuts.
-        guard context.mode == .macOS else { return nil }
+        guard context.mode.allowsTranslation else { return nil }
         if nativeAppSwitchEnabled && event.keyCode == 48 && event.modifiers.subtracting(.shift) == windowsKeyModifier.altFlag {
             return ShortcutRule(id: "windows.nativeAppSwitch", input: .init(keyCode: 48, modifiers: event.modifiers),
                                 output: .init(keyCode: 48, modifiers: Modifiers.command.union(event.modifiers.intersection(.shift))))
@@ -279,7 +277,8 @@ public struct KeyboardEventProcessor: Sendable {
             return localRule(event)
         }
         let browserRules = windowsKeyModifier == .option ? RuleEngine.browserCommandAlt : RuleEngine.browser
-        if context.isBrowser, let browser = browserRules.match(keyCode: event.keyCode, modifiers: event.modifiers) {
+        if context.isBrowser || context.mode == .terminal || context.mode == .ide,
+           let browser = browserRules.match(keyCode: event.keyCode, modifiers: event.modifiers) {
             return browser
         }
         return localRule(event)

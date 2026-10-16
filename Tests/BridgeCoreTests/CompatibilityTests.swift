@@ -80,7 +80,7 @@ struct CompatibilityTests {
         for mode in ApplicationMode.allCases {
             var p = processor(mode: mode, windowsKeyModifier: .option); pressModifiers(.option, &p)
             let result = p.process(.init(.down, keyCode: 14, modifiers: .option))
-            if mode == .macOS {
+            if [.macOS, .terminal, .ide].contains(mode) {
                 #expect(result == .action(.system(.openFinder), ruleID: "karabiner.12"))
             } else { #expect(result == .passThrough) }
         }

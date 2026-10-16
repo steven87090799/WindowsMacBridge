@@ -1,0 +1,1517 @@
+{
+  "date": "2026-10-16",
+  "scope": "Local build52 validation before commit; CI results belong to the subsequently uploaded PR head. Local logs and settings backups are not published.",
+  "audited_base_commit": "949fc1f4d005b84f969d98e12e4a37249bd147f8",
+  "candidate_source_state": "modified",
+  "source_counts": {
+    "files": 282,
+    "identical_to_audited_main": 214,
+    "changed_tracked": 42,
+    "added": 26
+  },
+  "tests": {
+    "debug-final.log": {
+      "passed": 478,
+      "target_runs": [
+        42,
+        2,
+        14,
+        40,
+        211,
+        168,
+        1
+      ],
+      "memory_regression_separate_process": true
+    },
+    "release-final.log": {
+      "passed": 478,
+      "target_runs": [
+        42,
+        2,
+        14,
+        40,
+        211,
+        168,
+        1
+      ],
+      "memory_regression_separate_process": true
+    }
+  },
+  "prior_python_validation": {
+    "source": "build/feature-review-20261016/final-verification.json",
+    "installer_passed": 62,
+    "monitoring_passed": 6,
+    "rerun_this_followup": false,
+    "unchanged_input_hashes_verified": 25
+  },
+  "source_files": [
+    {
+      "path": ".github/workflows/macos.yml",
+      "sha256": "e4116c27e4283550ae7b2c5c96e4f7016c639a4a0b884fddf79627604eab588d",
+      "bytes": 2981
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "a33f8d612bcc782fd7631ee6a1c079b77043fb7e61b5091e90b0fa4ccf886d57",
+      "bytes": 182
+    },
+    {
+      "path": "Docs/Architecture.md",
+      "sha256": "81daa1ce1a3abc98d40f3090ea873159b74c8fa6a8434630c016e65eb5d1ff67",
+      "bytes": 4654
+    },
+    {
+      "path": "Docs/ComplexityHandoff-2026-10-02.md",
+      "sha256": "19b315018f7d40929c6ef573932da04d7bdcbc0434d1c1a362b1ec6a247ce468",
+      "bytes": 7594
+    },
+    {
+      "path": "Docs/ConsistencyRepair-2026-10-02.md",
+      "sha256": "0f62af2eba1c6b1247eeff2933b0ebd8475d36110a289b7dc3ee30fc6819e839",
+      "bytes": 27460
+    },
+    {
+      "path": "Docs/DualModeReview-2026-10-03.md",
+      "sha256": "a303d85e3083e58a21d28b50a4ea6119c28f978c132668fe8d0e02ea7c9e6a5b",
+      "bytes": 7463
+    },
+    {
+      "path": "Docs/FinalProductionReview-2026-10-03.md",
+      "sha256": "2a02d91571de46512c94d9d182df83fd0df9a7f081db8f21ef837d48dbb05740",
+      "bytes": 46653
+    },
+    {
+      "path": "Docs/FourAreaRepair-2026-10-02.md",
+      "sha256": "9e9581cd22fe1a7b73f8ff58899f2300fae92230a7c5f2abdc6c6a8ab3566476",
+      "bytes": 7656
+    },
+    {
+      "path": "Docs/HIDIntegration.md",
+      "sha256": "1e02be77efa03513c65e316afdbc61f9c6d035af326540e664e611f3bb2293b0",
+      "bytes": 10660
+    },
+    {
+      "path": "Docs/KarabinerReplacement.md",
+      "sha256": "950270fd44c4a9a85256148222f51fc87a3466b4c97d2ad068f5a03a9615a6a3",
+      "bytes": 7640
+    },
+    {
+      "path": "Docs/NativeAcceptance-2026-10-03.md",
+      "sha256": "9e621434f82080fa77f61df66c63562b5bd60fd1785996d6cdb588d9c5824c88",
+      "bytes": 4862
+    },
+    {
+      "path": "Docs/OneClickSetupRepair-2026-10-02.md",
+      "sha256": "53110d12584e68b0721df06393abc18e54a8e81a55dc679596431c3bfc6c8142",
+      "bytes": 3985
+    },
+    {
+      "path": "Docs/PermissionOnboarding-2026-10-02.md",
+      "sha256": "eb44eb3a5392e9edc09aecfc2e68f0d0e273c5df28f90348a9a916832708e6e4",
+      "bytes": 4215
+    },
+    {
+      "path": "Docs/PermissionsRepair-2026-10-02.md",
+      "sha256": "a13c46912d5536376ae5fa2b0a9a49fd434389b9a2b56b324cb8786ea1505b40",
+      "bytes": 3179
+    },
+    {
+      "path": "Docs/PreReleaseRepair-2026-09-30.md",
+      "sha256": "8d8ccba7a29879d2f54fb76b43650ca565cf1cbdb59726b71d52550bb106e4d4",
+      "bytes": 36894
+    },
+    {
+      "path": "Docs/ProjectIntegration.md",
+      "sha256": "0f722f256622bc80685844175f1eb4991067ed43db827b60343bf1f9552b0858",
+      "bytes": 7161
+    },
+    {
+      "path": "Docs/ReleaseAcceptance.md",
+      "sha256": "63a3c4433c8002f98d755fb7102b7e1d35f62fb441acb29fd5a547e30226a516",
+      "bytes": 5019
+    },
+    {
+      "path": "Docs/ReleaseNotes-0.4.3-preview.1.md",
+      "sha256": "bf4bd48144defb33b8ee0ec5122b5c1d5abf13e74543a18883b3f1051547320f",
+      "bytes": 996
+    },
+    {
+      "path": "Docs/ReleaseReadiness-2026-09-28.md",
+      "sha256": "63081b0dfb00f33c0d44662dacc16b1953d435b83927f6bd490fe7268a148774",
+      "bytes": 10007
+    },
+    {
+      "path": "Docs/ReviewerAudit-2026-10-02.md",
+      "sha256": "b2652cef7d402e2a1a1f26398ae987081a0894c6582302b069e83e4dd79666ec",
+      "bytes": 11870
+    },
+    {
+      "path": "Docs/SafetyAndUsabilityReview.md",
+      "sha256": "35abfe41e505d35f0ccc1f0951aeec41839a77650d2a07daa82cb7e282818058",
+      "bytes": 10280
+    },
+    {
+      "path": "Docs/SimplePermissions-2026-10-02.md",
+      "sha256": "f3da1f6009d2f16fbe89c35dab204372f7a17042bf5df35dd4d559b28e91adbe",
+      "bytes": 6367
+    },
+    {
+      "path": "Docs/SingleAppInstall-2026-10-02.md",
+      "sha256": "93b9ce5ea5d4a75769276ec6a2a0ca06fc4e867d599546a35eeee47fba756865",
+      "bytes": 3161
+    },
+    {
+      "path": "Docs/UnifiedInput-2026-10-01.md",
+      "sha256": "a00eb26707ae1360f5c367c6e3f4bf4fc7b36537aa265cf74cf07d0fd98e806d",
+      "bytes": 41743
+    },
+    {
+      "path": "Docs/Validation.md",
+      "sha256": "5b74d669b5f6df75acef25d7b723f78795e00f718ffec08e8acb577829280cf4",
+      "bytes": 30955
+    },
+    {
+      "path": "Docs/macOS27-UIInvestigation.md",
+      "sha256": "66764f255e4b88b605503fe124baa498afc71cafa9a0f507386f6eeec7e27f26",
+      "bytes": 4876
+    },
+    {
+      "path": "Extensions/FinderSync/Entitlements.plist",
+      "sha256": "dc540d332e8a6e8e3126300099b4b51cbcb3d886ab6e4c8f12b037075b130e0c",
+      "bytes": 239
+    },
+    {
+      "path": "Extensions/FinderSync/FinderSync.swift",
+      "sha256": "9ab610950bdbda0fef3816a85d71f514f49506fa0f8ba650c30b8546cb9b3eec",
+      "bytes": 4299
+    },
+    {
+      "path": "Extensions/FinderSync/Info.plist",
+      "sha256": "5b6f09eb468c6405ac62304849694588a1fc8a60e72421efe79492477663e581",
+      "bytes": 1199
+    },
+    {
+      "path": "Package.swift",
+      "sha256": "a405feebcd26b7ad92dee2774428a3dff5c87ad9e45586cce5cae8d879782078",
+      "bytes": 3336
+    },
+    {
+      "path": "README.md",
+      "sha256": "62473ec73938a708d20ae79f30c9611ae8ac71f6407eb8b06f8794ddecd572fe",
+      "bytes": 8544
+    },
+    {
+      "path": "Resources/AcceptanceGuide.md",
+      "sha256": "ac27ae2ddfa6d39c9a66903d87ba9347c781b10725577617fb960d29e8b1b70a",
+      "bytes": 9335
+    },
+    {
+      "path": "Resources/AppEntitlements.plist",
+      "sha256": "3a42773d833db52c8a6113f2ea83cd6e97ed6ffbdd4ecb8f10d506868a037626",
+      "bytes": 186
+    },
+    {
+      "path": "Resources/Brand/AppIcon.icns",
+      "sha256": "d37b83d6b2d9b173d9c72203ac891c83e86ba77085b7d175fdea6f31e8a21a88",
+      "bytes": 123524
+    },
+    {
+      "path": "Resources/Brand/AppIcon.png",
+      "sha256": "877bde5920a4b519e95b557497b20fbf95199fe39dcaa007521bba15655b5bba",
+      "bytes": 54110
+    },
+    {
+      "path": "Resources/Brand/MenuBarIcon.png",
+      "sha256": "ed25f8513e86ccb9cb4a2282efbf8c3860a01f3b05c7eea1303d82d5272423eb",
+      "bytes": 739
+    },
+    {
+      "path": "Resources/Brand/MenuBarPausedIcon.png",
+      "sha256": "cfe14050bbf2c16d6abe918c5c7e1b7f08ad1d07eb840df4cf4c61ae666fc2e4",
+      "bytes": 500
+    },
+    {
+      "path": "Resources/Brand/README.md",
+      "sha256": "29e9c8156e65f73b0d0d3f115b220640017446118b8792880e6ba34a8709814c",
+      "bytes": 791
+    },
+    {
+      "path": "Resources/DragInstall.txt",
+      "sha256": "b2785fb9f6a8a080bb55df4d950c6fcccc6d195397e1109e14b395c4422e70b6",
+      "bytes": 1184
+    },
+    {
+      "path": "Resources/Info.plist",
+      "sha256": "2f03d51e7843909404b78817dc440a26962eb7d3c3a5f10108401c9d4c0a1770",
+      "bytes": 1044
+    },
+    {
+      "path": "Resources/Installer/ActivateDriver.command",
+      "sha256": "1734b75cb3f9b61188a98469d8ee16c103c3cd659fae090f17508fad43a2b64e",
+      "bytes": 385
+    },
+    {
+      "path": "Resources/Installer/AppProcess.sh",
+      "sha256": "08904bf4856f26c4ff568b7c67c8713cd686ae8d3246991f825217a9d2d09bc1",
+      "bytes": 674
+    },
+    {
+      "path": "Resources/Installer/DriverProcessRunner.c",
+      "sha256": "3e4d43cc76f81afc4049810b3d7bc412e66e98713b31cb07303f20cca6df1752",
+      "bytes": 6296
+    },
+    {
+      "path": "Resources/Installer/DriverTransaction.sh",
+      "sha256": "d868bd12ddca5707a4ab8ae6435e1e5c1ab04a776a95750f44349818269b7ab1",
+      "bytes": 10182
+    },
+    {
+      "path": "Resources/Installer/Install.command",
+      "sha256": "5ac0d859379112e5832629ab6bd83fd560a1e6d94622581eceb570ad7bad15e3",
+      "bytes": 917
+    },
+    {
+      "path": "Resources/Installer/InstallBackend.sh",
+      "sha256": "76f74bd5986f8a8379ee0d810ab052ecec1ae180b2b615caefad5aeb54621a15",
+      "bytes": 28969
+    },
+    {
+      "path": "Resources/Installer/LaunchEmbeddedInstall.sh",
+      "sha256": "6441330a5a126d604e1087a20cdc106a8c4b46a952d6dd69f4b8b25279e69ec2",
+      "bytes": 3106
+    },
+    {
+      "path": "Resources/Installer/LaunchEmbeddedUninstall.sh",
+      "sha256": "2c0937259166b1eed97214de219022b899d92c6c3303d56cc32965ce4e0c5f5f",
+      "bytes": 1059
+    },
+    {
+      "path": "Resources/Installer/READ-ME-FIRST.md",
+      "sha256": "fc788c53e8cf4f86187d238920bd83f1d3c1448bf1438635587e970fa3921cd2",
+      "bytes": 2036
+    },
+    {
+      "path": "Resources/Installer/RelaunchApp.sh",
+      "sha256": "42ddf4d9e70b9ed6675c8bdcc59eff05e5804ea9bff9500cca5cd76462faad17",
+      "bytes": 464
+    },
+    {
+      "path": "Resources/Installer/Stop.command",
+      "sha256": "65a29a95ec4a0dbfc12a13de6f30dca0cca5654ee8f1be1c1a53edf80dfd1407",
+      "bytes": 289
+    },
+    {
+      "path": "Resources/Installer/Uninstall.command",
+      "sha256": "b845be8c528cba7b6996b163e3693742e20ad121fd9b1264cb01eeafbc0132af",
+      "bytes": 361
+    },
+    {
+      "path": "Resources/Installer/UninstallBackend.sh",
+      "sha256": "1aec237c965e73f74dcc22a64f889f7e6257c25206bbdb36f38a7db79867d02e",
+      "bytes": 2417
+    },
+    {
+      "path": "Resources/Installer/local.WindowsMacBridge.HIDHelper.plist",
+      "sha256": "6b45db95cf8e3614bac052db176561272222bf9ceaf0538dc968a0a9250c15b1",
+      "bytes": 801
+    },
+    {
+      "path": "Resources/Installer/local.WindowsMacBridge.VirtualHIDService.plist",
+      "sha256": "f596d2c87eafd8ca1aeb5f127d54c25c2842375cb23df6d481757c7f554dd518",
+      "bytes": 708
+    },
+    {
+      "path": "Resources/Licenses/VChewingGuard.txt",
+      "sha256": "587c82723b1d4bd0022f28af75e416f089b23d2cf02c7406e0810fe4a5af6759",
+      "bytes": 1083
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/Boost-1.0.txt",
+      "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566",
+      "bytes": 1338
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/GSL.txt",
+      "sha256": "4c21dc82a1c7186ea754fd59d504c00947953a3401fe8e24eaa44109ef8e2555",
+      "bytes": 1157
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/Karabiner-VirtualHID-Unlicense.txt",
+      "sha256": "88d9b4eb60579c191ec391ca04c16130572d7eedc4a86daa58bf28c6e14c9bcd",
+      "bytes": 1210
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/debug_assert.txt",
+      "sha256": "195c95c8dc2349255994fe270c623a79b058ede80e0484d3361ca394133e2306",
+      "bytes": 900
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/fmt.txt",
+      "sha256": "07580f2a3b35709ce703d523f447b242f6dfec7582a8c0df102c7fa2849375f8",
+      "bytes": 1431
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/nlohmann-json.txt",
+      "sha256": "d64d1b4d948aa7751cfb613c02dc246aab7b358d760053e6580f01affe946906",
+      "bytes": 1076
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/nod.txt",
+      "sha256": "e807458b70e8e0b92fabec57c9a8cbb06cc640472508ffd051ab1869d0586194",
+      "bytes": 1073
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/sources.json",
+      "sha256": "11ea7824e058424caff8a613ff3e066c6c196322d8ad3076836df2e5bd8902c3",
+      "bytes": 1324
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/spdlog.txt",
+      "sha256": "d678c20826e1392578508e1c78649a1e3c31bda05ef4388d967dbd654461b140",
+      "bytes": 1323
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/type_safe.txt",
+      "sha256": "c9b2c3b9c65bf163d4338d9f56edb0ce0846e91d7b89e1a1e35326abbc8997ae",
+      "bytes": 1078
+    },
+    {
+      "path": "Resources/TwoMacAcceptance.md",
+      "sha256": "427626caf294dc81f99924a1debed6ccf560d73f6065835978f74bb627e49526",
+      "bytes": 1909
+    },
+    {
+      "path": "Resources/UserGuide.md",
+      "sha256": "1a215bc28cd3d0a6426a0e984b7ff88aeaee9125232be213fdc59eaefc784bed",
+      "bytes": 9604
+    },
+    {
+      "path": "Sources/BridgeCore/BackendCapabilities.swift",
+      "sha256": "69ab2251abee2536078ee7abd7db5482c3523cfaf1529b519c9ccda5f27b3534",
+      "bytes": 2182
+    },
+    {
+      "path": "Sources/BridgeCore/BoundedActionInbox.swift",
+      "sha256": "2a35ff9a90562d0dbce3cf4263cf78f1791450a4692e207bd7c11752d95b8a19",
+      "bytes": 1345
+    },
+    {
+      "path": "Sources/BridgeCore/BoundedDiagnosticLogger.swift",
+      "sha256": "410761b4c71aa688e3498e0afcb16bb6ab4a598e2847572da04daa0dcb6fa2fa",
+      "bytes": 4845
+    },
+    {
+      "path": "Sources/BridgeCore/BoundedImageFile.swift",
+      "sha256": "2f68a8fb44864c42926a4fd032ba299f44ca47dc35e31418c8bf8a195b9a377c",
+      "bytes": 2784
+    },
+    {
+      "path": "Sources/BridgeCore/DeferredSignalMailbox.swift",
+      "sha256": "5285d84f7141517bd0b31a1733ec953d4fc05a751007a0a7918f8b1a21f1c87e",
+      "bytes": 1026
+    },
+    {
+      "path": "Sources/BridgeCore/DestinationSemanticPolicy.swift",
+      "sha256": "1262c059f60266d365c339e3f5bc8d4c4aa33509bd3e908d321ccf8fb6694826",
+      "bytes": 1350
+    },
+    {
+      "path": "Sources/BridgeCore/DriverApproval.swift",
+      "sha256": "5e56343166107c94fcb0f5837270287c2f1373ddc7096edd773cffbdb72dd44c",
+      "bytes": 1052
+    },
+    {
+      "path": "Sources/BridgeCore/FinderActionPolicy.swift",
+      "sha256": "305383b33de087457f3acaec0d8a01fcd04d34c4054da72ae3801fc4ac7b4154",
+      "bytes": 1268
+    },
+    {
+      "path": "Sources/BridgeCore/FinderCutState.swift",
+      "sha256": "21c5e39988af428e07f4e1075bfe07b2001a22135f352546fb94a4f2110bac8b",
+      "bytes": 1579
+    },
+    {
+      "path": "Sources/BridgeCore/FinderModeSignal.swift",
+      "sha256": "74410c08bc6a20274fe98f72592ddbe961d3799f4e2e67b6c75ddb8f7785f397",
+      "bytes": 957
+    },
+    {
+      "path": "Sources/BridgeCore/FinderPathSelection.swift",
+      "sha256": "fc21c2ecb9b5635462a344eab73a4ac51c73c0b02f7f1a2044b893eb5ccf4e48",
+      "bytes": 1260
+    },
+    {
+      "path": "Sources/BridgeCore/HIDDescriptorPolicy.swift",
+      "sha256": "8dcb095b75550a80e3217c306aa6cce3567b7b4b395622f2c781fc0b72c0476c",
+      "bytes": 3126
+    },
+    {
+      "path": "Sources/BridgeCore/HIDModifier.swift",
+      "sha256": "335397e6010398a70e8fb5f4f651bbb378d6cc490a85cf5884a701aaaf12e918",
+      "bytes": 297
+    },
+    {
+      "path": "Sources/BridgeCore/HIDTranslationEngine.swift",
+      "sha256": "ba560a0c7fc0878ccb9ddb5731cf2cc1714dcf82047e36b5a2a3820accd79661",
+      "bytes": 25031
+    },
+    {
+      "path": "Sources/BridgeCore/ImageMemoryBudget.swift",
+      "sha256": "151fa760327e1af19323fea3d1b1bc309394efeaf81236b2a408c85664740c2d",
+      "bytes": 1455
+    },
+    {
+      "path": "Sources/BridgeCore/InputSourcePolicy.swift",
+      "sha256": "c24b947e869b111badbb26e9a182aec7d2c3c5b445475c1b43ab988913cf7efd",
+      "bytes": 1151
+    },
+    {
+      "path": "Sources/BridgeCore/InputSources.swift",
+      "sha256": "899a0e50dca07244dc628b9fbd8f4134825551354907dba143fd0a08130abe27",
+      "bytes": 8543
+    },
+    {
+      "path": "Sources/BridgeCore/KeyboardEventProcessor.swift",
+      "sha256": "89a3a24d0059a3f4a7453b0a360097b95c54b93e553e472310db7d252b399579",
+      "bytes": 17625
+    },
+    {
+      "path": "Sources/BridgeCore/MacBookKeyboardMapping.swift",
+      "sha256": "d33ca17464c1b55afdce2fdbcffe924d5b37e74a33a6cfb34a22863b0d89f4b2",
+      "bytes": 3448
+    },
+    {
+      "path": "Sources/BridgeCore/Model.swift",
+      "sha256": "7a509b943bcc04170992d407dc68cfebb565f0c84ef81d43b925f0f34ff20b82",
+      "bytes": 6756
+    },
+    {
+      "path": "Sources/BridgeCore/NativeAppSwitchLatch.swift",
+      "sha256": "78bdf1e4ded2ca8af0c8d284d95439f0d2ebfe66eb239394163cfda3e9803f05",
+      "bytes": 1704
+    },
+    {
+      "path": "Sources/BridgeCore/NativeScreenshotMapping.swift",
+      "sha256": "45c837d821faa163318aec160a09570b66ef020ae4b7142f1e8bd820d5e6ddc1",
+      "bytes": 2485
+    },
+    {
+      "path": "Sources/BridgeCore/PermissionChecklist.swift",
+      "sha256": "8f02f7aa00a87f6603be1409207dd6a74d864e356d30517ab4fabbd3f515f11e",
+      "bytes": 3942
+    },
+    {
+      "path": "Sources/BridgeCore/PhysicalDevicePolicy.swift",
+      "sha256": "e8d35799d946766136cce7ab7c6f4dc0be45d3cb811a60a85fa96c5c3f225ee4",
+      "bytes": 1556
+    },
+    {
+      "path": "Sources/BridgeCore/RecoveryPolicy.swift",
+      "sha256": "46dd1a02219af03018868b77020d4b0c651663184309022625a9a4a706b12e63",
+      "bytes": 516
+    },
+    {
+      "path": "Sources/BridgeCore/RemoteSourceRouter.swift",
+      "sha256": "316344edb42a6eec56d8e0def88aed68d86dafdb007911f6d4eb746f50add085",
+      "bytes": 11346
+    },
+    {
+      "path": "Sources/BridgeCore/RuleEngine.swift",
+      "sha256": "06a41b19ac400d429f3507d9602ec1971d287858d4c3dfc529a180b920babb75",
+      "bytes": 2936
+    },
+    {
+      "path": "Sources/BridgeCore/RuntimePolicy.swift",
+      "sha256": "5e04eabb4e138587b79eeddc6d735dc318a0336e36de7fc8a45f5e42b5fb4695",
+      "bytes": 5943
+    },
+    {
+      "path": "Sources/BridgeCore/ScreenshotCaptureLifecycle.swift",
+      "sha256": "32640a6ba890787eb7aaf80093e2f96d36055cc802d55ec20860f2b5c3b08410",
+      "bytes": 1618
+    },
+    {
+      "path": "Sources/BridgeCore/ScreenshotShortcuts.swift",
+      "sha256": "964669a0fb2b3fb07df2951a2791bcdf10b54227f6ec5facf54b8c158dd3aa0f",
+      "bytes": 925
+    },
+    {
+      "path": "Sources/BridgeCore/ScreenshotTextProtocol.swift",
+      "sha256": "ff1934d299746d2123c21150d6cc2f3529b743a0fa084c898b1f705d1855d056",
+      "bytes": 2074
+    },
+    {
+      "path": "Sources/BridgeCore/ShortcutPreview.swift",
+      "sha256": "dd3ca5c36d38d0fa7d2fbb4d2d136d9d8a13aaabc68be12e4857945f9c1f16b7",
+      "bytes": 9874
+    },
+    {
+      "path": "Sources/BridgeCore/WindowsCompatibilityRules.swift",
+      "sha256": "b30aa767756635c79198ae557f4686cb075ecc52020e880902584cbd25f02fcb",
+      "bytes": 14917
+    },
+    {
+      "path": "Sources/BridgePlatform/ApplicationRegistry.swift",
+      "sha256": "c60047c7bc886c96b2ecea1c81bdd08590b6179d8afd3a13dd68602f78afe1aa",
+      "bytes": 3162
+    },
+    {
+      "path": "Sources/BridgePlatform/EventRewriter.swift",
+      "sha256": "982d19dd1e44ba78f2dd22b559919ee8bd275c620176d27bf387f3755ceca01d",
+      "bytes": 900
+    },
+    {
+      "path": "Sources/BridgePlatform/FinderModePublisher.swift",
+      "sha256": "c5f8d19d2ac1e0c4737445a9df1364b33d5a4550b8f20144afd98a504be1385e",
+      "bytes": 2031
+    },
+    {
+      "path": "Sources/BridgePlatform/HIDBackendClient.swift",
+      "sha256": "a0f90cb595fa98e20ced0276e5212bb6a20d8d521abf53ebd835b5aabcac13d6",
+      "bytes": 26057
+    },
+    {
+      "path": "Sources/BridgePlatform/HIDBackendSlot.swift",
+      "sha256": "10e3b8d5bab5b148a4e1738fee690a038430b26c390c8789175a7e9c9c25fa40",
+      "bytes": 4159
+    },
+    {
+      "path": "Sources/BridgePlatform/HIDDeviceInventory.swift",
+      "sha256": "a32926a96e137cf4764e6a599ad6e8acf2cc5ace1ce3e97661361463fda0d694",
+      "bytes": 2059
+    },
+    {
+      "path": "Sources/BridgePlatform/InputEngine.swift",
+      "sha256": "6b5f84b3423b22119446aebb00f7abc56764694007877792c313aa84df1ffe55",
+      "bytes": 38445
+    },
+    {
+      "path": "Sources/BridgePlatform/KeyboardEventTapCoverage.swift",
+      "sha256": "d01ee99cdebdbc4f967c44f7e177111359a6bfbb0d0282de2923f49f22306520",
+      "bytes": 4171
+    },
+    {
+      "path": "Sources/BridgePlatform/KeyboardLayoutResolver.swift",
+      "sha256": "bb78853f6de81bd842df8574b3423c3a385ef7c632b4d43ca841ad785d4209f3",
+      "bytes": 1302
+    },
+    {
+      "path": "Sources/BridgePlatform/KeyboardMappingDiagnostics.swift",
+      "sha256": "82806afbf2573c5735873c482294f08edb716b66cac95f57eb078c7664c8188a",
+      "bytes": 452
+    },
+    {
+      "path": "Sources/BridgePlatform/KeyboardPermissionRequest.swift",
+      "sha256": "02ecc9dcb7e8c98f60534e888ba3a5bd9570327762941a3e17990e99d66c7726",
+      "bytes": 1577
+    },
+    {
+      "path": "Sources/BridgePlatform/MacBookKeyboardMapper.swift",
+      "sha256": "ba704c3504904de29dbb7441531fffef16f0f54dc1809732f523899354e6fa16",
+      "bytes": 11493
+    },
+    {
+      "path": "Sources/BridgePlatform/NativeMacBookKeyboardBackend.swift",
+      "sha256": "efb0039bb729c7209ec7bf6a4095583b9e0323942bef94eece623a8f9cd2fdda",
+      "bytes": 8731
+    },
+    {
+      "path": "Sources/BridgePlatform/NativeScreenshotObserver.swift",
+      "sha256": "d92d8ae77fb3df70437f49b14e583b41c2808b865d3c5e97f94dd44b63ccbf19",
+      "bytes": 7412
+    },
+    {
+      "path": "Sources/BridgePlatform/NativeSessionEmitter.swift",
+      "sha256": "74d955963ff0e43142ae523b259613283cd87baad290049df9711c328f04dadb",
+      "bytes": 986
+    },
+    {
+      "path": "Sources/BridgePlatform/PDFImageBudget.swift",
+      "sha256": "4e45ee1debe7d5f103639705babe48b78e1a7e3f66f1b529974b44aba6c1e62a",
+      "bytes": 8379
+    },
+    {
+      "path": "Sources/BridgePlatform/PrivateMappingJournal.swift",
+      "sha256": "08a7b1d1587b6a54ded8e3d998b04148a612f81d890e1df1b7d6732649cc6313",
+      "bytes": 2977
+    },
+    {
+      "path": "Sources/BridgePlatform/RemoteCalibrationCoordinator.swift",
+      "sha256": "9a46f58f20e269d5c54e88f4acafaae2b7fe61f801e9156fd186376e93c05710",
+      "bytes": 6784
+    },
+    {
+      "path": "Sources/BridgePlatform/RemoteInputAdapters.swift",
+      "sha256": "11c82b1d2f7e0e300d5366d20ba0355c77101eddeceda0577d63ffc2a0dad4c5",
+      "bytes": 18885
+    },
+    {
+      "path": "Sources/BridgePlatform/Resources/applications.json",
+      "sha256": "95e3805880e0d5eb32f8f1d16bdbabf164223bbfcfb9c49168414f63a0060b06",
+      "bytes": 1148
+    },
+    {
+      "path": "Sources/BridgePlatform/Resources/compatibility-applications.json",
+      "sha256": "6a2d66073e439145f0c7935fde461043903bbc72beb369259b24c45f5edc72a8",
+      "bytes": 2682
+    },
+    {
+      "path": "Sources/BridgePlatform/ScreenshotCaptureDriver.swift",
+      "sha256": "3c4f642b1136978a355f4a9b04753bc62bc8448c967419fdda7edadb205e1731",
+      "bytes": 7411
+    },
+    {
+      "path": "Sources/BridgePlatform/ScreenshotFolderAccess.swift",
+      "sha256": "f93affab26af38915cc59e825714f2e249003accc24ccf283cf929f82d250976",
+      "bytes": 1141
+    },
+    {
+      "path": "Sources/BridgePlatform/ScreenshotManager.swift",
+      "sha256": "ac8a8ec1266b037d3bbf5790a22fbe1ab70a8d6446886a129197e875cbb2d768",
+      "bytes": 48858
+    },
+    {
+      "path": "Sources/BridgePlatform/ScreenshotPreview.swift",
+      "sha256": "d54550b73407b246f14a017b3802c4c850195b2ecc18fecb30d0032c134cbeb4",
+      "bytes": 2546
+    },
+    {
+      "path": "Sources/BridgePlatform/ScreenshotShortcut.swift",
+      "sha256": "a032020eb2127a6cc0bddc97774a0c0d8fd14248d900cba6eca452e0f03e39b4",
+      "bytes": 4475
+    },
+    {
+      "path": "Sources/BridgePlatform/ScreenshotTextWorkerClient.swift",
+      "sha256": "885f34dfcb41a007fcb611e47f44c0beecdc9db7e2b4f10f2a47159fd994dd40",
+      "bytes": 7978
+    },
+    {
+      "path": "Sources/BridgePlatform/SettingsStore.swift",
+      "sha256": "42ca960cfc5fa0a59a32478479a366759bdfb9f4d34ddbfa80bd4996833ac697",
+      "bytes": 10132
+    },
+    {
+      "path": "Sources/BridgePlatform/ShortcutActionDispatcher.swift",
+      "sha256": "099c300501c7c59b8dba7813f0f0985a2e657dca0d57810ca7722ef77eeeebf6",
+      "bytes": 23160
+    },
+    {
+      "path": "Sources/BridgePlatform/ShortcutPreviewSettings.swift",
+      "sha256": "14fc9e79f61ed68052b232f85acc65be1abe96172c69e49d74182e17c58b42bf",
+      "bytes": 894
+    },
+    {
+      "path": "Sources/BridgePlatform/TerminalSelectionReader.swift",
+      "sha256": "85a9f5e6460bd371e269d22540ab8522a50fd2e1fb84cd8e0dce1cbc049e450f",
+      "bytes": 3453
+    },
+    {
+      "path": "Sources/BridgeWorkGate/BridgeWorkGate.c",
+      "sha256": "7f05cb4450116909cba86db9e3c7383a4f6d51db447758812f6f0a9bb6237cb4",
+      "bytes": 674
+    },
+    {
+      "path": "Sources/BridgeWorkGate/include/BridgeWorkGate.h",
+      "sha256": "ffd245bf22ed4f0e21bc166acac428d5f729f0108e630700be5871d9e993a380",
+      "bytes": 256
+    },
+    {
+      "path": "Sources/HIDProtocol/HIDProtocol.swift",
+      "sha256": "eaac1c5619c98db255eab1df644d30614862533edb4f121f7364e076a8030e2d",
+      "bytes": 5916
+    },
+    {
+      "path": "Sources/InputSourceCore/GuardDetectionPause.swift",
+      "sha256": "f993454eea05954a7e231ddb5627625964d8de72146d29abc344dfcb2b851722",
+      "bytes": 1361
+    },
+    {
+      "path": "Sources/InputSourceCore/GuardSelectionStore.swift",
+      "sha256": "a31c487d942ab4e1aaaa65b0a52c057930bb44b07b039e55f28d2ff99f721cc6",
+      "bytes": 714
+    },
+    {
+      "path": "Sources/InputSourceCore/GuardStateMachine.swift",
+      "sha256": "4e5523964e6346e8f0c4b954e6d742476dc4d2db8c5e9a8a5857d99781d80bad",
+      "bytes": 4676
+    },
+    {
+      "path": "Sources/InputSourceCore/InputSourceStatistics.swift",
+      "sha256": "fa14c38ae91bcb0650522cbc4d94bc64b2727abb8d90fabf0e6c52e51ad31fe0",
+      "bytes": 5510
+    },
+    {
+      "path": "Sources/InputSourceSupport/AppSettings.swift",
+      "sha256": "72f21e9448c51842635b9996eeb96725b3ccac1bdf98afa96157d66962ce3ae6",
+      "bytes": 3703
+    },
+    {
+      "path": "Sources/InputSourceSupport/DiagnosticMetrics.swift",
+      "sha256": "9dabe5a3e9968f9cdf3c3a94f9963cab2b67cda4fcf2b8c52662a8d52dc4a644",
+      "bytes": 4624
+    },
+    {
+      "path": "Sources/InputSourceSupport/FileLogger.swift",
+      "sha256": "a61c303cadc392cdee3c38fd77de983b0982826c7c57a62b7f9e3d7398430b19",
+      "bytes": 710
+    },
+    {
+      "path": "Sources/InputSourceSupport/GuardController.swift",
+      "sha256": "b3c96c4e06fc0b7773a27685dd171050ea66d51ceb701fcd5aa91b8280f3414b",
+      "bytes": 45681
+    },
+    {
+      "path": "Sources/InputSourceSupport/HotkeyManager.swift",
+      "sha256": "d44580ae4afe0b3361c2f87d7d5eb9af7bf228bee074832f009357e0ae11c044",
+      "bytes": 4468
+    },
+    {
+      "path": "Sources/InputSourceSupport/InputSourceCoordinator.swift",
+      "sha256": "1bb242ce91362584b71db81f984ce98d0f84d813407f6b88779ac9672fa62500",
+      "bytes": 10349
+    },
+    {
+      "path": "Sources/InputSourceSupport/InputSourceManager.swift",
+      "sha256": "b6cf0f911c26e154194cfefa70a6c4eaf0cbe132a75ff6cf88eb788cb0cd9792",
+      "bytes": 9112
+    },
+    {
+      "path": "Sources/InputSourceSupport/LoginItemManager.swift",
+      "sha256": "745a806a2772bf1d3f13809eb2d092d98fe38bb6aa0f9920c41dbd9237e835ac",
+      "bytes": 1515
+    },
+    {
+      "path": "Sources/InputSourceSupport/SingleInstanceGuard.swift",
+      "sha256": "3620d559eb4853aafe7e30671874bc5bd2f81485d282eafbced496ef3aa81a27",
+      "bytes": 2688
+    },
+    {
+      "path": "Sources/WindowsMacBridge/AppBuildInfo.swift",
+      "sha256": "1f330ab9351241bc730eab32db7bfb5ec2a6c8ccdf34ddb3d7f4aea64613be6f",
+      "bytes": 1369
+    },
+    {
+      "path": "Sources/WindowsMacBridge/AppMain.swift",
+      "sha256": "89948a4a15ad47a3df26463f6b0fa63d20610371041d7cc5e1af1b474db2c3fa",
+      "bytes": 14884
+    },
+    {
+      "path": "Sources/WindowsMacBridge/BrandAssets.swift",
+      "sha256": "75ab1bede6963f1d268de29a10f03ab6d204cc15c66977eac73e3d7624527ced",
+      "bytes": 701
+    },
+    {
+      "path": "Sources/WindowsMacBridge/BridgeController.swift",
+      "sha256": "f17abd5a09e98ebfb711fab39f34902f11d55165d56b1fbd8e1b7796e03233d4",
+      "bytes": 49431
+    },
+    {
+      "path": "Sources/WindowsMacBridge/BundledBackendInstaller.swift",
+      "sha256": "d377d66924c6301a6a98bcf27e81357032f291407c8c16310882676c094a9a20",
+      "bytes": 4392
+    },
+    {
+      "path": "Sources/WindowsMacBridge/DriverActivationLauncher.swift",
+      "sha256": "ff3c313f7dffef4dc626d4bb90289e2ed499fef744b0c039874e2e67b5260a40",
+      "bytes": 2580
+    },
+    {
+      "path": "Sources/WindowsMacBridge/DriverPermissionCheck.swift",
+      "sha256": "a38de5fadf3528f7cd79b96d9fc27d424d7918c4db43bdcee2ab11957aafe6df",
+      "bytes": 1746
+    },
+    {
+      "path": "Sources/WindowsMacBridge/FeatureResourceCheck.swift",
+      "sha256": "f3a1ae62d2022a0b7a24689d1df81eae91bd70900ba335e5dd1e597087224403",
+      "bytes": 1584
+    },
+    {
+      "path": "Sources/WindowsMacBridge/FeatureVisualCheck.swift",
+      "sha256": "aa5b1cdeacfe62970eb3b62126ce5ca352827c73adc292f951ee2132817b61e7",
+      "bytes": 5185
+    },
+    {
+      "path": "Sources/WindowsMacBridge/PermissionRelauncher.swift",
+      "sha256": "2424e3613918a0650ec6635c33f234b8900c73355536ccbfa2c5a357d1d3aea1",
+      "bytes": 1084
+    },
+    {
+      "path": "Sources/WindowsMacBridge/PermissionStatus.swift",
+      "sha256": "204f21e7490be7c2f5c6f810a2cfc92b6aaba4cd269d1d783c87adc8f53d9a25",
+      "bytes": 1582
+    },
+    {
+      "path": "Sources/WindowsMacBridge/RemoteCalibrationView.swift",
+      "sha256": "a315f057dc12db97ce81d1b34dc71dab0fc68fb1e01def0124401102ee0a110c",
+      "bytes": 6015
+    },
+    {
+      "path": "Sources/WindowsMacBridge/ScreenshotTextCaptureSection.swift",
+      "sha256": "91047929848adc5bbc04e9e3199db733acc7c2d90f0a3f339fc6a3d1a6722ada",
+      "bytes": 1391
+    },
+    {
+      "path": "Sources/WindowsMacBridge/ScreenshotThumbnailPresenter.swift",
+      "sha256": "4f8ccdc26eaf5b1fc5548ac86a5942b6754d4a284f98c7f4863a17e0871a4bd2",
+      "bytes": 6409
+    },
+    {
+      "path": "Sources/WindowsMacBridge/SettingsView.swift",
+      "sha256": "483b5b3a693c66bc59816c61f7850ebeb7da52cfee79adf4d9f21435297bb5b3",
+      "bytes": 36666
+    },
+    {
+      "path": "Sources/WindowsMacBridge/ShortcutPreviewView.swift",
+      "sha256": "e835e0d483a46571d73d5e0d78756469ef4115f5bba1a1055682b4b5be05d940",
+      "bytes": 7607
+    },
+    {
+      "path": "Tests/BridgeCoreTests/BoundedLoggerTests.swift",
+      "sha256": "92a6a7bc16a9434ceb5587ebccef93bbdaae055340640af903e42c684f5368ed",
+      "bytes": 1975
+    },
+    {
+      "path": "Tests/BridgeCoreTests/CompatibilityTests.swift",
+      "sha256": "d35997a571ead25d39d54af83c7cb914d7cb9f8732cc5be10fdaa562f883f59f",
+      "bytes": 8345
+    },
+    {
+      "path": "Tests/BridgeCoreTests/DestinationAppSwitchTests.swift",
+      "sha256": "77354ec0661d3c34be12149bc333e664bb9a4dc8e3f09d76b11d8b11a00f8e16",
+      "bytes": 2166
+    },
+    {
+      "path": "Tests/BridgeCoreTests/DestinationSemanticsTests.swift",
+      "sha256": "c36404ba7116392fbf7675952e627104b043cdf67f0164cabc277c861718c505",
+      "bytes": 7331
+    },
+    {
+      "path": "Tests/BridgeCoreTests/DriverApprovalTests.swift",
+      "sha256": "2d4388a211a709931836b2acef2c6f6de2177a97a78522265cd833872d1c84fc",
+      "bytes": 1029
+    },
+    {
+      "path": "Tests/BridgeCoreTests/FinderModeSignalTests.swift",
+      "sha256": "2170d6a4317437ba60e9c3e4adf251452aab291050486aeae21fec0098ced9ad",
+      "bytes": 918
+    },
+    {
+      "path": "Tests/BridgeCoreTests/Fixtures/windows-like-mac-v2.json",
+      "sha256": "27e366cb7114f45eb3ca555326eb170eda223e50c04b6b7f2db4fc6456c6fe53",
+      "bytes": 138620
+    },
+    {
+      "path": "Tests/BridgeCoreTests/FullLocalWindowsProfileTests.swift",
+      "sha256": "8f71d9c2d27851b578b8183f750bb167d0673650c74238a27dcd5e9546f7bc85",
+      "bytes": 3867
+    },
+    {
+      "path": "Tests/BridgeCoreTests/HIDDescriptorTests.swift",
+      "sha256": "f672a3e4daec5ac1277771c512312c3c4326be286de04adc69ea79854bea2349",
+      "bytes": 2505
+    },
+    {
+      "path": "Tests/BridgeCoreTests/HIDTranslationTests.swift",
+      "sha256": "4b075108b41ac36e8723d06968bc72becce7fb6175b2bb78947752da78b3bf7e",
+      "bytes": 16978
+    },
+    {
+      "path": "Tests/BridgeCoreTests/InstallReadinessRegressionTests.swift",
+      "sha256": "96e8a45755e5f7fd43c20da81c43ab76f20dba8ce49a6fb073c2360f5d407085",
+      "bytes": 9527
+    },
+    {
+      "path": "Tests/BridgeCoreTests/KarabinerFixtureTests.swift",
+      "sha256": "ed3e626da92e28a91470dbba5a424a35184497212137301a0f3f616a31dfe684",
+      "bytes": 4218
+    },
+    {
+      "path": "Tests/BridgeCoreTests/KeyboardEngineTests.swift",
+      "sha256": "c71d27f826e23a4a1d243c82d08164620b06a0770c0c92642b05ebf2a0249871",
+      "bytes": 15269
+    },
+    {
+      "path": "Tests/BridgeCoreTests/LocalClipboardShortcutTests.swift",
+      "sha256": "5877bcc4fbfbab914fa369529e12a953afd5be5f296a18440882dafd94838752",
+      "bytes": 8783
+    },
+    {
+      "path": "Tests/BridgeCoreTests/MacBookKeyboardMappingTests.swift",
+      "sha256": "82292bf883c73884b860fab757fa6f7e4eb8f160b66dc28bd2de76e618eaa061",
+      "bytes": 3362
+    },
+    {
+      "path": "Tests/BridgeCoreTests/MultiKeyboardReleaseOrderTests.swift",
+      "sha256": "0fb8634349795ef8c6463cddbc09b81d5ae27218db5e4c1a9f2d1f8fea7f10d0",
+      "bytes": 3103
+    },
+    {
+      "path": "Tests/BridgeCoreTests/NativeScreenshotMappingTests.swift",
+      "sha256": "ed82aef78a2fd14451167a26a13088d429a9192d13de43a1136bfd0c6676cadb",
+      "bytes": 2495
+    },
+    {
+      "path": "Tests/BridgeCoreTests/PermissionChecklistTests.swift",
+      "sha256": "4d52007d94bcab34957dbc3cd3d2031a0355131657f76e76cd6aec46a4a9f4ef",
+      "bytes": 4273
+    },
+    {
+      "path": "Tests/BridgeCoreTests/PhysicalDevicePolicyTests.swift",
+      "sha256": "adfcbbb9b47ae446be3abf8a2697ff14d0cc5517158595f5306519974af8288d",
+      "bytes": 3421
+    },
+    {
+      "path": "Tests/BridgeCoreTests/ReleaseInputRegressionTests.swift",
+      "sha256": "fd3e3b47732afdf6e157a9be8fe8c32f1a2b8bb9d65553b7f555f1e0fdb32bc6",
+      "bytes": 7550
+    },
+    {
+      "path": "Tests/BridgeCoreTests/ReleasePolicyRegressionTests.swift",
+      "sha256": "075f57cee70b9994b72c97c2196afbad27b63c5cf7739af985ac1c1a34c682ef",
+      "bytes": 9801
+    },
+    {
+      "path": "Tests/BridgeCoreTests/RemoteRouterUpdateTests.swift",
+      "sha256": "0e2da61dc17e0e9b01a7735c165f3e8949903c89c2929af87ddfd2537d4699c7",
+      "bytes": 3242
+    },
+    {
+      "path": "Tests/BridgeCoreTests/RemoteSemanticRegressionTests.swift",
+      "sha256": "6592d9afaebb4cd8096358169dcf9366b314490b1e1fe6f7220aced2122d397d",
+      "bytes": 11596
+    },
+    {
+      "path": "Tests/BridgeCoreTests/ScreenshotCaptureLifecycleTests.swift",
+      "sha256": "c38dc7778b6a4a36eabf12927db9283d08085b83425462d2dba72a3c00e05fd1",
+      "bytes": 2078
+    },
+    {
+      "path": "Tests/BridgeCoreTests/ShortcutPreviewTests.swift",
+      "sha256": "3900f3ae0f26bb512ce9eadfc6b75531974c9a4515a69e2dd658dca7c413343c",
+      "bytes": 4843
+    },
+    {
+      "path": "Tests/BridgeCoreTests/SourceRevocationTests.swift",
+      "sha256": "cf48e50763cbcfb6e0d31c561fceb112d8d4885c5d69cc99db0cbccd75aa1842",
+      "bytes": 778
+    },
+    {
+      "path": "Tests/BridgeCoreTests/SourceWorkGateTests.swift",
+      "sha256": "d1983d5338a1a06b3fbcb71f3e03c2086fb001e3fac9cb10bf9799943dbb24d8",
+      "bytes": 876
+    },
+    {
+      "path": "Tests/BridgeCoreTests/UnifiedInputTests.swift",
+      "sha256": "68dac6737d13d2ba46f805188534bb69606f1aa783467bb906f32286aef40738",
+      "bytes": 8926
+    },
+    {
+      "path": "Tests/BridgeCoreTests/WindowsFeatureTests.swift",
+      "sha256": "dbb10d4dbf88e65cdc64d81cb428048032e11e14282c1ebbfbd7d6b37af3d2cc",
+      "bytes": 9945
+    },
+    {
+      "path": "Tests/BridgePlatformTests/ActionDispatcherTests.swift",
+      "sha256": "70cf057f4af1eee6e7fed0f0ffab3bcf4ed1b34d37157d8029bf307be3022379",
+      "bytes": 1276
+    },
+    {
+      "path": "Tests/BridgePlatformTests/AppKitShortcutTests.swift",
+      "sha256": "abbe51510451b4475fc5bfcdb86831bb9a87e1c52a2c43035c6249d1202ebc2c",
+      "bytes": 2457
+    },
+    {
+      "path": "Tests/BridgePlatformTests/AppTransitionSafetyTests.swift",
+      "sha256": "a66066473cf57a00f6fa13797d9b293f40e21ae1b7e3da07b77f25fa6cbe7dde",
+      "bytes": 5468
+    },
+    {
+      "path": "Tests/BridgePlatformTests/BackendOwnershipTests.swift",
+      "sha256": "94ab31c04860996448d09ef254c53fc0b82048be89e80cd970eec9d25dacb3b3",
+      "bytes": 10632
+    },
+    {
+      "path": "Tests/BridgePlatformTests/CompatibilityPlatformTests.swift",
+      "sha256": "ede7c8a78475c8d1725fc4a69e79580336867a4387afad8ee8827d421a2f03e9",
+      "bytes": 3548
+    },
+    {
+      "path": "Tests/BridgePlatformTests/DestinationRuntimeTests.swift",
+      "sha256": "71d196585ffdb531c5b5dfdd2d2b9724fa00791dd445e901ad2f964161b4b2a1",
+      "bytes": 3199
+    },
+    {
+      "path": "Tests/BridgePlatformTests/EngineWakePolicyTests.swift",
+      "sha256": "8e4cfba907fa3a795d571eaa58925e365599ade1977dd6c49778242548275d00",
+      "bytes": 3333
+    },
+    {
+      "path": "Tests/BridgePlatformTests/FinderFocusReaderTests.swift",
+      "sha256": "62f4354d973c2eb521db62c10569b125bc00a973e2f9bb6fa514e131e258f79f",
+      "bytes": 4909
+    },
+    {
+      "path": "Tests/BridgePlatformTests/FinderModePublisherTests.swift",
+      "sha256": "36bc4a53c3a060e715d215484d34aaf89da1aa632d884af9dd7fa6f47ad5223e",
+      "bytes": 2504
+    },
+    {
+      "path": "Tests/BridgePlatformTests/HIDProtocolTests.swift",
+      "sha256": "86e1b710ceea4d48c638dfe8148522c118a48a3f22308824c83ceb68fc5cd559",
+      "bytes": 4059
+    },
+    {
+      "path": "Tests/BridgePlatformTests/HIDReleaseStateMachineTests.swift",
+      "sha256": "bafc72a6aed286872a701281ab0b73597c82b96a098e4b8349648f4d4b51a6f7",
+      "bytes": 17110
+    },
+    {
+      "path": "Tests/BridgePlatformTests/KeyboardEventTapCoverageTests.swift",
+      "sha256": "45358ae0630059843f9ea9998eb72260626abb4c4723b15870179205d559b50b",
+      "bytes": 3180
+    },
+    {
+      "path": "Tests/BridgePlatformTests/KeyboardPermissionRequestTests.swift",
+      "sha256": "ec4bc311d3324f34f24d120448c5365c1e550f20949cdce48ea7e9c02aaf7656",
+      "bytes": 1982
+    },
+    {
+      "path": "Tests/BridgePlatformTests/MacBookKeyboardMapperTests.swift",
+      "sha256": "97cc5ad3b43be23520ebb2fa0e50dd7e4997127b7b530e65953da90738df21ca",
+      "bytes": 24658
+    },
+    {
+      "path": "Tests/BridgePlatformTests/MappingJournalTests.swift",
+      "sha256": "df2186ce7949f95d9b801731ee938386fbe18027468900ff1cc0e9d8fa301cc5",
+      "bytes": 1645
+    },
+    {
+      "path": "Tests/BridgePlatformTests/ModeIsolationTests.swift",
+      "sha256": "b1b6c2fe236f743d27091a23e9946f3d50933e69f4ef6c8fff3356f372f1d1c3",
+      "bytes": 4251
+    },
+    {
+      "path": "Tests/BridgePlatformTests/NativeScreenshotJobTests.swift",
+      "sha256": "a66677554422ab8be3deb87db8340c28a6db49ce302404b5c391a492deedda14",
+      "bytes": 4471
+    },
+    {
+      "path": "Tests/BridgePlatformTests/NativeScreenshotObserverTests.swift",
+      "sha256": "7141bdbf76b165568c12b9634ccfc30aa8162398127235c0979cd9cd85648471",
+      "bytes": 5249
+    },
+    {
+      "path": "Tests/BridgePlatformTests/NativeSessionEmitterTests.swift",
+      "sha256": "c8ad26d3fedc6e2f125437c609c956acfbccfa48b80e8cadf5b2f41083ad9b94",
+      "bytes": 1835
+    },
+    {
+      "path": "Tests/BridgePlatformTests/PlatformTests.swift",
+      "sha256": "80452c6d3c78e84263a5ba5652cf6daa33e39c5fb20af714bb8452f211e3b5ea",
+      "bytes": 1800
+    },
+    {
+      "path": "Tests/BridgePlatformTests/ReleasePlatformRegressionTests.swift",
+      "sha256": "17ee687ce1e1b401aa9df8edbb992bad44189df8be3a1b19a55b10fe2a0ca72a",
+      "bytes": 3050
+    },
+    {
+      "path": "Tests/BridgePlatformTests/RemoteAdapterTests.swift",
+      "sha256": "9863d769a497c045226d91755879a72f00c2b0e5026074e9cada10486e8a335c",
+      "bytes": 4415
+    },
+    {
+      "path": "Tests/BridgePlatformTests/RemoteCalibrationCoordinatorTests.swift",
+      "sha256": "040f06ef084fb1ff2d27dbdf6c3d5544d4620cd066918cfec0b965118a66958e",
+      "bytes": 6323
+    },
+    {
+      "path": "Tests/BridgePlatformTests/ScreenshotBoundedReadTests.swift",
+      "sha256": "93619de80ed7ab8cb3d1cb8efd62a5dee012db2515919f6aaf74963b95a63297",
+      "bytes": 9007
+    },
+    {
+      "path": "Tests/BridgePlatformTests/ScreenshotFolderAccessTests.swift",
+      "sha256": "e00348f1e1a73bd73c6b8590f22cc75e9a923ad7b5a8599311aabe4b3c28acfd",
+      "bytes": 844
+    },
+    {
+      "path": "Tests/BridgePlatformTests/ScreenshotPreviewTests.swift",
+      "sha256": "3dfa37b003a9b1b6ea7cda42d87885dad8a3835b0fd8458eb370f0e9ee2c2ec4",
+      "bytes": 7678
+    },
+    {
+      "path": "Tests/BridgePlatformTests/ScreenshotRuntimeTests.swift",
+      "sha256": "5a2c98a05a2075a882f0a537accbef51e5297e8d9e54fa2bd3977b8da28e6592",
+      "bytes": 27571
+    },
+    {
+      "path": "Tests/BridgePlatformTests/ScreenshotTests.swift",
+      "sha256": "3d3e6b9f5a0882a69dbcdec49d48e331f687b587c90e3956a001c5a422895ff2",
+      "bytes": 26527
+    },
+    {
+      "path": "Tests/BridgePlatformTests/ScreenshotTextRecognitionTests.swift",
+      "sha256": "feb36001dae7b90b6f31a13b3a145dea634abc008a977fce17a83022fb61bf41",
+      "bytes": 6215
+    },
+    {
+      "path": "Tests/BridgePlatformTests/SettingsStoreTests.swift",
+      "sha256": "56dc4617df5ee107939f23ec79cc2f26e998f7bc44b3575c5d5d8b494e690fb2",
+      "bytes": 16489
+    },
+    {
+      "path": "Tests/BridgePlatformTests/SourceActionIsolationTests.swift",
+      "sha256": "21c8a57bc97b8fee0d5eacfc18772dcee3cff9e899dfb9ecc6eeb05294827d19",
+      "bytes": 5515
+    },
+    {
+      "path": "Tests/BridgePlatformTests/TerminalCopyTests.swift",
+      "sha256": "01003abc93b37d4c5d302f8ddec3a3d10632094bf4cdaf66b2d32cd44ec03c0d",
+      "bytes": 5765
+    },
+    {
+      "path": "Tests/BridgePlatformTests/TextNavigationTests.swift",
+      "sha256": "ba5c9b2081ff99d63795eddb10368bd924f35663885587fd1154c9ca2b3f86e4",
+      "bytes": 4651
+    },
+    {
+      "path": "Tests/BridgePlatformTests/UnifiedSettingsTests.swift",
+      "sha256": "9dd20797091fc6eab2cf12bda95c02373101ae1e0c6249789776d3b8fe8d6b6b",
+      "bytes": 3181
+    },
+    {
+      "path": "Tests/InputSourceCoreTests/GuardDetectionPauseTests.swift",
+      "sha256": "87877180f895e828112213738ca4b55eb5f25b09d3a25f98f53172a03a6e7622",
+      "bytes": 1986
+    },
+    {
+      "path": "Tests/InputSourceCoreTests/GuardSelectionStoreTests.swift",
+      "sha256": "f8b8a1b11e3784974f58d065f849d95a99c44b07ee475e686c7d031bf192178a",
+      "bytes": 1629
+    },
+    {
+      "path": "Tests/InputSourceCoreTests/GuardStateMachineTests.swift",
+      "sha256": "dd611cfbf1955c2bdd98b3cfccb404caccb57885d9c66697c2ee0d5c12b7e2ff",
+      "bytes": 8076
+    },
+    {
+      "path": "Tests/InputSourceCoreTests/InputSourcePolicyTests.swift",
+      "sha256": "071d3d2eac82042eb599591dcb42cec602f7c12b7a6e158875e487191ae62755",
+      "bytes": 2413
+    },
+    {
+      "path": "Tests/InputSourceCoreTests/InputSourceStatisticsTests.swift",
+      "sha256": "cadd789e72e9267ca83dbfff57c9282adb6341a5a885476ba91a37fb69ca6dff",
+      "bytes": 4953
+    },
+    {
+      "path": "Tests/InputSourceSupportTests/GuardControllerIntentTests.swift",
+      "sha256": "ca1837896e0540e3a720c23579580b74b60127dcd09a1697ee1b32b0a1dcf9ac",
+      "bytes": 11133
+    },
+    {
+      "path": "Tests/InputSourceSupportTests/ObserverLifetimeTests.swift",
+      "sha256": "92077102615d526da696382215766a38651eb2e411f3b09b01307e6586f5d0c0",
+      "bytes": 714
+    },
+    {
+      "path": "Tests/InstallerTests/test_driver_runner.py",
+      "sha256": "92ed1c978361828a3eeb1493ae33cc9fcda2c7cdf8609818fdbc7db925671624",
+      "bytes": 3194
+    },
+    {
+      "path": "Tests/InstallerTests/test_hid_sdk_build.py",
+      "sha256": "6c5d81b2ac4bb1d6114ae979a80e2859d9dfe22f9ec3d5b1da4dee379fa34710",
+      "bytes": 1817
+    },
+    {
+      "path": "Tests/InstallerTests/test_install_backend.py",
+      "sha256": "df1430bd59bd505e92402b29c9601b9f2bb8bab8c41a58b4c2e708b97df1f3fe",
+      "bytes": 54661
+    },
+    {
+      "path": "Tests/InstallerTests/test_root_bootstrap.py",
+      "sha256": "27aed8273285e344e6d0fa841af7de356d7641182b3c1c70b964b2940763a882",
+      "bytes": 4429
+    },
+    {
+      "path": "Tests/InstallerTests/test_source_version.py",
+      "sha256": "998a88b3fb1e8ba5941931b47ecff30355350a2dc86d64a3005603e7d884b7f6",
+      "bytes": 1911
+    },
+    {
+      "path": "Tests/InstallerTests/test_test_runner.py",
+      "sha256": "dc01dad5a5ebf6984eb01e76ee3cb1fbf9aac94c0b0cdf353a0282c56ec88aed",
+      "bytes": 4610
+    },
+    {
+      "path": "Tests/InstallerTests/test_uninstall_recovery.py",
+      "sha256": "4a150a3e034995fa8a93ba5ef964ce9c59dfd95f1f8b47b43740f4c3bf761748",
+      "bytes": 1998
+    },
+    {
+      "path": "Tests/MonitoringTests/test_monitor_runtime.py",
+      "sha256": "8e4f446cf6deee56a937b09184d7b8bb267098d984223e50c26a7ab42994fc3b",
+      "bytes": 2929
+    },
+    {
+      "path": "Tests/OCRWorkerTests/VisionWorkerTests.swift",
+      "sha256": "d1165d3e1c0a569b5ce4ba8b09344605abee720d21b5c1d7d4be6b59580e0914",
+      "bytes": 2051
+    },
+    {
+      "path": "Tools/HIDBackend/README.md",
+      "sha256": "c7717729f431df265a1a6118e0d006aeed81e0efd37767b6b033b0cc38b078c8",
+      "bytes": 1588
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDLifecycle/CaptureLifecycle.swift",
+      "sha256": "456a128a029f6ac13ecf45b3fd1a23822522e0d16612cbcc363f1621d6baacdd",
+      "bytes": 3571
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDLifecycle/ConnectionRetainer.swift",
+      "sha256": "8c2ce18420f640a2c6a7920c9829e1403fe2e7c755319ad57b5ccbeeee04dc92",
+      "bytes": 1114
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDLifecycle/ControllerCodeRequirement.swift",
+      "sha256": "3af46e6513f6cf823af3f882b1eb406b1aff733253f73eeecd77dcdddc726d65",
+      "bytes": 1145
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDLifecycle/ExclusivePublish.swift",
+      "sha256": "3886c47531da7f49d65ea77ba822267c7bbc4b40273244cfbfdb959afbb9fe20",
+      "bytes": 1527
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDLifecycle/HeldSafetyPolicy.swift",
+      "sha256": "0f0b7f453928bcef67ea2c654a276caab93a330dc5de431543c55658840a1820",
+      "bytes": 955
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDLifecycle/HeldSafetyTimer.swift",
+      "sha256": "ca9c7a96a7d20661d84cc45898a71437f3e0d5c491fa2e9075fe54de2072c698",
+      "bytes": 1131
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDLifecycle/OwnedRetirement.swift",
+      "sha256": "caf93716b331632040f8392f2dbc158230cf5a2b217a7d7a696a88787182e5d5",
+      "bytes": 2914
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDLifecycle/PassiveRunLoopLifetime.swift",
+      "sha256": "c08013687d85feedce8bee1b9aae703439494d734ed9d8c3421e2c2f5574a5b7",
+      "bytes": 830
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDRuntime/DeviceCapture.swift",
+      "sha256": "05d7da115296cf7c5f1da000b252234ac3b294ceb41dcd186ab7c0b1b0dfe84f",
+      "bytes": 31315
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDRuntime/InputService.swift",
+      "sha256": "c2a6a6c4d073744899578da512d07b52f18d2f1433ae65eeabee2cbca237a88c",
+      "bytes": 10326
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDRuntime/RuntimeCommand.swift",
+      "sha256": "583d38ba7ffdc2195a9792cae7c9637b697de6e087112b02b8b080d327ef24dd",
+      "bytes": 3894
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/VirtualHID/VirtualHID.cpp",
+      "sha256": "bec3ca71e4e151a19e3cb15a2a5dcbeb37abc86b2b322cbdef44ef34a536a965",
+      "bytes": 15915
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/VirtualHID/include/VirtualHID.h",
+      "sha256": "886e70d04ed1093859997fce3aa3cd7d96dadfecf2d84c1b781f6a953223c4e6",
+      "bytes": 3188
+    },
+    {
+      "path": "Tools/HIDBackend/Tests/VirtualHIDTests/ConnectionLeaseTests.swift",
+      "sha256": "f006f2b7b3d065f2a6c1b439409ff68dc36fafce38cedd706edb8d2a39dbab4b",
+      "bytes": 1107
+    },
+    {
+      "path": "Tools/HIDBackend/Tests/VirtualHIDTests/ConnectionRetainerTests.swift",
+      "sha256": "ce3625ac4a2ac3dbb02628371b1572a58d8e4883bd927554d0570149d3f57889",
+      "bytes": 1168
+    },
+    {
+      "path": "Tools/HIDBackend/Tests/VirtualHIDTests/ControllerRequirementTests.swift",
+      "sha256": "0a8db18233aea3e5f61d934ffc0fa2b93f622ec1c847e691310502e6153a0e70",
+      "bytes": 4375
+    },
+    {
+      "path": "Tools/HIDBackend/Tests/VirtualHIDTests/ExclusivePublishTests.swift",
+      "sha256": "1f9c1ac6c7bd85e88694042c4f64fc0fcde305111a57e09ec7577b0058c54272",
+      "bytes": 3936
+    },
+    {
+      "path": "Tools/HIDBackend/Tests/VirtualHIDTests/HeldSafetyTimerTests.swift",
+      "sha256": "c842629be2c190f92c878a7ffabbd7c79c9c70512b645d41485e9b79c4fff6a8",
+      "bytes": 1266
+    },
+    {
+      "path": "Tools/HIDBackend/Tests/VirtualHIDTests/LifecycleTests.swift",
+      "sha256": "66cae66c08bd66c8f81d767ab80de7f31cedc6f9158ad1ec0dabe64cc44d9c24",
+      "bytes": 5650
+    },
+    {
+      "path": "Tools/HIDBackend/Tests/VirtualHIDTests/OutputStallTests.swift",
+      "sha256": "9e24adf56b4c2a41e5b3c2e241cb642e92d196d703f2bf32e210f007682c5e4f",
+      "bytes": 1267
+    },
+    {
+      "path": "Tools/HIDBackend/Tests/VirtualHIDTests/OwnedRetirementTests.swift",
+      "sha256": "7e1c7420ad7deba9c35e3ca1c304ce99b1ff5f108c48133778b8d45dd1f48cfc",
+      "bytes": 5354
+    },
+    {
+      "path": "Tools/HIDBackend/Tests/VirtualHIDTests/ReportTests.swift",
+      "sha256": "ccefb7e79ad2373c900386b2d30f61725e7f793ea9b432d21dbfc4904a4c24d7",
+      "bytes": 6040
+    },
+    {
+      "path": "Tools/HIDBackend/Tests/VirtualHIDTests/RunLoopLifetimeTests.swift",
+      "sha256": "209e42588a4a341fb44069e46c43ebd14ef22ec4a63e41b714168a06940544de",
+      "bytes": 848
+    },
+    {
+      "path": "Tools/ImageBenchmark/Benchmark.swift",
+      "sha256": "12e195dbbcc6fc4f25297ab3ded81620d56e7cab87c6ae9c25f416beb5fffa2e",
+      "bytes": 2368
+    },
+    {
+      "path": "Tools/OCRWorker/ScreenshotTextRecognition.swift",
+      "sha256": "31357b1b49c58ac2d7f567c5a643561a21eb2b14afeed5fe83bd3cf76e64dc57",
+      "bytes": 4817
+    },
+    {
+      "path": "Tools/OCRWorker/WorkerMain.swift",
+      "sha256": "6435f3a2e16e40706eaba78ea974742d2fc7f49ea144cf0ec22c321c4a942ab7",
+      "bytes": 464
+    },
+    {
+      "path": "Tools/PerformanceCheck/PerformanceCheck.swift",
+      "sha256": "3cb349ff48c459ba906621b5390800b428037e1711a505bcffd1ec3763d3f04c",
+      "bytes": 8518
+    },
+    {
+      "path": "scripts/build-app.sh",
+      "sha256": "6f5a4ec960ddfc2cd979e91cdaa14d8205539d85992b42cd56cc236dc2ac37ac",
+      "bytes": 5865
+    },
+    {
+      "path": "scripts/build-environment.sh",
+      "sha256": "1e4c9b5cfb78d8536846437a76bb0a242f9f754f01dd7b6ddc21e73048e5483a",
+      "bytes": 267
+    },
+    {
+      "path": "scripts/generate-brand-assets.swift",
+      "sha256": "3bcc0d540bc4a3396b878f419c730fc34d29de8da179037483c2a01cf8ee5d01",
+      "bytes": 5261
+    },
+    {
+      "path": "scripts/generate-image-budget-fixtures.py",
+      "sha256": "69a1693b1154479d6f3bf453d5be667dc8b53c5d5175894d02fd9d7298b4422e",
+      "bytes": 3095
+    },
+    {
+      "path": "scripts/monitor-runtime.py",
+      "sha256": "399515ec0bb9cadcec4246ac65f531679f8440e7b21390b14889fe486a795c8d",
+      "bytes": 8428
+    },
+    {
+      "path": "scripts/package-app-dmg.sh",
+      "sha256": "4cee9c9c82922a1b0441fdec727c8fdc1a2914384dce56742d2860510b249137",
+      "bytes": 2122
+    },
+    {
+      "path": "scripts/package-single-app.sh",
+      "sha256": "205576253651cdd8c2969067a99803c3ec1a2906e254ebab32c6fbab3deba5e2",
+      "bytes": 4564
+    },
+    {
+      "path": "scripts/prepare-hid-backend.sh",
+      "sha256": "b194c3380d813d588f217e1c9fbf33ab39fb6f2d82d230824da1be1ee13f6da5",
+      "bytes": 2565
+    },
+    {
+      "path": "scripts/prepare-hid-sdk.py",
+      "sha256": "713dd6606ebb507c083b0bbe6c31148600eaff533a705fda9fdaea216c6cad94",
+      "bytes": 2069
+    },
+    {
+      "path": "scripts/source-version.sh",
+      "sha256": "e79eb5a5285613a6c1a1812ff3bf5d46fc3722569755f6f9418132d36be7b43b",
+      "bytes": 662
+    },
+    {
+      "path": "scripts/test.sh",
+      "sha256": "2d7c66fff54e81f1b07b63d68f3968309fd2468196fe18c01b48b082742edc70",
+      "bytes": 2226
+    }
+  ],
+  "candidate": {
+    "version": "0.6.0",
+    "build": "52",
+    "unpackaged_executable": {
+      "sha256": "343504ca6ecb3c7e55305b71be05adcf6be487f392e85ac61aab6085629fe12f",
+      "bytes": 5423680
+    },
+    "ocr_helper": {
+      "sha256": "17ee05be0fe263158fa8b83a8d06c0f913fe5ac1dcba248bab1cc7864c542c21",
+      "bytes": 1030304
+    }
+  },
+  "local_install": {
+    "build": "52",
+    "previous_build": "47",
+    "backup_retained": true,
+    "normal_quit_and_exclusive_publish": true,
+    "text_sections_match_tested_artifact": true,
+    "file_count": 985,
+    "full_bundle_matches_packaged_candidate": true,
+    "packaged_executable_sha256": "28728ca6e1b9ec7550398f0baa04cc3d5a21ed50ec2a2eb426c9013191371160",
+    "system_services_or_driver_modified": false,
+    "permissions_at_first_launch": {
+      "accessibility": "not granted",
+      "input_monitoring": "not granted",
+      "screen_capture": "not granted"
+    }
+  },
+  "local_log_digests": {
+    "debug-final.log": {
+      "sha256": "8ad5d2697450da393f09ccb971903d0b686ef88ce68a8e37a20e3da766492e0c"
+    },
+    "release-final.log": {
+      "sha256": "70548af7efdcb63982af6c464614ab24a465d0ca6bf26fb88fb75f8e9160254b"
+    },
+    "build-app.log": {
+      "sha256": "aa1c3eadbe154ecec87a1d49a4b8447f1190480d7b07aa29fd633262f6380762"
+    },
+    "app-self-check.log": {
+      "sha256": "9a213ec0ef0259c0757a66f0df621abcd441d967055fbd347d46ebd6b666b5f0"
+    },
+    "hid-self-check.log": {
+      "sha256": "c19b4173d8cc6999ebde3d584eba627407f878f6bb708dc607d4df9387da8a18"
+    },
+    "worker-self-check.log": {
+      "sha256": "a0bbcd0494497f585dcfe5b72dee3fb07441a7adafca6a1ebf75fdb267508618"
+    },
+    "visual-checks.log": {
+      "sha256": "2a332e269d4e805e05322fff03af8f360713dd82b7f5e933fe7a9a40ae0bb0ed"
+    }
+  },
+  "limits": [
+    "No claim of globally optimal performance or zero defects",
+    "Actual keyboard, screenshot, Terminal, remote and Driver acceptance not completed",
+    "Ad-hoc signature; package signing changes the Mach-O signature without changing checked __TEXT sections",
+    "Local executable embeds audited base revision plus modified state, not a later commit id",
+    "No claim of byte-for-byte reproducible binaries across toolchains"
+  ]
+}

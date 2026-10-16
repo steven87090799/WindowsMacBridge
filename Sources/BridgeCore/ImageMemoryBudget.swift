@@ -14,6 +14,7 @@ public enum ImageMemoryBudget {
 }
 public enum ScreenshotFailure: String, Error, Sendable {
     case userCancelled, permissionDenied, processFailure, diskFailure, decodeFailure, encodeFailure, timedOut, policyCancelled
+    case textNotFound, textTooLarge, recognitionFailure
     public static func classify(exitCode: Int32, hasImage: Bool, permission: Bool, writable: Bool,
                                 interactive: Bool = true) -> Self? {
         if !permission { return .permissionDenied }

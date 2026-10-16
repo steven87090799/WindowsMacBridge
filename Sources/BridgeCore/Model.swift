@@ -71,12 +71,12 @@ public enum ApplicationMode: String, CaseIterable, Codable, Sendable {
     public var allowsTranslation: Bool { self == .macOS || self == .terminal || self == .ide }
     public var title: String {
         switch self {
-        case .macOS: "Default macOS"
-        case .terminal: "Terminal — Windows Clipboard"
+        case .macOS: "一般 App — Windows 操作"
+        case .terminal: "Terminal — Windows 操作"
         case .remoteWindows: "Remote Session — Pass-through"
         case .virtualMachine: "Virtual Machine — Pass-through"
         case .game: "Game — Pass-through"
-        case .ide: "IDE — Windows Clipboard"
+        case .ide: "IDE — Windows 操作"
         case .disabled: "Disabled — Pass-through"
         }
     }
@@ -153,6 +153,7 @@ public enum WindowAction: Equatable, Sendable {
     case close
 }
 public enum ShortcutAction: Equatable, Sendable {
+    case terminalCopyOrInterrupt
     case finder(FinderAction)
     case system(SystemAction)
     case window(WindowAction)

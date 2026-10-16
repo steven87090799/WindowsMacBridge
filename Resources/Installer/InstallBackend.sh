@@ -11,6 +11,8 @@ bridge_shared_driver='/Library/Application Support/org.pqrs/Karabiner-DriverKit-
 bridge_driver_manager='/Applications/.Karabiner-VirtualHIDDevice-Manager.app'
 bridge_recovery="$bridge_root/.install-recovery"
 bridge_stage="$(/usr/bin/mktemp -d /private/var/tmp/WindowsMacBridge-install.XXXXXX)"
+# This invocation's payload scratch is distinct from an older recovery snapshot.
+bridge_scratch="$bridge_stage"
 bridge_switched=0
 bridge_committed=0
 bridge_app_saved=0
@@ -133,15 +135,27 @@ bridge_rollback() {
     if [[ "$bridge_root_existed" == 0 ]]; then /bin/rmdir "$bridge_root" 2>/dev/null || true; fi
     return "$bridge_failed"
 }
+bridge_cleanup_unused_scratch() {
+    if [[ "$bridge_scratch" != "$bridge_stage" ]]; then /bin/rm -rf "$bridge_scratch"; fi
+}
 bridge_finish() {
     local bridge_result="$?"
     trap - EXIT
+    # ln can publish successfully just before a signal/command failure, before
+    # the next shell assignment runs. Keep its private hard link until switched
+    # is recorded so EXIT can prove that this is our journal, never another owner's.
+    if [[ "$bridge_switched" == 0 && -n "$bridge_journal_tmp" &&
+          ! -L "$bridge_recovery" && "$bridge_recovery" -ef "$bridge_journal_tmp" ]]; then
+        bridge_switched=1
+    fi
     if [[ "$bridge_preserve_stage" == 1 ]]; then
+        bridge_cleanup_unused_scratch
         echo "Protected recovery snapshot retained at $bridge_stage" >&2
         exit 1
     fi
     if [[ "$bridge_switched" == 1 && "$bridge_committed" == 0 ]]; then
         if ! bridge_rollback; then
+            bridge_cleanup_unused_scratch
             echo "Rollback incomplete. Protected recovery snapshot retained at $bridge_stage" >&2
             exit 1
         fi
@@ -149,6 +163,7 @@ bridge_finish() {
     fi
     if [[ "$bridge_switched" == 1 ]]; then
         if ! /bin/rm -f "$bridge_recovery"; then
+            bridge_cleanup_unused_scratch
             echo "Recovery journal cleanup failed; snapshot retained at $bridge_stage" >&2; exit 1
         fi
         /bin/sync
@@ -156,6 +171,7 @@ bridge_finish() {
     fi
     if [[ -n "$bridge_journal_tmp" ]]; then /bin/rm -f "$bridge_journal_tmp"; fi
     /bin/rm -rf "$bridge_stage"
+    bridge_cleanup_unused_scratch
     exit "$bridge_result"
 }
 trap bridge_finish EXIT
@@ -373,10 +389,10 @@ printf 'WMB-INSTALL-2\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' "$bridge_stage"
 /bin/sync
 # Atomic no-clobber publication: concurrent installers cannot overwrite a live recovery owner.
 /bin/ln "$bridge_journal_tmp" "$bridge_recovery"
+bridge_switched=1
 /bin/rm -f "$bridge_journal_tmp"
 bridge_journal_tmp=''
 /bin/sync
-bridge_switched=1
 if [[ "$bridge_helper_running" == 1 ]]; then /bin/launchctl bootout system "$bridge_daemon"; fi
 bridge_driver_check_foreign_clients
 if [[ "$bridge_driver_running" == 1 && "$bridge_driver_kind" != reuse ]]; then /bin/launchctl bootout system "$bridge_driver_daemon"; fi

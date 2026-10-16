@@ -8,6 +8,8 @@ DMG 拖入 Applications → 一般模式 → 權限頁逐項核准輔助功能�
 
 ## 1. 快捷鍵與持鍵
 
+Terminal 與 IDE 也測 Ctrl+S／Z／Y／F／T／W、Ctrl+Arrow、Home／End、Alt+Tab／Alt+F4 與截圖，確認套用完整 Windows 相容規則。各 App 是否提供對應命令另行記錄，不以送出 Command 快捷鍵當作功能成功。兩套輸入後端都須驗收。
+
 TextEdit、Safari 各測 Ctrl+A/C/X/V/Z/Y/F/S/P、Ctrl+Tab、Ctrl+Shift+Tab、Ctrl+T/W／Shift+T、Ctrl+Arrow／Shift+Arrow、Home/End/Delete。先複製後按住 Ctrl 再 Tab，確認仍是分頁切換，沒有殘留 Command。左右 Ctrl／Shift／Alt 重疊，字母先放／修飾鍵先放各測一次。按住 Ctrl 在兩個普通 App 來回，重復 Ctrl+C；進入 Remote、Pause、Secure Input、session鎖定後放開鍵，回來新快捷鍵恢復。不要關閉系統的真正安全輸入。
 
 一般模式無法可靠按鍵盤 ID 分流；若另接第二把測試，兩把同按相同按鍵時記錄 aggregate flags 的限制。使用者實際環境是 Mac mini 外接＋MacBook 內建，雙機按下一節。
@@ -21,6 +23,8 @@ TextEdit、Safari 各測 Ctrl+A/C/X/V/Z/Y/F/S/P、Ctrl+Tab、Ctrl+Shift+Tab、Ct
 兩個測試文件：Ctrl+X→進新目錄→Ctrl+V，應該移動一次，clipboard改變／超過5分鐘不能繼續舊move。F2改名、Delete垃圾桶。文件名文字編輯中的Delete應刪字，未知焦點不盲刪。Shift+Delete確認取消不刪除；確認刪除只用可丟棄文件。Alt+F4只關當前窗口，保留未儲存對話，不退出整個App。一般App亮度鍵不能變Enter。打開多目錄檢查Finder延遲；沒有全磁碟 FinderSync 監控，但流暢度仍須實測。
 
 ## 4. 截圖與記憶體
+
+Windows 截圖鍵與 CmdShift3／4 成功複製後都應在螢幕右下角顯示縮圖，不搶焦點，約五秒後消失；點擊用系統快速查看。新截圖取代舊縮圖；取消、失敗、OCR 與失效工作不顯示圖片縮圖。原生截圖已顯示系統縮圖時不重複加一個。暫停或關閉截圖功能時關閉自己的縮圖與查看程序，清理自己的暫存檔。
 
 Win+Shift+S／PrintScreen框選、Alt+PrintScreen當前窗口、Win+PrintScreen全屏存檔，完成後直接 Ctrl+V／Cmd+V。CmdShift3全屏、CmdShift4選區也複製；暫停或關閉功能後恢復系統原生行為。Esc取消保持原clipboard。框選尚未結束→Pause／換backend／鎖屏／切App／關功能再開，舊結果不得寫入。核准／撤銷 ScreenCapture 後結果不得顯示偽成功；磁碟／程序／解碼／編碼失敗各有錯誤。
 
@@ -38,7 +42,7 @@ Win+Shift+S／PrintScreen框選、Alt+PrintScreen當前窗口、Win+PrintScreen�
 
 ## 7. 輸入法與App模式
 
-ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再測試複製。在 TextEdit、Terminal、IDE 分別測左右 Ctrl+C／V／A／X 與原生 Command+C／V／A／X，確認複製、貼上、全選、剪下依 App 可用功能執行；先放開 Ctrl 再放開字母不得卡住修飾鍵。Terminal 運行 `sleep 30` 後 Ctrl+C 應維持複製用途，Ctrl+Shift+C 應中斷。IDE 內嵌 Terminal 另測其原生中斷操作。遠端 Windows／VM 的 Ctrl+C／V 保持原 Ctrl，兩種後端各自驗收。手動App規則、快速切換、Pause應同步取消舊輸入法／AX／截圖任務。守護／切換熱鍵默認關閉；守護關閉時不修正系統輸入來源。
+ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再測試複製。在 TextEdit、Terminal、IDE 分別測左右 Ctrl+C／V／A／X 與原生 Command+C／V／A／X，確認複製、貼上、全選、剪下依 App 可用功能執行；先放開 Ctrl 再放開字母不得卡住修飾鍵。Terminal 運行 `sleep 30`，先選取可丟棄文字按 Ctrl+C 應複製且命令繼續；清除選取再按 Ctrl+C 應中斷。Ctrl+Shift+C 應明確中斷。另測選取資訊不可用時僅嘗試複製、查詢中切 App／暫停／撤銷來源不得送出舊中斷。IDE 內嵌 Terminal 使用整個 App 的 Windows 規則，另記錄其命令中斷綁定。遠端 Windows／VM 的 Ctrl+C／V 保持原 Ctrl，兩種後端各自驗收。手動App規則、快速切換、Pause應同步取消舊輸入法／AX／截圖任務。守護／切換熱鍵默認關閉；守護關閉時不修正系統輸入來源。
 
 守護開啟後預設維持唯音繁體。用系統選單切成 ABC，應在設定延遲後回到唯音；切換本機 App、喚醒或重新啟動後仍應回到守護目標。用本 App 的 ABC 按鈕或唯音／ABC 快捷鍵選英文，應維持 ABC，並在重新啟動後保留此明確目標；本 App 選回唯音後，系統切英文應再次被修正。舊版記錄的「保留來源」不能當作明確英文選擇。
 
@@ -48,4 +52,12 @@ ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再�
 
 一般模式、關閉診斷、設置窗口關閉，開機等待兩分鐘，Activity Monitor觀察5分鐘，目標平均0.0–0.1%，不能只看一張瞬間截圖。主App沒有固定250ms／1s閒置timer；按鍵、App/session通知和明確deadline會產生正常短暫活動。記錄同PID累計CPU增量、RSS與physical footprint；PID/version改變重新建baseline。自己的HID root process應無client後結束，共享Karabiner進程可能因其他軟件繼續運行。
 
-分別從Git clone和無.git ZIP做Release arm64 build，核對Info版本／commit、資源allowlist、簽章與DMG App→Applications拖入；登入開關只改本App。停止／移除進階runtime保留共享Driver。沒有自制MRU、thumbnail、窗口遍歷切換器；AltTab只使用macOS native path。
+分別從Git clone和無.git ZIP做Release arm64 build，核對Info版本／commit、資源allowlist、簽章與DMG App→Applications拖入；登入開關只改本App。停止／移除進階runtime保留共享Driver。沒有自制 MRU 或窗口遍歷切換器；AltTab 只使用 macOS native path。截圖縮圖只在成功截圖後短暫建立，未使用時沒有視窗與固定輪詢。
+
+## 9. 規則預覽、遠端校準與文字擷取
+
+總開關關閉時先開規則預覽，選 Terminal、IDE、Finder、瀏覽器、Remote／VM 與不同 Windows 鍵位置。核對 Ctrl+C／Ctrl+Shift+C、Ctrl+V、Alt+Tab、Shift+Delete 與截圖輸出，確認沒有實際按鍵輸出、沒有儲存模擬 Profile；最小 730×600 與放大視窗、鍵盤與 VoiceOver 操作都須可用。
+
+從指定遠端來源送入按鍵後開始校準，切到本機 TextEdit 測一次 Ctrl+C。確認前設定不變；套用後重測並還原校準前手動設定。另一來源、一般打字、repeat、60 秒逾時、關閉校準頁、來源退出／重啟、Pause／Secure Input／權限撤銷不得套用結果。正常本機 App 切換應保持校準。分別記錄實際來源軟體與目標，不以 metadata 或 fixture 取代連線驗收。
+
+用可丟棄的繁中／英文圖片框選文字，貼到測試文件，檢查數字、標點、換行、小字與多欄結果；一般截圖仍只複製圖片。沒有文字、取消、逾時、暫停、切換 Session 或撤銷螢幕錄製時原剪貼簿保持。辨識期間再次要求截圖不能啟動第二個工作；結束後再試。量測主 App 與單次 OCR worker 各自的 RSS／footprint，記錄冷／暖啟動與工作結束後記憶體，不要求辨識時 CPU 為零；確認不留命名 OCR 圖檔或文字日誌。

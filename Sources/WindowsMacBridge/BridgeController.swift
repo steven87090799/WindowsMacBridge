@@ -61,7 +61,8 @@ import IOKit.hid
     @Published var screenshotStatus = ScreenshotStatus()
     @Published var macBookKeyboardStatus = MacBookKeyboardMappingStatus()
     @Published var remoteSources: [RemoteSourceStatus] = []
-    @Published var calibrationNotice: String?
+    @Published private(set) var calibrationStatus = RemoteCalibrationStatus()
+    @Published private(set) var remotePreferenceNotice: String?
     @Published private(set) var permissionChecklist = PermissionChecklistState()
     var permissions: PermissionSnapshot { permissionChecklist.verified }
     var keyboardPermissionRestartSuggested: Bool {
@@ -98,19 +99,21 @@ import IOKit.hid
     private let engine = InputEngine()
     private let remoteRegistry = RemoteSourceRegistry()
     private var lastEngineConfiguration: EngineConfiguration?
-    private var calibrationDeadline: Double?
+    private lazy var calibration = RemoteCalibrationCoordinator(inbox: engine.calibrationInbox)
     /// Active HID client plus any client still retiring its capture lease.
     private let hidSlot = HIDBackendSlot()
     private var hid: HIDBackendClient? { hidSlot.active }
     private let store = SettingsStore()
     let installationRecoveryPending: Bool
     private let screenshot = ScreenshotManager()
+    private var screenshotPreview: ScreenshotThumbnailPresenter?
     private let macBookKeyboard = MacBookKeyboardMapper()
     private let finderPublisher = FinderModePublisher()
     private var registry: ApplicationRegistry?
     private var timer: Timer?
     private var timerPlan: RuntimeWakePlan = .stopped
     private var running = false
+    private var terminating = false
     private var observers: [NSObjectProtocol] = []
     private var applicationActivationObserver: NSObjectProtocol?
     private enum SuspensionReason { case systemSleep, screensSleep, inactiveSession }
@@ -128,13 +131,14 @@ import IOKit.hid
     var onStatusChange: (() -> Void)?
 
     var isOperating: Bool {
-        guard settings.enabled, !paused, !status.emergencyPaused, permissions.keyboardControlGranted, permissions.listening,
+        guard !terminating, settings.enabled, !paused, !status.emergencyPaused, permissions.keyboardControlGranted, permissions.listening,
               sessionActive, !status.secureInput, !status.manualPassThrough else { return false }
         if settings.usesHID { return hidStatus.permissions && hidStatus.driverReady && hidStatus.capturedDevices > 0 }
         return status.tapActive && status.fault == nil && status.backendIssue == nil && !status.awaitingNeutral
     }
     var paused: Bool { pausedUntilRestart || (pauseUntil.map { $0 > Date() } ?? false) }
     var summary: String {
+        if terminating { return "正在還原鍵盤並結束；請放開所有按鍵" }
         // Reopening the App does not resume recovery; only the explicit install action does.
         if settings.isAdvancedModeEnabled && installationRecoveryPending { return "背景元件更新中斷；請在進階設定按「安裝進階背景元件」完成復原。" }
         if let configurationError { return configurationError }
@@ -217,7 +221,15 @@ import IOKit.hid
         observe(center, NSWorkspace.sessionDidResignActiveNotification) { $0.setSuspended(.inactiveSession, true) }
         observe(center, NSWorkspace.sessionDidBecomeActiveNotification) { $0.setSuspended(.inactiveSession, false); $0.refreshApplication() }
         inputSources.start()
-        screenshot.onChange = { [weak self] status in self?.screenshotStatus = status }
+        screenshot.onChange = { [weak self] status in
+            if self?.screenshotStatus != status { self?.screenshotStatus = status }
+        }
+        screenshot.onPreviewReady = { [weak self] preview in
+            guard let self else { return false }
+            if self.screenshotPreview == nil { self.screenshotPreview = ScreenshotThumbnailPresenter() }
+            return self.screenshotPreview?.present(preview) == true
+        }
+        screenshot.onDismissPreview = { [weak self] in self?.screenshotPreview?.dismiss() }
         screenshot.start(enabled: false)
         engine.setScreenshotHandler { [weak self] kind, source in self?.screenshot.requestCapture(kind, source: source) }
         remoteRegistry.onChange = { [weak self] in
@@ -237,10 +249,10 @@ import IOKit.hid
     private func updateRuntimeTimer() {
         guard running, let snapshot = policy.current else { return }
         // Calibration expiry is uptime-based; convert it so one one-shot timer covers all deadlines.
-        let calibration = calibrationDeadline.map {
+        let calibrationExpiry = calibration.status.deadline.map {
             ((Date().timeIntervalSince1970 + max(0, $0 - ProcessInfo.processInfo.systemUptime)) * 100).rounded(.up) / 100
         }
-        let deadline = ([pauseUntil, debugUntil].compactMap { $0?.timeIntervalSince1970 } + [calibration].compactMap { $0 }).min()
+        let deadline = ([pauseUntil, debugUntil].compactMap { $0?.timeIntervalSince1970 } + [calibrationExpiry].compactMap { $0 }).min()
         let plan = RuntimeWakePlan.make(input: snapshot.input,
                                         awaitingMappingNeutral: macBookKeyboardStatus.awaitingNeutral,
                                         deadline: deadline)
@@ -266,13 +278,26 @@ import IOKit.hid
             MainActor.assumeIsolated { if let self, self.running { action(self) } }
         })
     }
+    func prepareForTermination() {
+        terminating = true
+        publish()
+    }
+    func restoreNativeMappingForTermination() async -> Bool {
+        let restored = await macBookKeyboard.restoreForTermination()
+        macBookKeyboardStatus = macBookKeyboard.status
+        return restored
+    }
+    func cancelTermination() {
+        terminating = false
+        publish()
+    }
     func stop() {
         running = false
         driverActivation.stop()
         driverCheckTask?.cancel(); driverCheckTask = nil
         remoteRegistry.configure(active: false, preferences: settings.remoteSources)
         remoteRegistry.onChange = nil
-        engine.calibrationInbox.cancel()
+        calibration.cancel()
         finderPublisher.stop()
         timer?.invalidate(); timer = nil; timerPlan = .stopped
         for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
@@ -294,15 +319,6 @@ import IOKit.hid
         engine.maintain()
         remoteRegistry.maintain(engine.producerInbox.take())
         screenshot.applyInputRouting(remoteRegistry.snapshot)
-        if let result = engine.calibrationInbox.take(),
-           remoteRegistry.snapshot.producers.contains(where: { $0.identity == result.identity && $0.processID == result.processID && $0.session == result.session }) {
-            let transport = remoteSources.first { $0.identity == result.identity }?.transport ?? .generic
-            saveRemotePreference(.init(identity: result.identity, semantics: result.semantics, transport: transport, learned: true))
-            calibrationNotice = "已保存此來源：\(result.semantics.title)"; calibrationDeadline = nil
-        }
-        if let deadline = calibrationDeadline, ProcessInfo.processInfo.systemUptime >= deadline {
-            engine.calibrationInbox.cancel(); calibrationDeadline = nil; calibrationNotice = "校準逾時；沒有改變來源設定。"
-        }
         // Reuse the existing lifecycle tick only while a mapping mutation is waiting.
         if macBookKeyboardStatus.awaitingNeutral { refreshMacBookKeyboard() }
         let previousPassThrough = status.manualPassThrough
@@ -439,7 +455,7 @@ import IOKit.hid
         if IsSecureEventInputEnabled() { return .protectedApplication }
         return InputSourcePolicy.suspension(context: app,
             isHostApp: app.processID == ProcessInfo.processInfo.processIdentifier,
-            paused: paused || status.emergencyPaused || status.manualPassThrough, sessionActive: sessionActive)
+            paused: terminating || paused || status.emergencyPaused || status.manualPassThrough, sessionActive: sessionActive)
     }
     private func setSuspended(_ reason: SuspensionReason, _ suspended: Bool) {
         if suspended { suspensionReasons.insert(reason) } else { suspensionReasons.remove(reason) }
@@ -520,7 +536,7 @@ import IOKit.hid
         var input = RuntimePolicyInput()
         input.backend = settings.effectiveInputBackend; input.deviceScope = settings.effectiveKeyboardScope
         input.foreground = context
-        input.paused = paused || status.emergencyPaused
+        input.paused = terminating || paused || status.emergencyPaused
         input.manualPassThrough = status.manualPassThrough
         input.secureInput = IsSecureEventInputEnabled()
         input.session = sessionEpoch; input.sessionActive = sessionActive
@@ -539,6 +555,8 @@ import IOKit.hid
         let previous = policy.current
         let snapshot = policy.transition(input)
         remoteRegistry.configure(active: snapshot.permitsShortcuts, preferences: settings.remoteSources)
+        calibration.refresh(policy: snapshot, producers: remoteRegistry.snapshot.producers)
+        synchronizeCalibrationStatus()
         updateRuntimeTimer()
         if previous == snapshot {
             guard var config = lastEngineConfiguration else { return }
@@ -558,9 +576,6 @@ import IOKit.hid
             }
             engine.update(config)
             return
-        }
-        if calibrationDeadline != nil {
-            engine.calibrationInbox.cancel(); calibrationDeadline = nil; updateRuntimeTimer()
         }
         var config = EngineConfiguration()
         config.context = context
@@ -614,7 +629,7 @@ import IOKit.hid
         inputSources.updateRuntimePolicy(snapshot, protection: sourceSuspension(for: context))
     }
     private func synchronizeHIDMode() {
-        let wanted = settings.usesHID && !backgroundInstallationNeeded
+        let wanted = !terminating && settings.usesHID && !backgroundInstallationNeeded
         let retired = !wanted && hidSlot.active != nil
         hidSlot.synchronize(wanted: wanted)
         if retired { hidStatus = HIDStatus() }
@@ -696,6 +711,18 @@ import IOKit.hid
             NSWorkspace.shared.open(url)
         }
     }
+    var previewApplicationIDs: [String] {
+        Array(Set((registry.map { Array($0.entries.keys) } ?? []) + Array(settings.overrides.keys) +
+            ["com.apple.finder", "com.apple.Terminal", "com.google.Chrome", "com.microsoft.VSCode"] +
+            (targetApp.map { [$0.bundleID] } ?? []))).filter { !$0.isEmpty }.sorted()
+    }
+    func previewContext(bundleID: String, executablePath: String = "", displayName: String? = nil) -> ApplicationContext {
+        let names = ["com.apple.finder":"Finder", "com.apple.Terminal":"Terminal", "com.google.Chrome":"Google Chrome",
+                     "com.apple.Safari":"Safari", "com.microsoft.VSCode":"Visual Studio Code", "com.openai.codex":"Codex"]
+        return .init(processID: 1, bundleID: bundleID, displayName: displayName ?? names[bundleID] ?? bundleID,
+            mode: registry?.mode(for: bundleID, executablePath: executablePath, overrides: settings.overrides) ?? .disabled,
+            executablePath: executablePath, isBrowser: registry?.isBrowser(bundleID) ?? false)
+    }
     func openAcceptanceGuide() {
         if let url = Bundle.main.url(forResource: "AcceptanceGuide", withExtension: "md") {
             NSWorkspace.shared.open(url)
@@ -713,27 +740,71 @@ import IOKit.hid
         store.update { $0.printScreenBehavior = value }; settings = store.settings
         configurationError = store.errorMessage; publish()
     }
-    private func saveRemotePreference(_ preference: RemoteSourcePreference) {
+    @discardableResult private func saveRemotePreference(_ preference: RemoteSourcePreference, publishChanges: Bool = true) -> Bool {
+        guard settings.remoteSources.contains(where: { $0.identity == preference.identity }) || settings.remoteSources.count < 32 else {
+            remotePreferenceNotice = "已達 32 個來源設定上限；請將不使用的來源恢復自動判定後再試。"
+            return false
+        }
         store.update {
             if let i = $0.remoteSources.firstIndex(where: { $0.identity == preference.identity }) { $0.remoteSources[i] = preference }
-            else if $0.remoteSources.count < 32 { $0.remoteSources.append(preference) }
+            else { $0.remoteSources.append(preference) }
         }
-        settings = store.settings; configurationError = store.errorMessage; publish()
+        settings = store.settings; remotePreferenceNotice = store.errorMessage
+        if store.errorMessage == nil { configurationError = nil }
+        if publishChanges { publish() }
+        return store.errorMessage == nil && settings.remoteSources.contains(preference)
     }
     func setRemoteSemantics(_ semantics: RemoteSemantics, source: RemoteSourceStatus) {
-        engine.calibrationInbox.cancel(); calibrationDeadline = nil
+        calibration.cancel(); synchronizeCalibrationStatus()
         saveRemotePreference(.init(identity: source.identity, semantics: semantics, transport: source.transport))
     }
     func setRemoteTransport(_ transport: RemoteTransport, source: RemoteSourceStatus) {
-        engine.calibrationInbox.cancel(); calibrationDeadline = nil
+        calibration.cancel(); synchronizeCalibrationStatus()
         saveRemotePreference(.init(identity: source.identity, semantics: source.semantics, transport: transport, learned: source.learned))
     }
     func calibrateRemote(_ source: RemoteSourceStatus) {
-        guard policy.current?.permitsShortcuts == true else { return }
-        engine.calibrationInbox.arm(identity: source.identity, processID: source.processID, session: source.session)
-        calibrationDeadline = ProcessInfo.processInfo.systemUptime + 60
-        calibrationNotice = "請在此遠端電腦按一次 Ctrl+C。只辨識這個測試組合，60 秒內有效。"
+        publish()
+        guard let snapshot = policy.current else { return }
+        calibration.begin(source: source, policy: snapshot, producers: remoteRegistry.snapshot.producers,
+            previous: settings.remoteSources.first { $0.identity == source.identity })
+        synchronizeCalibrationStatus()
         updateRuntimeTimer()
+    }
+    func cancelRemoteCalibration() {
+        calibration.cancel(notice: "已取消校準；原設定保留。")
+        synchronizeCalibrationStatus(); updateRuntimeTimer()
+    }
+    func confirmRemoteCalibration() {
+        publish()
+        guard let snapshot = policy.current,
+              let preference = calibration.proposedPreference(policy: snapshot, producers: remoteRegistry.snapshot.producers) else {
+            synchronizeCalibrationStatus(); return
+        }
+        let saved = saveRemotePreference(preference, publishChanges: false)
+        calibration.didSave(preference, success: saved)
+        synchronizeCalibrationStatus(); publish()
+    }
+    func undoRemoteCalibration() {
+        guard let undo = calibration.undoProposal(current: settings.remoteSources) else {
+            synchronizeCalibrationStatus(); return
+        }
+        store.update {
+            $0.remoteSources.removeAll { $0.identity == undo.identity }
+            if let previous = undo.previous { $0.remoteSources.append(previous) }
+        }
+        settings = store.settings; configurationError = store.errorMessage
+        calibration.didUndo(success: store.errorMessage == nil)
+        synchronizeCalibrationStatus(); publish()
+    }
+    func resetRemotePreference(_ source: RemoteSourceStatus) {
+        calibration.cancel(); synchronizeCalibrationStatus()
+        store.update { $0.remoteSources.removeAll { $0.identity == source.identity } }
+        settings = store.settings; configurationError = store.errorMessage; publish()
+    }
+    func discoverRemoteSources() { remoteRegistry.discover() }
+    var canCalibrateRemote: Bool { policy.current?.permitsShortcuts == true }
+    private func synchronizeCalibrationStatus() {
+        if calibrationStatus != calibration.status { calibrationStatus = calibration.status }
     }
     func setDeviceExperience(_ experience: DeviceExperience, identity: String) {
         guard (settings.deviceInputs.first { $0.identity == identity }?.experience ?? .windows) != experience else { return }
@@ -765,6 +836,9 @@ import IOKit.hid
             NSWorkspace.shared.open(url)
         }
     }
+    var canCaptureScreenshotText: Bool { policy.current?.permitsScreenshots == true && !screenshotStatus.isBusy }
+    func captureScreenshotText() { screenshot.requestTextCapture() }
+    func cancelScreenshot() { screenshot.cancelCapture() }
     func requestScreenRecording() {
         if !CGPreflightScreenCaptureAccess() { _ = CGRequestScreenCaptureAccess() }
         refreshPermissions(userInitiated: true)

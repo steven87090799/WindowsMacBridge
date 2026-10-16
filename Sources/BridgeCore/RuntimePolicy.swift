@@ -47,7 +47,7 @@ public struct RuntimePolicySnapshot: Equatable, Sendable {
     }
     /// A pending HID release gates BOTH backends: until the old capture lease is
     /// retired, VirtualHID output can re-enter a session tap as HID-state input.
-    /// The client's stop deadline bounds the gate; it cannot persist.
+    /// Missing release proof keeps the gate latched until an explicit restart.
     public var permitsInput: Bool { Self.permitsInput(input) }
     private static func permitsInput(_ input: RuntimePolicyInput) -> Bool {
         input.shortcutEnabled && !input.hidReleasePending && !input.paused && !input.secureInput && input.sessionActive &&

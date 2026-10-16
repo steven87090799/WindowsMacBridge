@@ -1,6 +1,7 @@
 import AppKit
 import Testing
 import BridgeCore
+import ImageIO
 @testable import BridgePlatform
 
 private final class CaptureJobFixture: ScreenshotCaptureJob, @unchecked Sendable {
@@ -298,5 +299,140 @@ private final class DelayedImagePreparation: @unchecked Sendable {
         // bounded fallback for a broken test, not a capture timeout simulation.
         guard finish.wait(timeout: .now() + 60) == .success else { return .failure(.timedOut) }
         return .success(.init(png: Data([137, 80, 78, 71])))
+    }
+}
+
+private final class TextRecognizerFixture: ScreenshotTextRecognizing, @unchecked Sendable {
+    private let lock = NSLock()
+    private let result: Result<String, ScreenshotFailure>
+    private var calls = 0
+    var callCount: Int { lock.lock(); defer { lock.unlock() }; return calls }
+    init(_ result: Result<String, ScreenshotFailure>) { self.result = result }
+    private func take() -> Result<String, ScreenshotFailure> {
+        lock.lock(); calls += 1; lock.unlock(); return result
+    }
+    func recognize(png: Data) async -> Result<String, ScreenshotFailure> { take() }
+}
+private final class DelayedTextRecognizer: ScreenshotTextRecognizing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Result<String, ScreenshotFailure>, Never>?
+    private var completed = false, didStart = false
+    var started: Bool { lock.lock(); defer { lock.unlock() }; return didStart }
+    func recognize(png: Data) async -> Result<String, ScreenshotFailure> {
+        await withCheckedContinuation { value in
+            lock.lock(); didStart = true
+            if completed { lock.unlock(); value.resume(returning: .success("late text")) }
+            else { continuation = value; lock.unlock() }
+        }
+    }
+    func finish() {
+        lock.lock(); completed = true; let value = continuation; continuation = nil; lock.unlock()
+        value?.resume(returning: .success("late text"))
+    }
+}
+@MainActor private final class TextCaptureAuthorizationFixture { var granted = true }
+
+@MainActor struct ScreenshotTextCaptureTests {
+    private func configure(_ manager: ScreenshotManager) -> (RuntimePolicyCoordinator, RuntimePolicyInput) {
+        var input = RuntimePolicyInput(); input.backend = .deviceHID
+        input.shortcutEnabled = true; input.screenshotEnabled = true
+        input.foreground = .init(processID: .max, bundleID: "test.fake", mode: .macOS)
+        var policy = RuntimePolicyCoordinator()
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+        return (policy, input)
+    }
+    private func complete(_ driver: CaptureDriverFixture) throws {
+        let url = try #require(driver.url)
+        let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 8, pixelsHigh: 8,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        let data = try #require(bitmap.representation(using: .png, properties: [:]))
+        try data.write(to: url); driver.completion?(0, nil)
+    }
+    private func waitUntilIdle(_ manager: ScreenshotManager) async throws {
+        for _ in 0..<500 where manager.status.isBusy { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(!manager.status.isBusy)
+    }
+    @Test func explicitTextCaptureSharesTheSlotAndCopiesOnlyText() async throws {
+        let driver = CaptureDriverFixture(), recognizer = TextRecognizerFixture(.success("測試文字 123"))
+        let board = NSPasteboard(name: .init("OCRTextCapture-\(UUID().uuidString)")); defer { board.releaseGlobally() }
+        let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true },
+            captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: recognizer)
+        defer { manager.stop() }
+        _ = configure(manager)
+        manager.requestTextCapture(); manager.requestCapture(.region)
+        #expect(driver.launches == 1 && manager.status.isBusy)
+        let path = try #require(driver.url)
+        try complete(driver); try await waitUntilIdle(manager)
+        #expect(board.string(forType: .string) == "測試文字 123")
+        #expect(board.data(forType: .init("public.png")) == nil && recognizer.callCount == 1)
+        #expect(!manager.status.lastResult.contains("測試文字"), "OCR text never enters status/log strings")
+        #expect(!FileManager.default.fileExists(atPath: path.path))
+    }
+    @Test func regularImagesDoNotLaunchTextRecognition() async throws {
+        let driver = CaptureDriverFixture(), recognizer = TextRecognizerFixture(.success("unused"))
+        let board = NSPasteboard(name: .init("OCRRegularImage-\(UUID().uuidString)")); defer { board.releaseGlobally() }
+        let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true },
+            captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: recognizer)
+        defer { manager.stop() }
+        _ = configure(manager); manager.requestCapture(.region)
+        try complete(driver); try await waitUntilIdle(manager)
+        #expect(board.data(forType: .init("public.png")) != nil && recognizer.callCount == 0)
+    }
+    @Test func noTextAndRecognitionFailuresPreserveClipboard() async throws {
+        for failure: ScreenshotFailure in [.textNotFound,.recognitionFailure,.textTooLarge] {
+            let driver = CaptureDriverFixture(), recognizer = TextRecognizerFixture(.failure(failure))
+            let board = NSPasteboard(name: .init("OCRFailure-\(UUID().uuidString)")); defer { board.releaseGlobally() }
+            board.setString("keep", forType: .string); let before = board.changeCount
+            let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true },
+                captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: recognizer)
+            defer { manager.stop() }
+            _ = configure(manager); manager.requestTextCapture()
+            try complete(driver); try await waitUntilIdle(manager)
+            #expect(manager.status.lastResult == failure.rawValue)
+            #expect(board.changeCount == before && board.string(forType: .string) == "keep")
+        }
+    }
+    @Test func cancelPauseAndSessionChangeRejectLateTextAndRetainSingleFlight() async throws {
+        for transition in 0..<3 {
+            let driver = CaptureDriverFixture(), gate = DelayedTextRecognizer(); defer { gate.finish() }
+            let board = NSPasteboard(name: .init("OCRLateResult-\(UUID().uuidString)")); defer { board.releaseGlobally() }
+            board.setString("original", forType: .string); let before = board.changeCount
+            let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true },
+                captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: gate)
+            defer { manager.stop() }
+            var (policy, input) = configure(manager)
+            manager.requestTextCapture(); try complete(driver)
+            for _ in 0..<500 where !gate.started { try await Task.sleep(for: .milliseconds(10)) }
+            #expect(gate.started && manager.status.recognizingText)
+            switch transition {
+            case 0: manager.cancelCapture()
+            case 1: input.paused = true
+            default: input.session &+= 1
+            }
+            manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+            input.paused = false
+            manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+            manager.requestTextCapture()
+            #expect(driver.launches == 1 && manager.status.isBusy)
+            gate.finish(); try await waitUntilIdle(manager)
+            #expect(board.changeCount == before && board.string(forType: .string) == "original")
+            manager.requestCapture(.region); #expect(driver.launches == 2)
+            driver.completion?(1, .userCancelled); try await waitUntilIdle(manager)
+        }
+    }
+    @Test func permissionRevocationDuringRecognitionBlocksClipboardCommit() async throws {
+        let access = TextCaptureAuthorizationFixture()
+        let driver = CaptureDriverFixture(), gate = DelayedTextRecognizer(); defer { gate.finish() }
+        let board = NSPasteboard(name: .init("OCRPermission-\(UUID().uuidString)")); defer { board.releaseGlobally() }
+        board.setString("keep", forType: .string); let before = board.changeCount
+        let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { access.granted },
+            captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: gate)
+        defer { manager.stop() }
+        _ = configure(manager); manager.requestTextCapture(); try complete(driver)
+        for _ in 0..<500 where !gate.started { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(gate.started)
+        access.granted = false; gate.finish(); try await waitUntilIdle(manager)
+        #expect(manager.status.lastResult == "permissionDenied" && board.changeCount == before)
     }
 }

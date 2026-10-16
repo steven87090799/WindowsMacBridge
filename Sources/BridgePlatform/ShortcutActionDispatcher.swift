@@ -24,7 +24,8 @@ public struct SystemApplicationActivation: Sendable {
 }
 
 /// A bounded mailbox separates the keyboard callback from AppKit, AX and pasteboard work.
-/// No clipboard payload or AX text/value attribute is read.
+/// No clipboard payload or AX text/value attribute is read. Terminal copy only
+/// inspects selection range metadata after an explicit Ctrl+C.
 public final class ShortcutActionDispatcher: @unchecked Sendable {
     private struct Request: Sendable {
         let action: ShortcutAction
@@ -52,14 +53,19 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     private let authorization: (@MainActor @Sendable (ApplicationContext) -> Bool)?
     private let clock: @Sendable () -> Double
     private let systemOpener: (any SystemApplicationOpening)?
+    private let terminalSelection: (@Sendable (Int32) async -> TerminalSelectionState)?
+    private let terminalKeyEmitter: (@MainActor @Sendable (UInt16, Modifiers, ApplicationContext) -> Bool)?
     @MainActor private var cut = FinderCutState()
     private var rejected: UInt64 = 0
     @MainActor public var onScreenshot: (@MainActor @Sendable (ScreenshotKind, SourceWorkToken?) -> Void)?
 
     public init(marker: Int64, authorization: (@MainActor @Sendable (ApplicationContext) -> Bool)? = nil,
                 clock: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime },
-                systemOpener: (any SystemApplicationOpening)? = nil) {
+                systemOpener: (any SystemApplicationOpening)? = nil,
+                terminalSelection: (@Sendable (Int32) async -> TerminalSelectionState)? = nil,
+                terminalKeyEmitter: (@MainActor @Sendable (UInt16, Modifiers, ApplicationContext) -> Bool)? = nil) {
         self.marker = marker; self.authorization = authorization; self.clock = clock; self.systemOpener = systemOpener
+        self.terminalSelection = terminalSelection; self.terminalKeyEmitter = terminalKeyEmitter
     }
 
     /// Per-device preferences invalidate local work without revoking a remote source.
@@ -146,6 +152,7 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
         while let request = pop() {
             guard allowed(request) else { continue }
             switch request.action {
+            case .terminalCopyOrInterrupt: await performTerminalCopy(request)
             case .system(let action):
                 let bundle: String
                 switch action {
@@ -164,6 +171,22 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
             case .screenshot(let kind): onScreenshot?(kind, request.source)
             }
         }
+    }
+
+    @MainActor private func performTerminalCopy(_ request: Request) async {
+        guard request.context.mode == .terminal else { return }
+        let state: TerminalSelectionState
+        if let terminalSelection { state = await terminalSelection(request.context.processID) }
+        else {
+            state = await Task.detached(priority: .userInitiated) {
+                TerminalSelectionReader.read(pid: request.context.processID)
+            }.value
+        }
+        guard allowed(request) else { return }
+        // Only positive evidence of an empty selection may interrupt a command.
+        let flags: Modifiers = state == .empty ? .control : .command
+        let sent = terminalKeyEmitter?(8, flags, request.context) ?? emit(8, flags, request: request)
+        if sent && state == .unknown { report("無法確認 Terminal 的文字選取，僅嘗試複製；Ctrl+Shift+C 可明確中斷命令。") }
     }
 
     @MainActor private func performFinder(_ action: FinderAction, request: Request) async {
@@ -241,7 +264,7 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     }
 
     @MainActor private func performWindow(_ action: WindowAction, request: Request) async {
-        guard request.context.mode == .macOS else { return }
+        guard request.context.mode.allowsTranslation else { return }
         switch action {
         case .close:
             let closed = await Task.detached(priority: .userInitiated) { [self] in

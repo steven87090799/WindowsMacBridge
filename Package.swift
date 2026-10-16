@@ -28,12 +28,17 @@ let package = Package(
         .target(name: "BridgePlatform", dependencies: ["BridgeCore", "HIDProtocol"],
                 resources: [.process("Resources")]),
         .executableTarget(name: "WindowsMacBridge", dependencies: ["BridgeCore", "BridgePlatform", "InputSourceCore", "InputSourceSupport", "HIDRuntime"]),
+        // Vision belongs only to this on-demand executable, never the GUI target.
+        .executableTarget(name: "WindowsMacBridgeTextWorker", dependencies: ["BridgeCore"], path: "Tools/OCRWorker"),
         // Offline codec measurement only; explicitly excluded from App packaging.
         .executableTarget(name: "BridgeImageBenchmark", dependencies: ["BridgeCore", "BridgePlatform"], path: "Tools/ImageBenchmark"),
+        // Opt-in synthetic checks only; no App packaging, event tap or real clipboard.
+        .executableTarget(name: "BridgePerformanceCheck", dependencies: ["BridgeCore", "BridgePlatform"], path: "Tools/PerformanceCheck"),
         .testTarget(name: "VirtualHIDTests", dependencies: ["VirtualHID", "HIDLifecycle"], path: "Tools/HIDBackend/Tests/VirtualHIDTests"),
         .testTarget(name: "BridgeCoreTests", dependencies: ["BridgeCore"], resources: [.copy("Fixtures")]),
         .testTarget(name: "InputSourceSupportTests", dependencies: ["InputSourceSupport"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(name: "InputSourceCoreTests", dependencies: ["InputSourceCore", "BridgeCore"]),
-        .testTarget(name: "BridgePlatformTests", dependencies: ["BridgeCore", "BridgePlatform", "HIDProtocol"])
+        .testTarget(name: "BridgePlatformTests", dependencies: ["BridgeCore", "BridgePlatform", "HIDProtocol"]),
+        .testTarget(name: "OCRWorkerTests", dependencies: ["BridgeCore", "WindowsMacBridgeTextWorker"], path: "Tests/OCRWorkerTests")
     ]
 )

@@ -228,10 +228,10 @@ struct HIDTranslationTests {
         #expect(e.observe(device: 1, page: 7, usage: 0x4c, down: true) == .finder(.permanentDelete))
     }
     @Test func protectedProfilesPreserveCtrlFnAltAndBrightness() {
-        for mode: ApplicationMode in [.terminal,.remoteWindows,.virtualMachine,.game,.ide,.disabled] {
+        for mode: ApplicationMode in [.remoteWindows,.virtualMachine,.game,.disabled] {
             var e = engine(mode)
             _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)
-            // Ctrl+Z stays native in Terminal/IDE; their clipboard chords are translated.
+            // Remote/VM/game/disabled remain outside local Windows translation.
             _ = e.observe(device: 1, page: 7, usage: 29, down: true)
             let out = output(&e); #expect(out.modifiers == 1); #expect(!out.fn); #expect(out.keys[0] == 29)
             _ = e.observe(device: 1, page: 0x0c, usage: 0x6f, down: true)
