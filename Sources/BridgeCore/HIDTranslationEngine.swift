@@ -194,8 +194,7 @@ public struct HIDTranslationEngine: Sendable {
         return result
     }
     private func match(key: UInt16, flags: Modifiers) -> ShortcutRule? {
-        if context.mode == .terminal { return RuleEngine.terminalClipboard.match(keyCode: key, modifiers: flags) }
-        if context.mode == .ide { return RuleEngine.clipboard.match(keyCode: key, modifiers: flags) }
+        if context.mode == .terminal, let terminal = RuleEngine.terminalClipboard.match(keyCode: key, modifiers: flags) { return terminal }
         let system = windowsKeyModifier == .option ? RuleEngine.system : RuleEngine.systemCommand
         if let rule = system.match(keyCode: key, modifiers: flags) {
             if flags != windowsKeyModifier.flag { return rule }
@@ -235,7 +234,7 @@ public struct HIDTranslationEngine: Sendable {
             }
             if key == 7 { return nil }
         }
-        if context.isBrowser {
+        if context.isBrowser || context.mode == .terminal || context.mode == .ide {
             let browser = windowsKeyModifier == .option ? RuleEngine.browserCommandAlt : RuleEngine.browser
             if let rule = browser.match(keyCode: key, modifiers: flags) { return rule }
         }
@@ -248,7 +247,7 @@ public struct HIDTranslationEngine: Sendable {
     private static func isTextNavigation(_ rule: ShortcutRule) -> Bool {
         (32...41).contains(Int(rule.id.split(separator: ".").last ?? "") ?? -1)
     }
-    private static func systemTransportAllowed(_ mode: ApplicationMode) -> Bool { mode == .macOS || mode == .terminal }
+    private static func systemTransportAllowed(_ mode: ApplicationMode) -> Bool { mode.allowsTranslation }
     private func transportSystemRule(key: UInt16, flags: Modifiers) -> ShortcutRule? {
         guard transportOnly, !manualPassThrough, !emergencyPaused, Self.systemTransportAllowed(context.mode),
               flags == windowsKeyModifier.flag else { return nil }
@@ -295,7 +294,7 @@ public struct HIDTranslationEngine: Sendable {
         }
         var rule: ShortcutRule?
         if (local || transportOnly) && !waitingForNeutral, page == 7, Int(usage) < HIDKeyMap.carbon.count, let key = HIDKeyMap.carbon[Int(usage)] {
-            if local && context.mode == .macOS && actionsEnabled && screenshotEnabled, (key != 105 || usage == 0x46),
+            if local && actionsEnabled && screenshotEnabled, (key != 105 || usage == 0x46),
                let kind = WindowsScreenshotShortcuts.match(key: key, modifiers: flags,
                 windowsKey: windowsKeyModifier, printScreen: printScreenBehavior) {
                 press.trigger = flags; press.ownsModifiers = true; press.suppressed = true

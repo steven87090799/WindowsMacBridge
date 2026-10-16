@@ -9,6 +9,8 @@ enum SettingsPage: String, CaseIterable {
     case general = "一般設定"
     case inputSources = "唯音與輸入法"
     case profiles = "App 規則"
+    case preview = "規則預覽"
+    case remoteCalibration = "遠端校準"
     case diagnostics = "診斷"
 }
 
@@ -32,6 +34,8 @@ struct SettingsView: View {
                 case .general: general
                 case .inputSources: inputSources
                 case .profiles: profiles
+                case .preview: ShortcutPreviewView(controller: controller)
+                case .remoteCalibration: RemoteCalibrationView(controller: controller)
                 case .diagnostics: diagnostics
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -175,26 +179,33 @@ struct SettingsView: View {
                 Text(controller.isOperating ? "🟢 運作中" : controller.summary)
                     .font(.headline)
                 if controller.status.fault != nil { Button("重新啟動引擎") { controller.resume() } }
-                Toggle("Windows 核心快捷鍵", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
-                explanation("複製、貼上、復原、全選、儲存、瀏覽器分頁與原生 Alt+Tab。Terminal 與 IDE 也使用 Ctrl+C／V／A／X；遠端 Windows 與虛擬機保留 Ctrl 給 Windows 處理。")
-                Toggle("MacBook 鍵盤模式（交換內建 Fn／地球鍵與左 Ctrl）", isOn: Binding(
-                    get: { controller.settings.macBookFnControlSwap }, set: { controller.setMacBookFnControlSwap($0) }))
-                if controller.settings.macBookFnControlSwap {
-                    Text(controller.macBookKeyboardStatus.summary).font(.caption).foregroundStyle(.secondary)
-                    explanation("只交換這臺 MacBook 的內建鍵盤；外接鍵盤不變。關閉或正常退出後還原，切換時請放開所有按鍵。")
+                Toggle("Windows 模式總開關", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
+                explanation("統一控制 Windows 快捷鍵、Fn／Ctrl 交換、Finder 加強與截圖自動複製。登入啟動與唯音輸入法守護各自獨立。")
+                if !controller.settings.enabled {
+                    Text("下列功能已暫停；設定保留，開啟總開關後恢復。").font(.caption).foregroundStyle(.secondary)
                 }
-                Toggle("Finder 檔案操作加強", isOn: Binding(get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
-                explanation("Ctrl+X → Ctrl+V 移動檔案，F2 改名，Delete 移到垃圾桶。Shift+Delete 交由 Finder 的「立即刪除」確認視窗保護；不需要 Finder 擴充功能。")
-                Toggle("Windows 快捷截圖（截圖後自動複製）", isOn: Binding(get: { controller.settings.screenshotAutoCopy }, set: { controller.setScreenshotAutoCopy($0) }))
-                explanation("Win+Shift+S／PrintScreen 框選，Alt+PrintScreen 擷取視窗，Win+PrintScreen 儲存全螢幕並複製。⌘⇧3／⌘⇧4 也直接複製；第一次擷取可能由 macOS 要求螢幕錄製授權。")
-                if let issue = controller.screenshotStatus.issue {
-                    Text(issue).font(.caption).foregroundStyle(.orange)
-                    Button("開啟螢幕錄製設定") { controller.openScreenRecording() }
+                Group {
+                    explanation("本機 App、Terminal 與 IDE 共用 Windows 相容操作：複製、貼上、復原、儲存、分頁、文字導覽與 Alt+Tab。遠端 Windows 與虛擬機保留 Ctrl 給 Windows 處理。")
+                    Toggle("MacBook 鍵盤模式（交換內建 Fn／地球鍵與左 Ctrl）", isOn: Binding(
+                        get: { controller.settings.macBookFnControlSwap }, set: { controller.setMacBookFnControlSwap($0) }))
+                    if controller.settings.macBookFnControlSwap {
+                        Text(controller.macBookKeyboardStatus.summary).font(.caption).foregroundStyle(.secondary)
+                        explanation("只交換這臺 MacBook 的內建鍵盤；外接鍵盤不變。關閉或正常退出後還原，切換時請放開所有按鍵。")
+                    }
+                    Toggle("Finder 檔案操作加強", isOn: Binding(get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
+                    explanation("Ctrl+X → Ctrl+V 移動檔案，F2 改名，Delete 移到垃圾桶。Shift+Delete 交由 Finder 的「立即刪除」確認視窗保護；不需要 Finder 擴充功能。")
+                    Toggle("Windows 快捷截圖（截圖後自動複製）", isOn: Binding(get: { controller.settings.screenshotAutoCopy }, set: { controller.setScreenshotAutoCopy($0) }))
+                    explanation("Win+Shift+S／PrintScreen 框選，Alt+PrintScreen 擷取視窗，Win+PrintScreen 儲存全螢幕並複製。⌘⇧3／⌘⇧4 也直接複製；第一次擷取可能由 macOS 要求螢幕錄製授權。")
+                    if let issue = controller.screenshotStatus.issue {
+                        Text(issue).font(.caption).foregroundStyle(.orange)
+                        Button("開啟螢幕錄製設定") { controller.openScreenRecording() }
+                    }
+                    Picker("這臺 Mac 收到的 Windows 鍵", selection: Binding(get: { controller.settings.windowsKeyModifier }, set: { controller.setWindowsKeyModifier($0) })) {
+                        Text("Option ⌥").tag(WindowsKeyModifier.option)
+                        Text("Command ⌘").tag(WindowsKeyModifier.command)
+                    }
                 }
-                Picker("這臺 Mac 收到的 Windows 鍵", selection: Binding(get: { controller.settings.windowsKeyModifier }, set: { controller.setWindowsKeyModifier($0) })) {
-                    Text("Option ⌥").tag(WindowsKeyModifier.option)
-                    Text("Command ⌘").tag(WindowsKeyModifier.command)
-                }
+                .disabled(!controller.settings.enabled)
                 Toggle("開機自動啟動", isOn: Binding(get: { controller.permissions.loginItem }, set: { controller.setLoginEnabled($0) }))
                 if let issue = controller.sourceStatus.loginIssue { Text(issue).foregroundStyle(.orange) }
                 HStack {
@@ -203,6 +214,9 @@ struct SettingsView: View {
                     Button("實機驗收步驟") { controller.openAcceptanceGuide() }
                 }
             }
+            ScreenshotTextCaptureSection(status: controller.screenshotStatus, canCapture: controller.canCaptureScreenshotText,
+                featuresEnabled: controller.settings.enabled && controller.settings.screenshotAutoCopy,
+                onCapture: controller.captureScreenshotText, onCancel: controller.cancelScreenshot)
             Section {
                 DisclosureGroup("進階選項") {
                     Toggle("解鎖進階後端模式（實驗性）", isOn: Binding(get: { controller.settings.isAdvancedModeEnabled }, set: { controller.setAdvancedModeEnabled($0) }))
@@ -241,11 +255,6 @@ struct SettingsView: View {
                             ForEach(PrintScreenBehavior.allCases, id: \.self) { Text($0.title).tag($0) }
                         }
                         Button("詳細診斷") { controller.settingsPage = .diagnostics }
-                        ForEach(controller.remoteSources) { source in
-                            Picker("\(source.displayName) 的來源按鍵", selection: Binding(get: { source.semantics }, set: { controller.setRemoteSemantics($0, source: source) })) {
-                                ForEach(RemoteSemantics.allCases, id: \.self) { Text($0.title).tag($0) }
-                            }
-                        }
                     }
                 }
             }
@@ -345,7 +354,7 @@ struct SettingsView: View {
     private var profiles: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("App 規則").font(.title2)
-            explanation("規則依 App 的 bundle ID 套用到整個 App。本機 macOS、Terminal 與 IDE 都支援 Ctrl+C／V／A／X；Terminal 使用 Ctrl+Shift+C 中斷命令，其餘 Unix Ctrl 操作保留。")
+            explanation("規則依 App 的 bundle ID 套用到整個 App。本機 App、Terminal 與 IDE 都套用完整 Windows 相容快捷鍵；Terminal 的 Ctrl+C 有選取時複製、沒有選取時中斷；Ctrl+Shift+C 明確中斷。")
             if let app = controller.targetApp {
                 HStack {
                     VStack(alignment: .leading) {
@@ -361,7 +370,7 @@ struct SettingsView: View {
                 }
             }
             Button("選擇其他 App…") { controller.chooseApplication() }
-            explanation("選取 .app 後先加入 Disabled／原樣通過，再用下方選單指定模式。「移除」會刪除自訂規則並恢復內建判定，包含 Codex 的 IDE 保護。")
+            explanation("選取 .app 後先加入 Disabled／原樣通過，再用下方選單指定模式。「移除」會刪除自訂規則並恢復內建判定，包含 Codex 的 IDE Windows 操作模式。")
             List(controller.settings.overrides.keys.sorted(), id: \.self) { id in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
@@ -393,9 +402,9 @@ struct SettingsView: View {
 
     private func profileExplanation(_ mode: ApplicationMode) -> String {
         switch mode {
-        case .macOS: "本機翻譯：將 Windows 快捷鍵轉為 macOS 操作；手動指定會覆寫此 App 原本的 Terminal／IDE 等保護。"
-        case .terminal: "Ctrl+C／V／A／X 對應複製／貼上／全選／剪下；Ctrl+Shift+C 中斷命令。其餘 Unix Ctrl 操作保留。"
-        case .ide: "Ctrl+C／V／A／X 對應複製／貼上／全選／剪下；其餘編輯器、除錯器與內嵌 Terminal 的 Ctrl 操作保留。"
+        case .macOS: "本機 App 使用完整 Windows 相容快捷鍵：複製、儲存、復原／重做、搜尋、分頁、文字導覽與系統操作。"
+        case .terminal: "Terminal 使用完整 Windows 相容快捷鍵；Ctrl+C 有選取文字時複製，沒有選取時中斷命令；Ctrl+Shift+C 明確中斷。"
+        case .ide: "IDE 整個 App 共用完整 Windows 相容快捷鍵，包含儲存、復原／重做、搜尋、分頁與文字導覽。"
         case .remoteWindows: "讓遠端 Client 收到原按鍵，停止本機翻譯、系統動作與輸入法守護。Windows 或 Mac 目標都適用；本 App 無法從 Client 的前景程序判斷連線目標，也不替 Client 設定轉送。"
         case .virtualMachine: "讓 VM 接收原按鍵，停止本機翻譯與輸入法切換；VM 是否捕捉 Alt+Tab 由虛擬機軟體控制。"
         case .game: "讓遊戲接收原按鍵，停止本機翻譯及輸入法切換，避免改動遊戲控制。"

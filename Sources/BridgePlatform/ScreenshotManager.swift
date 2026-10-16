@@ -18,6 +18,10 @@ public struct ScreenshotImagePayload: Sendable {
     public var encodedByteCount: Int { png.count }
 }
 
+private enum ScreenshotProcessedOutput: Sendable {
+    case image(ScreenshotImagePayload, thumbnail: Data?), text(String)
+}
+
 /// ImageIO writes incrementally. Refuse a chunk before it can grow the encoded
 /// buffer beyond its budget; a post-finalize size check alone is too late.
 private final class PNGEncodingBuffer {
@@ -29,45 +33,6 @@ private final class PNGEncodingBuffer {
         guard !Task.isCancelled, !overflow, count >= 0, count <= limit - data.count else { overflow = true; return 0 }
         data.append(pointer.assumingMemoryBound(to: UInt8.self), count: count)
         return count
-    }
-}
-
-/// One immutable, bounded snapshot of a capture file. Validation and every
-/// later parse use the same descriptor's bytes, so a path that is replaced,
-/// truncated or grown after the size check cannot bypass the budget. Never mapped.
-enum BoundedImageFile {
-    static func read(_ url: URL, limit: Int = ImageMemoryBudget.maximumFileBytes,
-                     afterValidation: (() -> Void)? = nil) -> Result<Data, ScreenshotFailure> {
-        // O_NONBLOCK: a FIFO at this path must not block the open.
-        let descriptor = open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
-        guard descriptor >= 0 else { return .failure(.diskFailure) }
-        defer { close(descriptor) }
-        var before = stat()
-        guard fstat(descriptor, &before) == 0, before.st_mode & S_IFMT == S_IFREG,
-              before.st_size > 0, before.st_size <= off_t(limit) else { return .failure(.diskFailure) }
-        afterValidation?()
-        let expected = Int(before.st_size)
-        // One extra byte detects growth; the allocation is bounded by the validated size.
-        var data = Data(count: expected + 1)
-        var total = 0
-        let complete = data.withUnsafeMutableBytes { buffer -> Bool in
-            guard let base = buffer.baseAddress else { return false }
-            while total < buffer.count {
-                guard !Task.isCancelled else { return false }
-                let count = Darwin.read(descriptor, base.advanced(by: total), buffer.count - total)
-                if count < 0 { if errno == EINTR { continue }; return false }
-                if count == 0 { break }
-                total += count
-            }
-            return true
-        }
-        guard !Task.isCancelled else { return .failure(.policyCancelled) }
-        var after = stat()
-        guard complete, total == expected, fstat(descriptor, &after) == 0, after.st_size == before.st_size,
-              after.st_ino == before.st_ino, after.st_mtimespec.tv_sec == before.st_mtimespec.tv_sec,
-              after.st_mtimespec.tv_nsec == before.st_mtimespec.tv_nsec else { return .failure(.diskFailure) }
-        data.count = expected
-        return .success(data)
     }
 }
 
@@ -176,6 +141,14 @@ public enum ScreenshotImagePreparation {
         pasteboard.clearContents()
         return pasteboard.writeObjects([item]) ? .success : .writeFailed
     }
+    public static func writeText(_ text: String, to pasteboard: NSPasteboard) -> ScreenshotClipboardResult {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              text.utf8.count <= ScreenshotTextBudget.maximumUTF8Bytes else { return .unreadableImage }
+        let item = NSPasteboardItem()
+        guard item.setString(text, forType: .string) else { return .writeFailed }
+        pasteboard.clearContents()
+        return pasteboard.writeObjects([item]) ? .success : .writeFailed
+    }
 }
 
 public struct ScreenshotStatus: Equatable, Sendable {
@@ -183,6 +156,8 @@ public struct ScreenshotStatus: Equatable, Sendable {
     public var issue: String?
     public var lastResult = "尚未啟用"
     public var lastCheck: Date?
+    public var isBusy = false
+    public var recognizingText = false
     public init() {}
 }
 
@@ -191,6 +166,9 @@ public struct ScreenshotStatus: Equatable, Sendable {
 @MainActor public final class ScreenshotManager {
     public var onChange: ((ScreenshotStatus) -> Void)?
     public var onPeriodicCheck: (() -> Void)?
+    /// Returning true transfers ownership of a temporary capture to the presenter.
+    public var onPreviewReady: ((ScreenshotPreview) -> Bool)?
+    public var onDismissPreview: (() -> Void)?
     public private(set) var status = ScreenshotStatus()
     public var logPath: String { logURL.path }
 
@@ -236,7 +214,9 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private let clipboard: NSPasteboard
     private var awaitingNeutral = false
     private var jobTimer: DispatchSourceTimer?
-    private var processing: Task<Result<ScreenshotImagePayload, ScreenshotFailure>, Never>?
+    private var processing: Task<Result<ScreenshotProcessedOutput, ScreenshotFailure>, Never>?
+    private var textJobToken: ScreenshotCaptureLifecycle.Token?
+    private let textRecognizer: any ScreenshotTextRecognizing
     private let prepareImage: @Sendable (URL) -> Result<ScreenshotImagePayload, ScreenshotFailure>
     private let captureTimeout: TimeInterval
     private var pendingNativeURL: URL?
@@ -248,7 +228,8 @@ public struct ScreenshotStatus: Equatable, Sendable {
                 driver: (any ScreenshotCaptureDriving)? = nil, clipboard: NSPasteboard = .general,
                 authorization: (@MainActor () -> Bool)? = nil,
                 prepareImage: @escaping @Sendable (URL) -> Result<ScreenshotImagePayload, ScreenshotFailure> = ScreenshotImagePreparation.prepareResult,
-                captureTimeout: TimeInterval = 120, captureDirectory: URL? = nil) {
+                captureTimeout: TimeInterval = 120, captureDirectory: URL? = nil,
+                textRecognizer: any ScreenshotTextRecognizing = IsolatedScreenshotTextRecognizer()) {
         // Initialize the shared marker outside the native event callback.
         _ = EventRewriter.generatedEventMarker
         self.defaults = defaults
@@ -258,6 +239,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         self.validatesNativeContext = authorization == nil
         self.captureDirectoryOverride = captureDirectory
         self.prepareImage = prepareImage
+        self.textRecognizer = textRecognizer
         self.captureTimeout = captureTimeout.isFinite && captureTimeout > 0 ? min(120, captureTimeout) : 120
         self.authorization = authorization ?? { !IsSecureEventInputEnabled() && CGPreflightScreenCaptureAccess() }
         logURL = fileManager.homeDirectoryForCurrentUser
@@ -284,6 +266,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
             verifyAndRepair(reason: "功能啟用")
 
         } else {
+            onDismissPreview?()
             if nativeSelectionOutstanding { nativeSelectionCancelled = true }
             pendingNativeURL = nil
             activeJob?.cancel(.policyCancelled)
@@ -303,6 +286,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         let nativeContinuity = sameScreenshotKeys && policy.permitsScreenshots &&
             runtimePolicy.map { $0.permitsScreenshots && policy.preservesModifiers(from: $0) } == true
         let preserveNativeJob = nativeContinuity && nativeFileJob
+        if !nativeContinuity { onDismissPreview?() }
         if let previous = runtimePolicy {
             var normalized = policy.input
             normalized.foreground = previous.input.foreground
@@ -335,6 +319,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     public func applyInputRouting(_ routing: InputRoutingSnapshot) {
         inputRouting = routing
         if sourceJob?.validForAsyncWork == false {
+            onDismissPreview?()
             activeJob?.cancel(.policyCancelled); processing?.cancel(); capture.invalidate()
             sourceJob = nil
         }
@@ -350,13 +335,28 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
     public func requestCapture(_ kind: ScreenshotKind, source: SourceWorkToken? = nil) {
         guard source?.validForAsyncWork ?? true, enabled, captureAllowed, let token = capture.begin() else { return }
+        textJobToken = nil
         sourceJob = source
         nativeFileJob = false
         jobKind = kind
         beginCapture(token, kind: kind)
     }
 
+    public func requestTextCapture() {
+        guard enabled, captureAllowed, let token = capture.begin() else { return }
+        sourceJob = nil; nativeFileJob = false; textJobToken = token
+        beginCapture(token, kind: .region)
+    }
+    public func cancelCapture() {
+        guard capture.hasActiveCapture else { return }
+        capture.invalidate(); pendingNativeURL = nil
+        activeJob?.cancel(.userCancelled); processing?.cancel()
+        jobTimer?.cancel(); jobTimer = nil
+        setStatus(issue: nil, result: "已取消；原剪貼簿保留")
+    }
+
     public func stop() {
+        onDismissPreview?()
         pendingNativeURL = nil
         destroyTap()
         destroyNativeTap()
@@ -657,7 +657,12 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     private func beginCapture(_ token: ScreenshotCaptureLifecycle.Token, kind: ScreenshotKind) {
-        guard sourceJob?.validForAsyncWork ?? true, capture.isCurrent(token) else { _ = capture.complete(token); return }
+        guard sourceJob?.validForAsyncWork ?? true, capture.isCurrent(token) else {
+            if textJobToken == token { textJobToken = nil }
+            _ = capture.complete(token); updateWorkStatus(); return
+        }
+        if textJobToken != token { textJobToken = nil }
+        onDismissPreview?()
         jobKind = kind
         // An explicit screenshot is the only general-mode action that may request
         // screen recording. Never request it during startup or a status check.
@@ -665,6 +670,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
             permissionRequested = true; _ = CGRequestScreenCaptureAccess()
         }
         guard isAuthorized() else {
+            if textJobToken == token { textJobToken = nil }
             if capture.complete(token) { setStatus(issue: "螢幕錄製權限不可用。", result: "permissionDenied") }
             return
         }
@@ -683,6 +689,10 @@ public struct ScreenshotStatus: Equatable, Sendable {
             }
         } catch {
             jobTimer?.cancel(); jobTimer = nil
+            if activeJobToken == token { activeJobToken = nil; activeJob = nil }
+            if isTemporary(destination) { try? fileManager.removeItem(at: destination) }
+            if activeDestination == destination { activeDestination = nil }
+            if textJobToken == token { textJobToken = nil }
             guard capture.complete(token) else { return }
             setStatus(issue: "無法啟動 macOS 截圖工具：\(error.localizedDescription)", result: "processFailure")
             log("截圖工具啟動失敗：\(error.localizedDescription)")
@@ -706,9 +716,12 @@ public struct ScreenshotStatus: Equatable, Sendable {
 
     private func finishCapture(exitCode: Int32, failure: ScreenshotFailure?, url: URL, token: ScreenshotCaptureLifecycle.Token) async {
         let temporary = isTemporary(url)
+        var previewOwnsTemporary = false
         defer {
-            if temporary { try? fileManager.removeItem(at: url) }
+            if temporary && !previewOwnsTemporary { try? fileManager.removeItem(at: url) }
             if activeDestination == url { activeDestination = nil }
+            if textJobToken == token { textJobToken = nil }
+            updateWorkStatus()
             if let pending = pendingNativeURL {
                 pendingNativeURL = nil
                 acceptNativeScreenshot(pending)
@@ -730,12 +743,26 @@ public struct ScreenshotStatus: Equatable, Sendable {
             return
         }
         let prepare = prepareImage
+        let recognizesText = textJobToken == token
+        // OS-owned native files already have the system's own floating thumbnail.
+        let preparesPreview = onPreviewReady != nil && !nativeFileJob && !recognizesText
+        let recognizer = textRecognizer
         let work = Task.detached(priority: .userInitiated) {
-            guard !Task.isCancelled else { return Result<ScreenshotImagePayload, ScreenshotFailure>.failure(.policyCancelled) }
+            guard !Task.isCancelled else { return Result<ScreenshotProcessedOutput, ScreenshotFailure>.failure(.policyCancelled) }
             let result = prepare(url)
-            return Task.isCancelled ? .failure(.policyCancelled) : result
+            guard !Task.isCancelled else { return .failure(.policyCancelled) }
+            switch result {
+            case .failure(let failure): return .failure(failure)
+            case .success(let image):
+                if recognizesText {
+                    let text = await recognizer.recognize(png: image.png)
+                    return Task.isCancelled ? .failure(.policyCancelled) : text.map { .text($0) }
+                }
+                return .success(.image(image, thumbnail: preparesPreview ? ScreenshotPreviewPreparation.thumbnail(png: image.png) : nil))
+            }
         }
         processing = work
+        setStatus(issue: nil, result: recognizesText ? "正在本機辨識文字…" : "正在處理截圖")
         let payload = await work.value
         processing = nil; jobTimer?.cancel(); jobTimer = nil
         // Off/on while decoding or while the native selection UI is open must
@@ -746,13 +773,28 @@ public struct ScreenshotStatus: Equatable, Sendable {
             return
         }
         guard capture.complete(token) else { return }
-        let image: ScreenshotImagePayload
+        let output: ScreenshotProcessedOutput
         switch payload {
-        case .success(let value): image = value
+        case .success(let value): output = value
         case .failure(let failure):
-            setStatus(issue: "圖片處理失敗：\(failure.rawValue)", result: failure.rawValue)
+            let message: String
+            switch failure {
+            case .textNotFound: message = "未找到可辨識文字；原剪貼簿保留。"
+            case .textTooLarge: message = "文字超過 64 KiB 或 1,000 行；請縮小框選範圍。"
+            case .recognitionFailure: message = "文字辨識未完成；請重新框選較清楚的文字。"
+            case .timedOut where recognizesText: message = "文字辨識逾時；請縮小框選範圍後重試。"
+            default: message = "截圖處理失敗：\(failure.rawValue)"
+            }
+            setStatus(issue: message, result: failure.rawValue)
             return
         }
+        if case .text(let text) = output {
+            if ScreenshotClipboard.writeText(text, to: clipboard) == .success {
+                setStatus(issue: nil, result: "已複製 \(text.count) 字；可直接貼上")
+            } else { setStatus(issue: "文字無法寫入剪貼簿。", result: "writeFailed") }
+            return // Never log recognized text or retain it in status/preferences.
+        }
+        guard case .image(let image, let thumbnail) = output else { return }
         let result = ScreenshotClipboard.write(image, to: clipboard)
         switch result {
         case .unreadableImage:
@@ -764,6 +806,10 @@ public struct ScreenshotStatus: Equatable, Sendable {
             log("截圖剪貼簿寫入失敗（\(jobKind)）")
             return
         case .success: break
+        }
+        if let thumbnail {
+            let accepted = onPreviewReady?(.init(thumbnailPNG: thumbnail, sourceURL: url, ownsSourceFile: temporary)) == true
+            previewOwnsTemporary = accepted && temporary
         }
         setStatus(issue: nil, result: "截圖已複製，可直接貼上")
         // Paths contain the account name; log only the outcome and kind.
@@ -802,6 +848,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         nativeSelectionOutstanding = false
         guard enabled, captureAllowed else { return }
         guard let token = capture.begin() else { pendingNativeURL = url; return }
+        textJobToken = nil
         sourceJob = nil; nativeFileJob = true; jobKind = .fullScreen
         scheduleCaptureTimeout(token)
         setStatus(issue: nil, result: "正在複製 macOS 截圖")
@@ -831,7 +878,14 @@ public struct ScreenshotStatus: Equatable, Sendable {
         status.issue = issue
         status.lastResult = result
         status.tapActive = nativeTap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false
+        status.isBusy = capture.hasActiveCapture
+        status.recognizingText = processing != nil && textJobToken != nil
         onChange?(status)
+    }
+    private func updateWorkStatus() {
+        let busy = capture.hasActiveCapture, text = processing != nil && textJobToken != nil
+        guard status.isBusy != busy || status.recognizingText != text else { return }
+        status.isBusy = busy; status.recognizingText = text; onChange?(status)
     }
 
     private func log(_ message: String) {

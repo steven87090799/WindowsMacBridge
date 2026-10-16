@@ -32,6 +32,7 @@ import HIDProtocol
         var b = a; b.processID = 99; b.bundleID = "com.apple.Terminal"; b.mode = .terminal
         b.layoutSupported = true; b.finderEnabled = true; b.generation = 42
         #expect(a.sameCapturePolicy(as: b))
+        b.mode = .ide; #expect(a.sameCapturePolicy(as: b))
         b.enabled = false; #expect(!a.sameCapturePolicy(as: b))
         b = a; b.sessionActive.toggle(); #expect(!a.sameCapturePolicy(as: b))
         b = a; b.macBookFnControlSwap.toggle(); #expect(!a.sameCapturePolicy(as: b))

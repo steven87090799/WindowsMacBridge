@@ -20,12 +20,14 @@ struct LocalClipboardShortcutTests {
                     var p = processor(mode)
                     _ = p.process(.init(.flagsChanged, keyCode: right ? 62 : 59, modifiers: .control,
                         modifierSide: right ? .rightControl : .leftControl, modifierDown: true))
-                    let output = EventDecision.rewrite(keyCode: key, modifiers: .command, ruleID: "windows.\(name)")
+                    let conditionalCopy = mode == .terminal && key == 8
+                    let output: EventDecision = conditionalCopy ? .action(.terminalCopyOrInterrupt, ruleID: "terminal.copyOrInterrupt") :
+                        .rewrite(keyCode: key, modifiers: .command, ruleID: "windows.\(name)")
                     #expect(p.process(.init(.down, keyCode: key, modifiers: .control)) == output)
-                    #expect(p.process(.init(.down, keyCode: key, modifiers: .control, isRepeat: true)) == output)
+                    #expect(p.process(.init(.down, keyCode: key, modifiers: .control, isRepeat: true)) == (conditionalCopy ? .suppress : output))
                     _ = p.process(.init(.flagsChanged, keyCode: right ? 62 : 59,
                         modifierSide: right ? .rightControl : .leftControl, modifierDown: false))
-                    #expect(p.process(.init(.up, keyCode: key)) == .rewrite(keyCode: key, modifiers: [], ruleID: "windows.\(name)"))
+                    #expect(p.process(.init(.up, keyCode: key)) == (conditionalCopy ? .suppress : .rewrite(keyCode: key, modifiers: [], ruleID: "windows.\(name)")))
                     #expect(p.activePressCount == 0)
                 }
             }
@@ -51,13 +53,14 @@ struct LocalClipboardShortcutTests {
         }
     }
 
-    @Test func terminalInterruptHasADedicatedChordWhileOtherUnixControlsPassThrough() {
+    @Test func terminalUsesFullWindowsControlsAndAnExplicitInterruptChord() {
         var p = processor(.terminal)
         _ = p.process(.init(.flagsChanged, keyCode: 59, modifiers: .control,
             modifierSide: .leftControl, modifierDown: true))
-        for key: UInt16 in [2, 6, 15, 37, 13, 1] { // D, Z, R, L, W, S
-            #expect(p.process(.init(.down, keyCode: key, modifiers: .control)) == .passThrough)
-            #expect(p.process(.init(.up, keyCode: key, modifiers: .control)) == .passThrough)
+        for (key, ruleID): (UInt16, String) in [(2,"karabiner.47"),(6,"windows.undo"),(15,"karabiner.45"),(37,"karabiner.44"),(13,"karabiner.25"),(1,"windows.save")] {
+            let expected = EventDecision.rewrite(keyCode: key, modifiers: .command, ruleID: ruleID)
+            #expect(p.process(.init(.down, keyCode: key, modifiers: .control)) == expected)
+            #expect(p.process(.init(.up, keyCode: key, modifiers: .control)) == expected)
         }
         _ = p.process(.init(.flagsChanged, keyCode: 56, modifiers: [.control, .shift],
             modifierSide: .leftShift, modifierDown: true))
@@ -74,12 +77,14 @@ struct LocalClipboardShortcutTests {
                     e.configure(context: .init(processID: 17, mode: mode), layoutSupported: true,
                         finderEnabled: false, transportOnly: transportOnly)
                     _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)
-                    _ = e.observe(device: 1, page: 7, usage: usage, down: true)
+                    let action = e.observe(device: 1, page: 7, usage: usage, down: true)
+                    let conditionalCopy = mode == .terminal && key == 8 && !transportOnly
+                    #expect(action == (conditionalCopy ? .terminalCopyOrInterrupt : nil))
                     var out = HIDOutput()
                     let rendered = e.render(into: &out)
                     #expect(rendered)
-                    #expect(out.modifiers == (transportOnly ? 1 : 8))
-                    #expect(out.keys.prefix(out.keyCount).contains(usage))
+                    #expect(out.modifiers == (conditionalCopy ? 0 : (transportOnly ? 1 : 8)))
+                    #expect(out.keys.prefix(out.keyCount).contains(usage) == !conditionalCopy)
                     _ = e.observe(device: 1, page: 7, usage: usage, down: false)
                     let released = e.render(into: &out)
                     #expect(released && out.keyCount == 0 && out.modifiers == 1)
@@ -117,13 +122,14 @@ struct LocalClipboardShortcutTests {
         #expect(released && out.keyCount == 0 && out.modifiers == 3)
     }
 
-    @Test func localClipboardProfilesRetainOtherControlsAndSafetyGates() {
+    @Test func localWindowsProfilesTranslateControlsAndRetainSafetyGates() {
         for mode: ApplicationMode in [.terminal, .ide] {
             var p = processor(mode)
             p.reconcileIndependentSourceFlags(.control)
-            for key: UInt16 in [2, 6, 15, 37, 13, 1] {
-                #expect(p.process(.init(.down, keyCode: key, modifiers: .control)) == .passThrough)
-                #expect(p.process(.init(.up, keyCode: key, modifiers: .control)) == .passThrough)
+            for (key, ruleID): (UInt16, String) in [(2,"karabiner.47"),(6,"windows.undo"),(15,"karabiner.45"),(37,"karabiner.44"),(13,"karabiner.25"),(1,"windows.save")] {
+                let expected = EventDecision.rewrite(keyCode: key, modifiers: .command, ruleID: ruleID)
+                #expect(p.process(.init(.down, keyCode: key, modifiers: .control)) == expected)
+                #expect(p.process(.init(.up, keyCode: key, modifiers: .control)) == expected)
             }
             var forwarded = KeyboardEvent(.down, keyCode: 8, modifiers: .control)
             forwarded.allowsTranslation = false

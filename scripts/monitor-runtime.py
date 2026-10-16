@@ -28,7 +28,7 @@ def command(*args: str, timeout: int = 10) -> subprocess.CompletedProcess[str]:
 
 
 def app_pids(executable: str = APP_PATH) -> list[int]:
-    pattern = f"^{re.escape(executable)}" + (r"( |$)" if executable == FINDER_PATH else "$" )
+    pattern = f"^{re.escape(executable)}( |$)"
     result = command("pgrep", "-f", pattern)
     if result.returncode != 0:
         return []

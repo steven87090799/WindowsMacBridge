@@ -225,7 +225,7 @@ class InstallBackendTests(unittest.TestCase):
                                         capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
-    def run_install(self, receipt='installed', fail='', existing=True, installed_driver_version='1.8.0', active_driver=True, driver_running=None, private_app_resource=False, protected_app=False, unified_runtime=False, codesign_reject='', publish_race='', retire_race=''):
+    def run_install(self, receipt='installed', fail='', existing=True, installed_driver_version='1.8.0', active_driver=True, driver_running=None, private_app_resource=False, protected_app=False, unified_runtime=False, codesign_reject='', publish_race='', retire_race='', journal_fault=''):
         temp = tempfile.TemporaryDirectory(prefix='wmb-install-test-')
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
@@ -296,6 +296,29 @@ class InstallBackendTests(unittest.TestCase):
         (payload/'PAYLOAD-SHA256SUMS').write_text(manifest)
         tools = root/'tools'; tools.mkdir()
         text = (ROOT/'Resources/Installer/InstallBackend.sh').read_text()
+        # One-shot faults in this private copy exercise the exact atomic journal
+        # publication window, including before the shell records its success.
+        if journal_fault:
+            publish = '/bin/ln "$bridge_journal_tmp" "$bridge_recovery"'
+            points = {
+                'after_publish': publish,
+                'signal_after_publish': publish,
+                'kill_after_publish': publish,
+                'after_switch': publish + '\nbridge_switched=1',
+                'after_unlink': '\n/bin/rm -f "$bridge_journal_tmp"\n',
+                'after_sync': "bridge_journal_tmp=''\n/bin/sync\n",
+                'foreign_owner': publish,
+            }
+            checkpoint = points[journal_fault]
+            self.assertEqual(text.count(checkpoint), 1)
+            if journal_fault == 'foreign_owner':
+                text = text.replace(checkpoint, 'printf "foreign-owner\\n" > "$bridge_recovery"\n' + checkpoint, 1)
+            else:
+                marker = shlex.quote(str(root/'journal-fault-exercised'))
+                action = {'signal_after_publish': 'kill -TERM "$$"',
+                          'kill_after_publish': 'kill -KILL "$$"'}.get(journal_fault, 'exit 79')
+                injection = f'\nif [[ ! -e {marker} ]]; then /usr/bin/touch {marker}; {action}; fi\n'
+                text = text.replace(checkpoint, checkpoint + injection, 1)
         # Authentication is only removed from this test copy; every privileged command is a stub.
         text = text.replace('"$EUID" -eq 0', '1 -eq 1')
         text = text.replace("'/Library/Application Support/WindowsMacBridge'", repr(str(helper_root)))
@@ -346,6 +369,44 @@ class InstallBackendTests(unittest.TestCase):
         self.assertEqual((helper/'unrelated.txt').read_text(),'preserve')
         self.assertFalse((helper/'WindowsMacBridge.app').exists())
         self.assertEqual((daemons/'local.WindowsMacBridge.HIDHelper.plist').read_text(),'old-HIDHelper')
+
+    def test_journal_publication_failures_restore_or_retain_a_valid_snapshot(self):
+        for point in ['after_publish', 'signal_after_publish', 'after_switch', 'after_unlink', 'after_sync']:
+            with self.subTest(point=point):
+                root, app, helper, daemons, result = self.run_install(journal_fault=point)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertTrue((root/'journal-fault-exercised').exists())
+                self.assert_original(app, helper, daemons)
+                self.assertFalse((helper/'.install-recovery').exists(), result.stderr)
+                self.assertEqual(list(root.glob('WindowsMacBridge-install.*')), [])
+                env = dict(os.environ, WMB_TEST_ROOT=str(root), WMB_DRIVER_SHA=DRIVER_SHA,
+                           WMB_ROLLBACK_SHA=ROLLBACK_SHA, WMB_RECEIPT='installed', WMB_FAIL='')
+                retry = subprocess.run(['/bin/bash', str(root/'InstallBackend.sh'), str(root/'payload')],
+                                       env=env, capture_output=True, text=True, timeout=20)
+                self.assertEqual(retry.returncode, 0, retry.stderr)
+                self.assertEqual((app/'identity').read_text(), 'new-app')
+
+    def test_kill_immediately_after_journal_publication_is_recoverable(self):
+        root, app, helper, daemons, result = self.run_install(journal_fault='kill_after_publish')
+        self.assertEqual(result.returncode, -9)
+        saved = Path((helper/'.install-recovery').read_text().splitlines()[1])
+        self.assertTrue((saved/'previous/WindowsMacBridge.app/identity').exists())
+        self.assert_original(app, helper, daemons)
+        env = dict(os.environ, WMB_TEST_ROOT=str(root), WMB_DRIVER_SHA=DRIVER_SHA,
+                   WMB_ROLLBACK_SHA=ROLLBACK_SHA, WMB_RECEIPT='installed', WMB_FAIL='')
+        retry = subprocess.run(['/bin/bash', str(root/'InstallBackend.sh'), str(root/'payload')],
+                               env=env, capture_output=True, text=True, timeout=20)
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        self.assertFalse(saved.exists())
+        self.assertFalse((helper/'.install-recovery').exists())
+        self.assertEqual((app/'identity').read_text(), 'new-app')
+
+    def test_journal_publish_race_does_not_remove_the_other_owners_record(self):
+        root, app, helper, daemons, result = self.run_install(journal_fault='foreign_owner')
+        self.assertNotEqual(result.returncode, 0)
+        self.assert_original(app, helper, daemons)
+        self.assertEqual((helper/'.install-recovery').read_text(), 'foreign-owner\n')
+        self.assertEqual(list(root.glob('WindowsMacBridge-install.*')), [])
 
     def test_fresh_driver_install_reaches_installation(self):
         root, app, helper, _, result = self.run_install(receipt='fresh', existing=False)
@@ -680,11 +741,14 @@ class InstallBackendTests(unittest.TestCase):
         (saved/'driver.phase').write_text('invalid')
         env = dict(os.environ,WMB_TEST_ROOT=str(root),WMB_DRIVER_SHA=DRIVER_SHA,
                    WMB_ROLLBACK_SHA=ROLLBACK_SHA,WMB_RECEIPT='7.3.0',WMB_FAIL='')
-        retry = subprocess.run(['/bin/bash',str(root/'InstallBackend.sh'),str(root/'payload')],
-                               env=env,capture_output=True,text=True,timeout=20)
-        self.assertNotEqual(retry.returncode,0)
-        self.assertTrue((saved/'previous/SharedDriver').is_dir())
-        self.assertTrue((helper/'.install-recovery').exists())
+        for _ in range(2):
+            retry = subprocess.run(['/bin/bash',str(root/'InstallBackend.sh'),str(root/'payload')],
+                                   env=env,capture_output=True,text=True,timeout=20)
+            self.assertNotEqual(retry.returncode,0)
+            self.assertTrue((saved/'previous/SharedDriver').is_dir())
+            self.assertTrue((helper/'.install-recovery').exists())
+            self.assertEqual(set(root.glob('WindowsMacBridge-install.*')), {saved},
+                             'Failed recovery must discard only the new payload scratch.')
 
     def test_running_app_and_foreign_clients_prevent_shared_mutation(self):
         for failure in ['app_running','foreign_client']:
@@ -702,6 +766,8 @@ class InstallBackendTests(unittest.TestCase):
                                env=env,capture_output=True,text=True,timeout=20)
         self.assertNotEqual(retry.returncode,0)
         self.assertTrue((helper/'.install-recovery').exists())
+        saved = Path((helper/'.install-recovery').read_text().splitlines()[1])
+        self.assertEqual(set(root.glob('WindowsMacBridge-install.*')), {saved})
         self.assertEqual(json.loads((root/'services.json').read_text()),{'helper':False,'driver':False},
                          'Do not restart services against an incompletely restored Driver.')
         env['WMB_FAIL']='staging'

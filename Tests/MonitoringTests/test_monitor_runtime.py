@@ -3,6 +3,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 import subprocess
+import re
 
 spec = importlib.util.spec_from_file_location("monitor", Path(__file__).parents[2] / "scripts/monitor-runtime.py")
 monitor = importlib.util.module_from_spec(spec)
@@ -10,6 +11,20 @@ spec.loader.exec_module(monitor)
 
 
 class ResourceMeasurements(unittest.TestCase):
+    def test_app_with_relaunch_arguments_is_included_but_other_executables_are_not(self):
+        result = subprocess.CompletedProcess([], 0, stdout="123\n", stderr="")
+        for executable in (monitor.APP_PATH, monitor.FINDER_PATH):
+            with self.subTest(executable=executable), patch.object(monitor, "command", return_value=result) as command:
+                self.assertEqual(monitor.app_pids(executable), [123])
+                args = command.call_args.args
+                self.assertEqual(args[:2], ("pgrep", "-f"))
+                pattern = args[2]
+                self.assertIsNotNone(re.search(pattern, executable))
+                self.assertIsNotNone(re.search(pattern, executable + " --permission-relaunch"))
+                self.assertIsNone(re.search(pattern, executable + "Helper"))
+                self.assertIsNone(re.search(pattern, "/other" + executable))
+                self.assertIsNone(re.search(pattern, "/Library/Application Support/WindowsMacBridge/WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge --hid-service"))
+
     def test_all_finder_instances_are_measured_with_a_bounded_pid_list(self):
         result = subprocess.CompletedProcess([], 0, stdout="45\n32\n45\n", stderr="")
         with patch.object(monitor, "command", return_value=result):

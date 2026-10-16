@@ -122,9 +122,9 @@ struct ScreenshotBoundedReadTests {
         #expect(await encode.value.successValue == nil)
     }
     @Test func repeatedPreparationDoesNotGrowMemoryWithCaptureCount() throws {
-        // phys_footprint is process-wide and other suites run concurrently, so the
-        // bound is far below what a per-capture leak would add (~12 MiB decoded
-        // bitmap per capture, ~700 MiB over 60) but above concurrent-test noise.
+        // phys_footprint is process-wide: scripts/test.sh runs this regression in
+        // its own process. Keep the bound far below a per-capture leak (~12 MiB
+        // decoded bitmap per capture, ~700 MiB over 60).
         let directory = TemporaryDirectory(); let url = directory.file("capture.tiff")
         try NSBitmapImageRep(data: pngData(width: 2048, height: 1536))!.tiffRepresentation!.write(to: url)
         // AddressSanitizer quarantines freed blocks (256 MiB by default), so the

@@ -6,13 +6,16 @@ source "$task_root/scripts/build-environment.sh"
 bash "$task_root/scripts/prepare-hid-backend.sh"
 configuration="${CONFIGURATION:-release}"
 swift build --scratch-path "$task_scratch" -c "$configuration" --product WindowsMacBridge --jobs "${BRIDGE_BUILD_JOBS:-2}"
+swift build --scratch-path "$task_scratch" -c "$configuration" --product WindowsMacBridgeTextWorker --jobs "${BRIDGE_BUILD_JOBS:-2}"
 binary_directory="$(swift build --scratch-path "$task_scratch" -c "$configuration" --show-bin-path)"
 mkdir -p "$task_scratch/Artifacts"
 bridge_stage="$(mktemp -d "$task_scratch/Artifacts/.app-stage.XXXXXX")"
 trap 'rm -rf "$bridge_stage"' EXIT
 app_directory="$bridge_stage/WindowsMacBridge.app"
 mkdir -p "$app_directory/Contents/MacOS" "$app_directory/Contents/Resources"
+mkdir -p "$app_directory/Contents/Helpers"
 cp "$binary_directory/WindowsMacBridge" "$app_directory/Contents/MacOS/WindowsMacBridge"
+cp "$binary_directory/WindowsMacBridgeTextWorker" "$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker"
 cp "$task_root/Resources/Info.plist" "$app_directory/Contents/Info.plist"
 source "$task_root/scripts/source-version.sh"
 bridge_build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -54,10 +57,13 @@ swiftc "$bridge_optimization" -emit-executable -parse-as-library -module-name Wi
 /usr/bin/xattr -dr com.apple.FinderInfo "$app_directory" 2>/dev/null || true
 /usr/bin/xattr -dr com.apple.ResourceFork "$app_directory" 2>/dev/null || true
 /usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --options runtime \
+    "$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker"
+/usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --options runtime \
     --entitlements "$task_root/Extensions/FinderSync/Entitlements.plist" "$extension_directory"
 /usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --options runtime \
     --entitlements "$task_root/Resources/AppEntitlements.plist" "$app_directory"
 /usr/bin/codesign --verify --strict "$app_directory"
+"$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker" --self-check
 "$app_directory/Contents/MacOS/WindowsMacBridge" --self-check
 bridge_final="$task_scratch/Artifacts/WindowsMacBridge.app"
 bridge_previous="$task_scratch/Artifacts/.WindowsMacBridge-previous-$$.app"

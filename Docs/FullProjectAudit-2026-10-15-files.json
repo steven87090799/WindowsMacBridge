@@ -1,0 +1,2407 @@
+{
+  "project": "WindowsMacBridge",
+  "review_date": "2026-10-15",
+  "timezone": "Asia/Taipei",
+  "baseline_commit": "2e1b21ffc557e3c5c0e4bc10b84342c765495041",
+  "baseline_branch": "codex/input-source-guard-intent",
+  "version": "0.6.0",
+  "build": 46,
+  "tracked_files": 238,
+  "text_files": 234,
+  "text_lines": 25382,
+  "review_method_counts": {
+    "full_line_review": 194,
+    "documentation_consistency_review": 29,
+    "asset_format_check": 4,
+    "license_notice_inventory": 10,
+    "full_structured_fixture_review": 1
+  },
+  "exclusions": [
+    ".git internal data",
+    "ignored build products and historical logs",
+    "downloaded third-party SDK and generated SDKOverride headers",
+    "installed application and live hardware/system state"
+  ],
+  "files": [
+    {
+      "path": ".github/workflows/macos.yml",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/.github/workflows/macos.yml",
+      "sha256": "d084d2013655b9bb578db573a1e3b378ae5961876b510837b88086b8fb7dde61",
+      "bytes": 2343,
+      "lines": 63,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": ".gitignore",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/.gitignore",
+      "sha256": "a33f8d612bcc782fd7631ee6a1c079b77043fb7e61b5091e90b0fa4ccf886d57",
+      "bytes": 182,
+      "lines": 12,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Docs/Architecture.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/Architecture.md",
+      "sha256": "00c16111cbb89323ceacdeb3e0aeb779fcedab681c14e6e50dd7df00c1414b9a",
+      "bytes": 4502,
+      "lines": 59,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/ComplexityHandoff-2026-10-02.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/ComplexityHandoff-2026-10-02.md",
+      "sha256": "19b315018f7d40929c6ef573932da04d7bdcbc0434d1c1a362b1ec6a247ce468",
+      "bytes": 7594,
+      "lines": 63,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/ConsistencyRepair-2026-10-02.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/ConsistencyRepair-2026-10-02.md",
+      "sha256": "0f62af2eba1c6b1247eeff2933b0ebd8475d36110a289b7dc3ee30fc6819e839",
+      "bytes": 27460,
+      "lines": 191,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/DualModeReview-2026-10-03.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/DualModeReview-2026-10-03.md",
+      "sha256": "58d57891f1fa8cf0183ba79b202af8349e0c4d3c733b4bd849b11f6d633ddcf8",
+      "bytes": 7224,
+      "lines": 39,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/FourAreaRepair-2026-10-02.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/FourAreaRepair-2026-10-02.md",
+      "sha256": "9e9581cd22fe1a7b73f8ff58899f2300fae92230a7c5f2abdc6c6a8ab3566476",
+      "bytes": 7656,
+      "lines": 61,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/HIDIntegration.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/HIDIntegration.md",
+      "sha256": "c07bb372bcc0a896ba88b4597eb9067ca50b096036d5365ae8be42d87023e030",
+      "bytes": 9875,
+      "lines": 76,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/KarabinerReplacement.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/KarabinerReplacement.md",
+      "sha256": "950270fd44c4a9a85256148222f51fc87a3466b4c97d2ad068f5a03a9615a6a3",
+      "bytes": 7640,
+      "lines": 71,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/NativeAcceptance-2026-10-03.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/NativeAcceptance-2026-10-03.md",
+      "sha256": "9e621434f82080fa77f61df66c63562b5bd60fd1785996d6cdb588d9c5824c88",
+      "bytes": 4862,
+      "lines": 32,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/OneClickSetupRepair-2026-10-02.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/OneClickSetupRepair-2026-10-02.md",
+      "sha256": "53110d12584e68b0721df06393abc18e54a8e81a55dc679596431c3bfc6c8142",
+      "bytes": 3985,
+      "lines": 21,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/PermissionOnboarding-2026-10-02.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/PermissionOnboarding-2026-10-02.md",
+      "sha256": "eb44eb3a5392e9edc09aecfc2e68f0d0e273c5df28f90348a9a916832708e6e4",
+      "bytes": 4215,
+      "lines": 32,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/PermissionsRepair-2026-10-02.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/PermissionsRepair-2026-10-02.md",
+      "sha256": "a13c46912d5536376ae5fa2b0a9a49fd434389b9a2b56b324cb8786ea1505b40",
+      "bytes": 3179,
+      "lines": 19,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/PreReleaseRepair-2026-09-30.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/PreReleaseRepair-2026-09-30.md",
+      "sha256": "8d8ccba7a29879d2f54fb76b43650ca565cf1cbdb59726b71d52550bb106e4d4",
+      "bytes": 36894,
+      "lines": 263,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/ProjectIntegration.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/ProjectIntegration.md",
+      "sha256": "0f722f256622bc80685844175f1eb4991067ed43db827b60343bf1f9552b0858",
+      "bytes": 7161,
+      "lines": 72,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/ReleaseAcceptance.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/ReleaseAcceptance.md",
+      "sha256": "7c0529b66b28e8be1b99cccf0cf90e65c9315de5649d3edba0f2fd02e58c5396",
+      "bytes": 4905,
+      "lines": 65,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/ReleaseNotes-0.4.3-preview.1.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/ReleaseNotes-0.4.3-preview.1.md",
+      "sha256": "bf4bd48144defb33b8ee0ec5122b5c1d5abf13e74543a18883b3f1051547320f",
+      "bytes": 996,
+      "lines": 9,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/ReleaseReadiness-2026-09-28.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/ReleaseReadiness-2026-09-28.md",
+      "sha256": "63081b0dfb00f33c0d44662dacc16b1953d435b83927f6bd490fe7268a148774",
+      "bytes": 10007,
+      "lines": 101,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/ReviewerAudit-2026-10-02.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/ReviewerAudit-2026-10-02.md",
+      "sha256": "b2652cef7d402e2a1a1f26398ae987081a0894c6582302b069e83e4dd79666ec",
+      "bytes": 11870,
+      "lines": 58,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/SafetyAndUsabilityReview.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/SafetyAndUsabilityReview.md",
+      "sha256": "35abfe41e505d35f0ccc1f0951aeec41839a77650d2a07daa82cb7e282818058",
+      "bytes": 10280,
+      "lines": 70,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/SimplePermissions-2026-10-02.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/SimplePermissions-2026-10-02.md",
+      "sha256": "f3da1f6009d2f16fbe89c35dab204372f7a17042bf5df35dd4d559b28e91adbe",
+      "bytes": 6367,
+      "lines": 33,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/SingleAppInstall-2026-10-02.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/SingleAppInstall-2026-10-02.md",
+      "sha256": "93b9ce5ea5d4a75769276ec6a2a0ca06fc4e867d599546a35eeee47fba756865",
+      "bytes": 3161,
+      "lines": 35,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/UnifiedInput-2026-10-01.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/UnifiedInput-2026-10-01.md",
+      "sha256": "a00eb26707ae1360f5c367c6e3f4bf4fc7b36537aa265cf74cf07d0fd98e806d",
+      "bytes": 41743,
+      "lines": 289,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/Validation.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/Validation.md",
+      "sha256": "5b74d669b5f6df75acef25d7b723f78795e00f718ffec08e8acb577829280cf4",
+      "bytes": 30955,
+      "lines": 244,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Docs/macOS27-UIInvestigation.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Docs/macOS27-UIInvestigation.md",
+      "sha256": "66764f255e4b88b605503fe124baa498afc71cafa9a0f507386f6eeec7e27f26",
+      "bytes": 4876,
+      "lines": 79,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Extensions/FinderSync/Entitlements.plist",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Extensions/FinderSync/Entitlements.plist",
+      "sha256": "dc540d332e8a6e8e3126300099b4b51cbcb3d886ab6e4c8f12b037075b130e0c",
+      "bytes": 239,
+      "lines": 5,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Extensions/FinderSync/FinderSync.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Extensions/FinderSync/FinderSync.swift",
+      "sha256": "9ab610950bdbda0fef3816a85d71f514f49506fa0f8ba650c30b8546cb9b3eec",
+      "bytes": 4299,
+      "lines": 85,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Extensions/FinderSync/Info.plist",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Extensions/FinderSync/Info.plist",
+      "sha256": "5b6f09eb468c6405ac62304849694588a1fc8a60e72421efe79492477663e581",
+      "bytes": 1199,
+      "lines": 21,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Package.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Package.swift",
+      "sha256": "9bd2f339dd4385d7ab7b18304073a436c7bd7850ac08778206a76147d79dd217",
+      "bytes": 2773,
+      "lines": 39,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "README.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/README.md",
+      "sha256": "ecac9a27ca9c037a0c0ea69cca1b7c6fe84cd4dc6937968d47403896f5165d55",
+      "bytes": 5659,
+      "lines": 68,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Resources/AcceptanceGuide.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/AcceptanceGuide.md",
+      "sha256": "2b6796d77da22ff7787b39946e90796be7b2d2b81f9be0defca21aa4487c7a58",
+      "bytes": 6246,
+      "lines": 49,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Resources/AppEntitlements.plist",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/AppEntitlements.plist",
+      "sha256": "3a42773d833db52c8a6113f2ea83cd6e97ed6ffbdd4ecb8f10d506868a037626",
+      "bytes": 186,
+      "lines": 4,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Brand/AppIcon.icns",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Brand/AppIcon.icns",
+      "sha256": "d37b83d6b2d9b173d9c72203ac891c83e86ba77085b7d175fdea6f31e8a21a88",
+      "bytes": 123524,
+      "lines": null,
+      "kind": "binary",
+      "reviewer": "main",
+      "method": "asset_format_check"
+    },
+    {
+      "path": "Resources/Brand/AppIcon.png",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Brand/AppIcon.png",
+      "sha256": "877bde5920a4b519e95b557497b20fbf95199fe39dcaa007521bba15655b5bba",
+      "bytes": 54110,
+      "lines": null,
+      "kind": "binary",
+      "reviewer": "main",
+      "method": "asset_format_check"
+    },
+    {
+      "path": "Resources/Brand/MenuBarIcon.png",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Brand/MenuBarIcon.png",
+      "sha256": "ed25f8513e86ccb9cb4a2282efbf8c3860a01f3b05c7eea1303d82d5272423eb",
+      "bytes": 739,
+      "lines": null,
+      "kind": "binary",
+      "reviewer": "main",
+      "method": "asset_format_check"
+    },
+    {
+      "path": "Resources/Brand/MenuBarPausedIcon.png",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Brand/MenuBarPausedIcon.png",
+      "sha256": "cfe14050bbf2c16d6abe918c5c7e1b7f08ad1d07eb840df4cf4c61ae666fc2e4",
+      "bytes": 500,
+      "lines": null,
+      "kind": "binary",
+      "reviewer": "main",
+      "method": "asset_format_check"
+    },
+    {
+      "path": "Resources/Brand/README.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Brand/README.md",
+      "sha256": "29e9c8156e65f73b0d0d3f115b220640017446118b8792880e6ba34a8709814c",
+      "bytes": 791,
+      "lines": 16,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Resources/DragInstall.txt",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/DragInstall.txt",
+      "sha256": "b2785fb9f6a8a080bb55df4d950c6fcccc6d195397e1109e14b395c4422e70b6",
+      "bytes": 1184,
+      "lines": 20,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Resources/Info.plist",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Info.plist",
+      "sha256": "e20ab429b2106a57f2e536969626df4fc2dde77ee9cbc3819167346c17a8111d",
+      "bytes": 1044,
+      "lines": 18,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Installer/ActivateDriver.command",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Installer/ActivateDriver.command",
+      "sha256": "1734b75cb3f9b61188a98469d8ee16c103c3cd659fae090f17508fad43a2b64e",
+      "bytes": 385,
+      "lines": 6,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Installer/AppProcess.sh",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Installer/AppProcess.sh",
+      "sha256": "08904bf4856f26c4ff568b7c67c8713cd686ae8d3246991f825217a9d2d09bc1",
+      "bytes": 674,
+      "lines": 18,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Installer/DriverProcessRunner.c",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Installer/DriverProcessRunner.c",
+      "sha256": "3e4d43cc76f81afc4049810b3d7bc412e66e98713b31cb07303f20cca6df1752",
+      "bytes": 6296,
+      "lines": 123,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Installer/DriverTransaction.sh",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Installer/DriverTransaction.sh",
+      "sha256": "59796b727f2ef98994bb33258ff0f6da4b4a142dd8f384baca67658c3ee916f1",
+      "bytes": 9698,
+      "lines": 176,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Installer/Install.command",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Installer/Install.command",
+      "sha256": "5ac0d859379112e5832629ab6bd83fd560a1e6d94622581eceb570ad7bad15e3",
+      "bytes": 917,
+      "lines": 15,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Installer/InstallBackend.sh",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Installer/InstallBackend.sh",
+      "sha256": "c85da136ce8bff5f3f2086b65b699392ff4abc86f7ab0eda9c5e16d8f5cd9111",
+      "bytes": 21421,
+      "lines": 351,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Installer/LaunchEmbeddedInstall.sh",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Installer/LaunchEmbeddedInstall.sh",
+      "sha256": "9ef670092ae7757c2908e21240d01980500a0c5e7cc49de71d6d4dd792637eff",
+      "bytes": 2284,
+      "lines": 55,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Installer/LaunchEmbeddedUninstall.sh",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Installer/LaunchEmbeddedUninstall.sh",
+      "sha256": "ffe96dcec0b6030e67b8998273e9b5994d730ad96bcdccc91dc54514779531a7",
+      "bytes": 402,
+      "lines": 10,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Installer/READ-ME-FIRST.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Installer/READ-ME-FIRST.md",
+      "sha256": "fc788c53e8cf4f86187d238920bd83f1d3c1448bf1438635587e970fa3921cd2",
+      "bytes": 2036,
+      "lines": 17,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Installer/RelaunchApp.sh",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Installer/RelaunchApp.sh",
+      "sha256": "42ddf4d9e70b9ed6675c8bdcc59eff05e5804ea9bff9500cca5cd76462faad17",
+      "bytes": 464,
+      "lines": 12,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Installer/Stop.command",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Installer/Stop.command",
+      "sha256": "65a29a95ec4a0dbfc12a13de6f30dca0cca5654ee8f1be1c1a53edf80dfd1407",
+      "bytes": 289,
+      "lines": 6,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Installer/Uninstall.command",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Installer/Uninstall.command",
+      "sha256": "b845be8c528cba7b6996b163e3693742e20ad121fd9b1264cb01eeafbc0132af",
+      "bytes": 361,
+      "lines": 9,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Installer/UninstallBackend.sh",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Installer/UninstallBackend.sh",
+      "sha256": "cc9f6fd369acb9e890710172b8ef3df5f32c2ba00568c2c1b552bbabc7b58527",
+      "bytes": 2369,
+      "lines": 41,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Installer/local.WindowsMacBridge.HIDHelper.plist",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Installer/local.WindowsMacBridge.HIDHelper.plist",
+      "sha256": "6b45db95cf8e3614bac052db176561272222bf9ceaf0538dc968a0a9250c15b1",
+      "bytes": 801,
+      "lines": 13,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Installer/local.WindowsMacBridge.VirtualHIDService.plist",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Installer/local.WindowsMacBridge.VirtualHIDService.plist",
+      "sha256": "f596d2c87eafd8ca1aeb5f127d54c25c2842375cb23df6d481757c7f554dd518",
+      "bytes": 708,
+      "lines": 11,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Licenses/VChewingGuard.txt",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Licenses/VChewingGuard.txt",
+      "sha256": "587c82723b1d4bd0022f28af75e416f089b23d2cf02c7406e0810fe4a5af6759",
+      "bytes": 1083,
+      "lines": 21,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "license_notice_inventory"
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/Boost-1.0.txt",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Licenses/VirtualHID/Boost-1.0.txt",
+      "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566",
+      "bytes": 1338,
+      "lines": 23,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "license_notice_inventory"
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/GSL.txt",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Licenses/VirtualHID/GSL.txt",
+      "sha256": "4c21dc82a1c7186ea754fd59d504c00947953a3401fe8e24eaa44109ef8e2555",
+      "bytes": 1157,
+      "lines": 21,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "license_notice_inventory"
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/Karabiner-VirtualHID-Unlicense.txt",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Licenses/VirtualHID/Karabiner-VirtualHID-Unlicense.txt",
+      "sha256": "88d9b4eb60579c191ec391ca04c16130572d7eedc4a86daa58bf28c6e14c9bcd",
+      "bytes": 1210,
+      "lines": 24,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "license_notice_inventory"
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/debug_assert.txt",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Licenses/VirtualHID/debug_assert.txt",
+      "sha256": "195c95c8dc2349255994fe270c623a79b058ede80e0484d3361ca394133e2306",
+      "bytes": 900,
+      "lines": 21,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "license_notice_inventory"
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/fmt.txt",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Licenses/VirtualHID/fmt.txt",
+      "sha256": "07580f2a3b35709ce703d523f447b242f6dfec7582a8c0df102c7fa2849375f8",
+      "bytes": 1431,
+      "lines": 27,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "license_notice_inventory"
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/nlohmann-json.txt",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Licenses/VirtualHID/nlohmann-json.txt",
+      "sha256": "d64d1b4d948aa7751cfb613c02dc246aab7b358d760053e6580f01affe946906",
+      "bytes": 1076,
+      "lines": 21,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "license_notice_inventory"
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/nod.txt",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Licenses/VirtualHID/nod.txt",
+      "sha256": "e807458b70e8e0b92fabec57c9a8cbb06cc640472508ffd051ab1869d0586194",
+      "bytes": 1073,
+      "lines": 21,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "license_notice_inventory"
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/sources.json",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Licenses/VirtualHID/sources.json",
+      "sha256": "11ea7824e058424caff8a613ff3e066c6c196322d8ad3076836df2e5bd8902c3",
+      "bytes": 1324,
+      "lines": 30,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/spdlog.txt",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Licenses/VirtualHID/spdlog.txt",
+      "sha256": "d678c20826e1392578508e1c78649a1e3c31bda05ef4388d967dbd654461b140",
+      "bytes": 1323,
+      "lines": 25,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "license_notice_inventory"
+    },
+    {
+      "path": "Resources/Licenses/VirtualHID/type_safe.txt",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/Licenses/VirtualHID/type_safe.txt",
+      "sha256": "c9b2c3b9c65bf163d4338d9f56edb0ce0846e91d7b89e1a1e35326abbc8997ae",
+      "bytes": 1078,
+      "lines": 21,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "license_notice_inventory"
+    },
+    {
+      "path": "Resources/TwoMacAcceptance.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/TwoMacAcceptance.md",
+      "sha256": "867b6e980820f34b94c7302e6a1c41d3d4196e131d5c3fe08747b4480129adfb",
+      "bytes": 1870,
+      "lines": 14,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Resources/UserGuide.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Resources/UserGuide.md",
+      "sha256": "eac10a4346f60c465ce3ae77c0bc61d74ae1913418ae73f1fe8a9bd9f186828a",
+      "bytes": 5568,
+      "lines": 45,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "documentation_consistency_review"
+    },
+    {
+      "path": "Sources/BridgeCore/BackendCapabilities.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/BackendCapabilities.swift",
+      "sha256": "69ab2251abee2536078ee7abd7db5482c3523cfaf1529b519c9ccda5f27b3534",
+      "bytes": 2182,
+      "lines": 49,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/BoundedActionInbox.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/BoundedActionInbox.swift",
+      "sha256": "2a35ff9a90562d0dbce3cf4263cf78f1791450a4692e207bd7c11752d95b8a19",
+      "bytes": 1345,
+      "lines": 32,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/BoundedDiagnosticLogger.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/BoundedDiagnosticLogger.swift",
+      "sha256": "410761b4c71aa688e3498e0afcb16bb6ab4a598e2847572da04daa0dcb6fa2fa",
+      "bytes": 4845,
+      "lines": 96,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/DeferredSignalMailbox.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/DeferredSignalMailbox.swift",
+      "sha256": "dd7a6a7080ef63cef838cda65ad449e12b519299d66cfb7dddb6e455db228823",
+      "bytes": 867,
+      "lines": 24,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/DestinationSemanticPolicy.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/DestinationSemanticPolicy.swift",
+      "sha256": "4e45c397b9bd4a6fb880be2f377426d184f63a73a7d0b71db7f3ded2b513b21c",
+      "bytes": 632,
+      "lines": 11,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/DriverApproval.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/DriverApproval.swift",
+      "sha256": "5e56343166107c94fcb0f5837270287c2f1373ddc7096edd773cffbdb72dd44c",
+      "bytes": 1052,
+      "lines": 19,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/FinderActionPolicy.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/FinderActionPolicy.swift",
+      "sha256": "43353c21a376aa7d5ce9ceaa572663bcd6a57382de90ae60bdfb5d77db4c26cf",
+      "bytes": 284,
+      "lines": 6,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/FinderCutState.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/FinderCutState.swift",
+      "sha256": "21c5e39988af428e07f4e1075bfe07b2001a22135f352546fb94a4f2110bac8b",
+      "bytes": 1579,
+      "lines": 34,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/FinderModeSignal.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/FinderModeSignal.swift",
+      "sha256": "74410c08bc6a20274fe98f72592ddbe961d3799f4e2e67b6c75ddb8f7785f397",
+      "bytes": 957,
+      "lines": 23,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/FinderPathSelection.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/FinderPathSelection.swift",
+      "sha256": "fc21c2ecb9b5635462a344eab73a4ac51c73c0b02f7f1a2044b893eb5ccf4e48",
+      "bytes": 1260,
+      "lines": 27,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/HIDDescriptorPolicy.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/HIDDescriptorPolicy.swift",
+      "sha256": "8dcb095b75550a80e3217c306aa6cce3567b7b4b395622f2c781fc0b72c0476c",
+      "bytes": 3126,
+      "lines": 58,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/HIDModifier.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/HIDModifier.swift",
+      "sha256": "335397e6010398a70e8fb5f4f651bbb378d6cc490a85cf5884a701aaaf12e918",
+      "bytes": 297,
+      "lines": 6,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/HIDTranslationEngine.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/HIDTranslationEngine.swift",
+      "sha256": "74bf50813ef1cb3d9e2b76b3512db19853ed00faeed07d938f2632381871d8fe",
+      "bytes": 24757,
+      "lines": 410,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/ImageMemoryBudget.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/ImageMemoryBudget.swift",
+      "sha256": "4eee65f971e36ef83d8df4b14ad09e220754d19b58d9f878095fa92ddf81eb58",
+      "bytes": 1399,
+      "lines": 24,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/InputSourcePolicy.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/InputSourcePolicy.swift",
+      "sha256": "f182aa35ce631310e9797bfbff33dbe4dae13853c3a47d736ce3d35a7fd0d669",
+      "bytes": 1162,
+      "lines": 22,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/InputSources.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/InputSources.swift",
+      "sha256": "899a0e50dca07244dc628b9fbd8f4134825551354907dba143fd0a08130abe27",
+      "bytes": 8543,
+      "lines": 171,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/KeyboardEventProcessor.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/KeyboardEventProcessor.swift",
+      "sha256": "f3460c977bdbd969a402552888927233a824c73c3ab65ca99ee32781afca97f9",
+      "bytes": 17210,
+      "lines": 304,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/MacBookKeyboardMapping.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/MacBookKeyboardMapping.swift",
+      "sha256": "d33ca17464c1b55afdce2fdbcffe924d5b37e74a33a6cfb34a22863b0d89f4b2",
+      "bytes": 3448,
+      "lines": 66,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/Model.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/Model.swift",
+      "sha256": "eafa2d1a2c77a000320edab2700f13f8a995178fd07340020dc31fa65ebedbfa",
+      "bytes": 6666,
+      "lines": 160,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/NativeAppSwitchLatch.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/NativeAppSwitchLatch.swift",
+      "sha256": "78bdf1e4ded2ca8af0c8d284d95439f0d2ebfe66eb239394163cfda3e9803f05",
+      "bytes": 1704,
+      "lines": 31,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/NativeScreenshotMapping.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/NativeScreenshotMapping.swift",
+      "sha256": "45c837d821faa163318aec160a09570b66ef020ae4b7142f1e8bd820d5e6ddc1",
+      "bytes": 2485,
+      "lines": 47,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/PermissionChecklist.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/PermissionChecklist.swift",
+      "sha256": "8f02f7aa00a87f6603be1409207dd6a74d864e356d30517ab4fabbd3f515f11e",
+      "bytes": 3942,
+      "lines": 91,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/PhysicalDevicePolicy.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/PhysicalDevicePolicy.swift",
+      "sha256": "e8d35799d946766136cce7ab7c6f4dc0be45d3cb811a60a85fa96c5c3f225ee4",
+      "bytes": 1556,
+      "lines": 23,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/RecoveryPolicy.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/RecoveryPolicy.swift",
+      "sha256": "46dd1a02219af03018868b77020d4b0c651663184309022625a9a4a706b12e63",
+      "bytes": 516,
+      "lines": 12,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/RemoteSourceRouter.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/RemoteSourceRouter.swift",
+      "sha256": "3a50a8618c57ba88eaca83b6a84770b0ec7e21039860e48f363bf974399f98be",
+      "bytes": 11092,
+      "lines": 165,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/RuleEngine.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/RuleEngine.swift",
+      "sha256": "1abcab1867ba2a02ec9a43a49b99ab5a17603d489bf78570e5532a0d563f20d9",
+      "bytes": 2732,
+      "lines": 46,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/RuntimePolicy.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/RuntimePolicy.swift",
+      "sha256": "3fea0cc0f89318f7ea146c229c6db4d06184210472af96cd95bbd212e52b3dab",
+      "bytes": 5208,
+      "lines": 98,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/ScreenshotCaptureLifecycle.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/ScreenshotCaptureLifecycle.swift",
+      "sha256": "d3c89016c014bfdc0a03f33c886f558a9e427699d8e0aa798b53cb8d50aa7b5f",
+      "bytes": 1562,
+      "lines": 39,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/ScreenshotShortcuts.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/ScreenshotShortcuts.swift",
+      "sha256": "964669a0fb2b3fb07df2951a2791bcdf10b54227f6ec5facf54b8c158dd3aa0f",
+      "bytes": 925,
+      "lines": 16,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeCore/WindowsCompatibilityRules.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/WindowsCompatibilityRules.swift",
+      "sha256": "ef4f63f1649c9f4f3532f4969b3586966c6574ffc0bcbbf22dbd3cc6a2551088",
+      "bytes": 14371,
+      "lines": 120,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/ApplicationRegistry.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/ApplicationRegistry.swift",
+      "sha256": "c60047c7bc886c96b2ecea1c81bdd08590b6179d8afd3a13dd68602f78afe1aa",
+      "bytes": 3162,
+      "lines": 54,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/EventRewriter.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/EventRewriter.swift",
+      "sha256": "982d19dd1e44ba78f2dd22b559919ee8bd275c620176d27bf387f3755ceca01d",
+      "bytes": 900,
+      "lines": 19,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/FinderModePublisher.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/FinderModePublisher.swift",
+      "sha256": "c5f8d19d2ac1e0c4737445a9df1364b33d5a4550b8f20144afd98a504be1385e",
+      "bytes": 2031,
+      "lines": 53,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/HIDBackendClient.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/HIDBackendClient.swift",
+      "sha256": "df1bf1aff389be2028284fbe96d22d12d7d923f52d4c7fbe88a8c3c1305ff240",
+      "bytes": 18280,
+      "lines": 298,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/HIDDeviceInventory.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/HIDDeviceInventory.swift",
+      "sha256": "a32926a96e137cf4764e6a599ad6e8acf2cc5ace1ce3e97661361463fda0d694",
+      "bytes": 2059,
+      "lines": 32,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/InputEngine.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/InputEngine.swift",
+      "sha256": "7ff3cedd675cc89c9fafd7ca6415c5732f1de623d9675854db47a806d6056c50",
+      "bytes": 34907,
+      "lines": 627,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/KeyboardEventTapCoverage.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/KeyboardEventTapCoverage.swift",
+      "sha256": "8382b6c1452cfd8b38b524d2f201eaec8fac929836b3e02426307ae96a1f1a9c",
+      "bytes": 3098,
+      "lines": 54,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/KeyboardLayoutResolver.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/KeyboardLayoutResolver.swift",
+      "sha256": "bb78853f6de81bd842df8574b3423c3a385ef7c632b4d43ca841ad785d4209f3",
+      "bytes": 1302,
+      "lines": 23,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/KeyboardMappingDiagnostics.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/KeyboardMappingDiagnostics.swift",
+      "sha256": "82806afbf2573c5735873c482294f08edb716b66cac95f57eb078c7664c8188a",
+      "bytes": 452,
+      "lines": 11,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/KeyboardPermissionRequest.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/KeyboardPermissionRequest.swift",
+      "sha256": "02ecc9dcb7e8c98f60534e888ba3a5bd9570327762941a3e17990e99d66c7726",
+      "bytes": 1577,
+      "lines": 33,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/MacBookKeyboardMapper.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/MacBookKeyboardMapper.swift",
+      "sha256": "74537ddae1e0d1b291c2eaefb376c59308654f5282b30a81d3127c5d6704a595",
+      "bytes": 10585,
+      "lines": 205,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/NativeMacBookKeyboardBackend.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/NativeMacBookKeyboardBackend.swift",
+      "sha256": "c75099db0eaa240cb3cd25eaddfa9aa5daf4827169cb57fe1f25418bfe38a74d",
+      "bytes": 8263,
+      "lines": 136,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/NativeScreenshotObserver.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/NativeScreenshotObserver.swift",
+      "sha256": "d92d8ae77fb3df70437f49b14e583b41c2808b865d3c5e97f94dd44b63ccbf19",
+      "bytes": 7412,
+      "lines": 145,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/NativeSessionEmitter.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/NativeSessionEmitter.swift",
+      "sha256": "74d955963ff0e43142ae523b259613283cd87baad290049df9711c328f04dadb",
+      "bytes": 986,
+      "lines": 21,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/PDFImageBudget.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/PDFImageBudget.swift",
+      "sha256": "4e45ee1debe7d5f103639705babe48b78e1a7e3f66f1b529974b44aba6c1e62a",
+      "bytes": 8379,
+      "lines": 156,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/PrivateMappingJournal.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/PrivateMappingJournal.swift",
+      "sha256": "08a7b1d1587b6a54ded8e3d998b04148a612f81d890e1df1b7d6732649cc6313",
+      "bytes": 2977,
+      "lines": 56,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/RemoteInputAdapters.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/RemoteInputAdapters.swift",
+      "sha256": "9294411097d6d865367b674f0f3a972d2903966ec63d3f90bf6e57e513ba8c86",
+      "bytes": 15396,
+      "lines": 264,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/Resources/applications.json",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/Resources/applications.json",
+      "sha256": "95e3805880e0d5eb32f8f1d16bdbabf164223bbfcfb9c49168414f63a0060b06",
+      "bytes": 1148,
+      "lines": 30,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/Resources/compatibility-applications.json",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/Resources/compatibility-applications.json",
+      "sha256": "6a2d66073e439145f0c7935fde461043903bbc72beb369259b24c45f5edc72a8",
+      "bytes": 2682,
+      "lines": 71,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/ScreenshotCaptureDriver.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/ScreenshotCaptureDriver.swift",
+      "sha256": "b91be7146fddb991e873bbd2ec2b0f47bcd9ccda9305962ea9e6ae4c6a8c24ca",
+      "bytes": 6905,
+      "lines": 127,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/ScreenshotFolderAccess.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/ScreenshotFolderAccess.swift",
+      "sha256": "f93affab26af38915cc59e825714f2e249003accc24ccf283cf929f82d250976",
+      "bytes": 1141,
+      "lines": 24,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/ScreenshotManager.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/ScreenshotManager.swift",
+      "sha256": "ec8cb2732363dc2bcc1ecb68661c30ad3e6599cad4c6ead6b08624e0be22f28b",
+      "bytes": 41726,
+      "lines": 770,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/ScreenshotShortcut.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/ScreenshotShortcut.swift",
+      "sha256": "eec98e66b9c5183d41f7ddf3584f0e264da14e9a8af0ae9b11a78f7af775c6fe",
+      "bytes": 3445,
+      "lines": 68,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/SettingsStore.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/SettingsStore.swift",
+      "sha256": "3c9beaca8fa47e12021fd03bd1d2a44ea085e0875eebe8d96d2c2eac20e4f57d",
+      "bytes": 9838,
+      "lines": 161,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgePlatform/ShortcutActionDispatcher.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/ShortcutActionDispatcher.swift",
+      "sha256": "a8772e7e5245e016f5df962376414b3910241784c277821120116206168b7314",
+      "bytes": 18844,
+      "lines": 342,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeWorkGate/BridgeWorkGate.c",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeWorkGate/BridgeWorkGate.c",
+      "sha256": "7f05cb4450116909cba86db9e3c7383a4f6d51db447758812f6f0a9bb6237cb4",
+      "bytes": 674,
+      "lines": 18,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/BridgeWorkGate/include/BridgeWorkGate.h",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/BridgeWorkGate/include/BridgeWorkGate.h",
+      "sha256": "ffd245bf22ed4f0e21bc166acac428d5f729f0108e630700be5871d9e993a380",
+      "bytes": 256,
+      "lines": 8,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/HIDProtocol/HIDProtocol.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/HIDProtocol/HIDProtocol.swift",
+      "sha256": "fe685915dab34fea56cfe0831fffc5a0eed2e2187c0c0a7d5f1d545bc82d63e1",
+      "bytes": 5805,
+      "lines": 120,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/InputSourceCore/GuardDetectionPause.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/InputSourceCore/GuardDetectionPause.swift",
+      "sha256": "f993454eea05954a7e231ddb5627625964d8de72146d29abc344dfcb2b851722",
+      "bytes": 1361,
+      "lines": 46,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/InputSourceCore/GuardSelectionStore.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/InputSourceCore/GuardSelectionStore.swift",
+      "sha256": "a31c487d942ab4e1aaaa65b0a52c057930bb44b07b039e55f28d2ff99f721cc6",
+      "bytes": 714,
+      "lines": 19,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/InputSourceCore/GuardStateMachine.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/InputSourceCore/GuardStateMachine.swift",
+      "sha256": "4e5523964e6346e8f0c4b954e6d742476dc4d2db8c5e9a8a5857d99781d80bad",
+      "bytes": 4676,
+      "lines": 133,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/InputSourceCore/InputSourceStatistics.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/InputSourceCore/InputSourceStatistics.swift",
+      "sha256": "fa14c38ae91bcb0650522cbc4d94bc64b2727abb8d90fabf0e6c52e51ad31fe0",
+      "bytes": 5510,
+      "lines": 106,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/InputSourceSupport/AppSettings.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/InputSourceSupport/AppSettings.swift",
+      "sha256": "72f21e9448c51842635b9996eeb96725b3ccac1bdf98afa96157d66962ce3ae6",
+      "bytes": 3703,
+      "lines": 102,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/InputSourceSupport/DiagnosticMetrics.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/InputSourceSupport/DiagnosticMetrics.swift",
+      "sha256": "9dabe5a3e9968f9cdf3c3a94f9963cab2b67cda4fcf2b8c52662a8d52dc4a644",
+      "bytes": 4624,
+      "lines": 111,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/InputSourceSupport/FileLogger.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/InputSourceSupport/FileLogger.swift",
+      "sha256": "a61c303cadc392cdee3c38fd77de983b0982826c7c57a62b7f9e3d7398430b19",
+      "bytes": 710,
+      "lines": 18,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/InputSourceSupport/GuardController.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/InputSourceSupport/GuardController.swift",
+      "sha256": "d8e6f30bf91254ccaa92fc60eb803637e3493e0e7d459f70d88f06173da668b3",
+      "bytes": 43405,
+      "lines": 1119,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/InputSourceSupport/HotkeyManager.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/InputSourceSupport/HotkeyManager.swift",
+      "sha256": "d44580ae4afe0b3361c2f87d7d5eb9af7bf228bee074832f009357e0ae11c044",
+      "bytes": 4468,
+      "lines": 134,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/InputSourceSupport/InputSourceCoordinator.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/InputSourceSupport/InputSourceCoordinator.swift",
+      "sha256": "f6e0eb6d7583e4b13a65428c2a9cdceb2eb35aa84640909b5f80c8de29bf413f",
+      "bytes": 10303,
+      "lines": 214,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/InputSourceSupport/InputSourceManager.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/InputSourceSupport/InputSourceManager.swift",
+      "sha256": "b6cf0f911c26e154194cfefa70a6c4eaf0cbe132a75ff6cf88eb788cb0cd9792",
+      "bytes": 9112,
+      "lines": 216,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/InputSourceSupport/LoginItemManager.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/InputSourceSupport/LoginItemManager.swift",
+      "sha256": "745a806a2772bf1d3f13809eb2d092d98fe38bb6aa0f9920c41dbd9237e835ac",
+      "bytes": 1515,
+      "lines": 50,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/InputSourceSupport/SingleInstanceGuard.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/InputSourceSupport/SingleInstanceGuard.swift",
+      "sha256": "979cd212ce6848b2a5e46ffb4e5e0ccb3a114cbc85da26a8cc5ae3ffa06d3418",
+      "bytes": 1515,
+      "lines": 48,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/WindowsMacBridge/AppBuildInfo.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/WindowsMacBridge/AppBuildInfo.swift",
+      "sha256": "1f330ab9351241bc730eab32db7bfb5ec2a6c8ccdf34ddb3d7f4aea64613be6f",
+      "bytes": 1369,
+      "lines": 33,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/WindowsMacBridge/AppMain.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/WindowsMacBridge/AppMain.swift",
+      "sha256": "740fed5b603001e5a22642d47d5f697e6cd0d05bd58ee55a07abc5b18333b549",
+      "bytes": 12095,
+      "lines": 222,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/WindowsMacBridge/BrandAssets.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/WindowsMacBridge/BrandAssets.swift",
+      "sha256": "75ab1bede6963f1d268de29a10f03ab6d204cc15c66977eac73e3d7624527ced",
+      "bytes": 701,
+      "lines": 16,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/WindowsMacBridge/BridgeController.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/WindowsMacBridge/BridgeController.swift",
+      "sha256": "1519d7f5c933e0ac603300e79934251f12bd5f92ffde95a8b0daf5fc8c0fdb70",
+      "bytes": 43824,
+      "lines": 815,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/WindowsMacBridge/BundledBackendInstaller.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/WindowsMacBridge/BundledBackendInstaller.swift",
+      "sha256": "d377d66924c6301a6a98bcf27e81357032f291407c8c16310882676c094a9a20",
+      "bytes": 4392,
+      "lines": 72,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/WindowsMacBridge/DriverActivationLauncher.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/WindowsMacBridge/DriverActivationLauncher.swift",
+      "sha256": "ff3c313f7dffef4dc626d4bb90289e2ed499fef744b0c039874e2e67b5260a40",
+      "bytes": 2580,
+      "lines": 46,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/WindowsMacBridge/DriverPermissionCheck.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/WindowsMacBridge/DriverPermissionCheck.swift",
+      "sha256": "a38de5fadf3528f7cd79b96d9fc27d424d7918c4db43bdcee2ab11957aafe6df",
+      "bytes": 1746,
+      "lines": 34,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/WindowsMacBridge/PermissionRelauncher.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/WindowsMacBridge/PermissionRelauncher.swift",
+      "sha256": "2424e3613918a0650ec6635c33f234b8900c73355536ccbfa2c5a357d1d3aea1",
+      "bytes": 1084,
+      "lines": 20,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/WindowsMacBridge/PermissionStatus.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/WindowsMacBridge/PermissionStatus.swift",
+      "sha256": "204f21e7490be7c2f5c6f810a2cfc92b6aaba4cd269d1d783c87adc8f53d9a25",
+      "bytes": 1582,
+      "lines": 30,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Sources/WindowsMacBridge/SettingsView.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Sources/WindowsMacBridge/SettingsView.swift",
+      "sha256": "c34b4109b478d2bf09e9369db4ec358b658198844035860386904f236c8dd9ee",
+      "bytes": 35588,
+      "lines": 458,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/BoundedLoggerTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/BoundedLoggerTests.swift",
+      "sha256": "92a6a7bc16a9434ceb5587ebccef93bbdaae055340640af903e42c684f5368ed",
+      "bytes": 1975,
+      "lines": 47,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/CompatibilityTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/CompatibilityTests.swift",
+      "sha256": "40973976c37f22e024e79cb7b11c4dd5b3b9af229427e093f199aa7298e32357",
+      "bytes": 8319,
+      "lines": 127,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/DestinationAppSwitchTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/DestinationAppSwitchTests.swift",
+      "sha256": "77354ec0661d3c34be12149bc333e664bb9a4dc8e3f09d76b11d8b11a00f8e16",
+      "bytes": 2166,
+      "lines": 34,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/DestinationSemanticsTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/DestinationSemanticsTests.swift",
+      "sha256": "c2c6d727b4196f37055721f8d64202ea4db9ffa8f2e67c005eeae84498bcceab",
+      "bytes": 6036,
+      "lines": 84,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/DriverApprovalTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/DriverApprovalTests.swift",
+      "sha256": "2d4388a211a709931836b2acef2c6f6de2177a97a78522265cd833872d1c84fc",
+      "bytes": 1029,
+      "lines": 16,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/FinderModeSignalTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/FinderModeSignalTests.swift",
+      "sha256": "2170d6a4317437ba60e9c3e4adf251452aab291050486aeae21fec0098ced9ad",
+      "bytes": 918,
+      "lines": 19,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/Fixtures/windows-like-mac-v2.json",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/Fixtures/windows-like-mac-v2.json",
+      "sha256": "27e366cb7114f45eb3ca555326eb170eda223e50c04b6b7f2db4fc6456c6fe53",
+      "bytes": 138620,
+      "lines": 3654,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_structured_fixture_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/HIDDescriptorTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/HIDDescriptorTests.swift",
+      "sha256": "f672a3e4daec5ac1277771c512312c3c4326be286de04adc69ea79854bea2349",
+      "bytes": 2505,
+      "lines": 47,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/HIDTranslationTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/HIDTranslationTests.swift",
+      "sha256": "5175e16f1561601556215f1ae0921601e243b197aac61f1c4a5e8163dcf38331",
+      "bytes": 16910,
+      "lines": 298,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/InstallReadinessRegressionTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/InstallReadinessRegressionTests.swift",
+      "sha256": "96e8a45755e5f7fd43c20da81c43ab76f20dba8ce49a6fb073c2360f5d407085",
+      "bytes": 9527,
+      "lines": 131,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/KarabinerFixtureTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/KarabinerFixtureTests.swift",
+      "sha256": "ed3e626da92e28a91470dbba5a424a35184497212137301a0f3f616a31dfe684",
+      "bytes": 4218,
+      "lines": 65,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/KeyboardEngineTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/KeyboardEngineTests.swift",
+      "sha256": "6daa7667a1488a27eb1ae34328f13775ac1ee58bc046fc48c78f41201894f922",
+      "bytes": 15246,
+      "lines": 254,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/MacBookKeyboardMappingTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/MacBookKeyboardMappingTests.swift",
+      "sha256": "82292bf883c73884b860fab757fa6f7e4eb8f160b66dc28bd2de76e618eaa061",
+      "bytes": 3362,
+      "lines": 53,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/MultiKeyboardReleaseOrderTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/MultiKeyboardReleaseOrderTests.swift",
+      "sha256": "0fb8634349795ef8c6463cddbc09b81d5ae27218db5e4c1a9f2d1f8fea7f10d0",
+      "bytes": 3103,
+      "lines": 54,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/NativeScreenshotMappingTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/NativeScreenshotMappingTests.swift",
+      "sha256": "ed82aef78a2fd14451167a26a13088d429a9192d13de43a1136bfd0c6676cadb",
+      "bytes": 2495,
+      "lines": 38,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/PermissionChecklistTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/PermissionChecklistTests.swift",
+      "sha256": "4d52007d94bcab34957dbc3cd3d2031a0355131657f76e76cd6aec46a4a9f4ef",
+      "bytes": 4273,
+      "lines": 86,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/PhysicalDevicePolicyTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/PhysicalDevicePolicyTests.swift",
+      "sha256": "adfcbbb9b47ae446be3abf8a2697ff14d0cc5517158595f5306519974af8288d",
+      "bytes": 3421,
+      "lines": 46,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/ReleaseInputRegressionTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/ReleaseInputRegressionTests.swift",
+      "sha256": "fd3e3b47732afdf6e157a9be8fe8c32f1a2b8bb9d65553b7f555f1e0fdb32bc6",
+      "bytes": 7550,
+      "lines": 139,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/ReleasePolicyRegressionTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/ReleasePolicyRegressionTests.swift",
+      "sha256": "7b87636bb380864aac3eab2d389c2fecf027d6d2ca6c83513dc7d7612585ca5d",
+      "bytes": 8697,
+      "lines": 165,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/RemoteSemanticRegressionTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/RemoteSemanticRegressionTests.swift",
+      "sha256": "6592d9afaebb4cd8096358169dcf9366b314490b1e1fe6f7220aced2122d397d",
+      "bytes": 11596,
+      "lines": 153,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/ScreenshotCaptureLifecycleTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/ScreenshotCaptureLifecycleTests.swift",
+      "sha256": "c38dc7778b6a4a36eabf12927db9283d08085b83425462d2dba72a3c00e05fd1",
+      "bytes": 2078,
+      "lines": 54,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/SourceRevocationTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/SourceRevocationTests.swift",
+      "sha256": "cf48e50763cbcfb6e0d31c561fceb112d8d4885c5d69cc99db0cbccd75aa1842",
+      "bytes": 778,
+      "lines": 16,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/SourceWorkGateTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/SourceWorkGateTests.swift",
+      "sha256": "d1983d5338a1a06b3fbcb71f3e03c2086fb001e3fac9cb10bf9799943dbb24d8",
+      "bytes": 876,
+      "lines": 26,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/UnifiedInputTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/UnifiedInputTests.swift",
+      "sha256": "68dac6737d13d2ba46f805188534bb69606f1aa783467bb906f32286aef40738",
+      "bytes": 8926,
+      "lines": 121,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgeCoreTests/WindowsFeatureTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgeCoreTests/WindowsFeatureTests.swift",
+      "sha256": "917a296093da62af32a1971bd631e662af11b7641277a711b00edda4c4091f17",
+      "bytes": 9841,
+      "lines": 157,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/ActionDispatcherTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/ActionDispatcherTests.swift",
+      "sha256": "70cf057f4af1eee6e7fed0f0ffab3bcf4ed1b34d37157d8029bf307be3022379",
+      "bytes": 1276,
+      "lines": 23,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/AppKitShortcutTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/AppKitShortcutTests.swift",
+      "sha256": "abbe51510451b4475fc5bfcdb86831bb9a87e1c52a2c43035c6249d1202ebc2c",
+      "bytes": 2457,
+      "lines": 46,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/AppTransitionSafetyTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/AppTransitionSafetyTests.swift",
+      "sha256": "a66066473cf57a00f6fa13797d9b293f40e21ae1b7e3da07b77f25fa6cbe7dde",
+      "bytes": 5468,
+      "lines": 89,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/BackendOwnershipTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/BackendOwnershipTests.swift",
+      "sha256": "4350abf43d69ca5b183673eb31d8c71bf8027b2b0fd56429d6498b119779deb4",
+      "bytes": 7273,
+      "lines": 123,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/CompatibilityPlatformTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/CompatibilityPlatformTests.swift",
+      "sha256": "ede7c8a78475c8d1725fc4a69e79580336867a4387afad8ee8827d421a2f03e9",
+      "bytes": 3548,
+      "lines": 51,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/DestinationRuntimeTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/DestinationRuntimeTests.swift",
+      "sha256": "91216b31960b019ad5dd4f97efe72cb6a4f3e392bc13d8dc82088382d4f16883",
+      "bytes": 3140,
+      "lines": 54,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/FinderModePublisherTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/FinderModePublisherTests.swift",
+      "sha256": "36bc4a53c3a060e715d215484d34aaf89da1aa632d884af9dd7fa6f47ad5223e",
+      "bytes": 2504,
+      "lines": 55,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/HIDProtocolTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/HIDProtocolTests.swift",
+      "sha256": "9e9c724dbb1ca6bedbaf0c07a943dda1a919c565772802b72ca8d4216fbf8836",
+      "bytes": 3829,
+      "lines": 61,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/KeyboardEventTapCoverageTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/KeyboardEventTapCoverageTests.swift",
+      "sha256": "2a4303970bbebb0e7d5b31b7912160518cba78d05bbcb645783c450986c89a1a",
+      "bytes": 2416,
+      "lines": 47,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/KeyboardPermissionRequestTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/KeyboardPermissionRequestTests.swift",
+      "sha256": "ec4bc311d3324f34f24d120448c5365c1e550f20949cdce48ea7e9c02aaf7656",
+      "bytes": 1982,
+      "lines": 38,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/MacBookKeyboardMapperTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/MacBookKeyboardMapperTests.swift",
+      "sha256": "671f73dd5f5e07cbfccfa1c6b29350c304a17f3165a997ff6a54f483a28c2562",
+      "bytes": 19155,
+      "lines": 259,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/MappingJournalTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/MappingJournalTests.swift",
+      "sha256": "df2186ce7949f95d9b801731ee938386fbe18027468900ff1cc0e9d8fa301cc5",
+      "bytes": 1645,
+      "lines": 30,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/ModeIsolationTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/ModeIsolationTests.swift",
+      "sha256": "ae71c16b65b7cf04cafd9225c9ce2937e7bbc96f0b38d9f8d7a826e1a98849e9",
+      "bytes": 2824,
+      "lines": 57,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/NativeScreenshotJobTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/NativeScreenshotJobTests.swift",
+      "sha256": "2f46a41ec8caeaa8b7a77cf173368366b7142b4e6f7f4de1dcf906b73d128b84",
+      "bytes": 2467,
+      "lines": 50,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/NativeScreenshotObserverTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/NativeScreenshotObserverTests.swift",
+      "sha256": "7141bdbf76b165568c12b9634ccfc30aa8162398127235c0979cd9cd85648471",
+      "bytes": 5249,
+      "lines": 89,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/NativeSessionEmitterTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/NativeSessionEmitterTests.swift",
+      "sha256": "c8ad26d3fedc6e2f125437c609c956acfbccfa48b80e8cadf5b2f41083ad9b94",
+      "bytes": 1835,
+      "lines": 32,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/PlatformTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/PlatformTests.swift",
+      "sha256": "80452c6d3c78e84263a5ba5652cf6daa33e39c5fb20af714bb8452f211e3b5ea",
+      "bytes": 1800,
+      "lines": 34,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/ReleasePlatformRegressionTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/ReleasePlatformRegressionTests.swift",
+      "sha256": "c0f17c676c4ef7c56a82de68ec9920d3d3c5688f7e02b047a8ea3aa97223d514",
+      "bytes": 3008,
+      "lines": 51,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/RemoteAdapterTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/RemoteAdapterTests.swift",
+      "sha256": "9863d769a497c045226d91755879a72f00c2b0e5026074e9cada10486e8a335c",
+      "bytes": 4415,
+      "lines": 68,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/ScreenshotFolderAccessTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/ScreenshotFolderAccessTests.swift",
+      "sha256": "e00348f1e1a73bd73c6b8590f22cc75e9a923ad7b5a8599311aabe4b3c28acfd",
+      "bytes": 844,
+      "lines": 17,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/ScreenshotRuntimeTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/ScreenshotRuntimeTests.swift",
+      "sha256": "b2d8c4bba2d63a0edeb43bb8d3d5f046a5198d50bc4f8e5a5459aa04ea9de231",
+      "bytes": 18857,
+      "lines": 302,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/ScreenshotTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/ScreenshotTests.swift",
+      "sha256": "94d8545e0d25053d36887e0356b5600c119dbe1c5d6a042a30184a38b3623445",
+      "bytes": 23702,
+      "lines": 359,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/SettingsStoreTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/SettingsStoreTests.swift",
+      "sha256": "a20c16007d8292af65e292c5b8a622728103bee2fd11c0c05fd68a8f74824983",
+      "bytes": 12599,
+      "lines": 205,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/SourceActionIsolationTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/SourceActionIsolationTests.swift",
+      "sha256": "21c8a57bc97b8fee0d5eacfc18772dcee3cff9e899dfb9ecc6eeb05294827d19",
+      "bytes": 5515,
+      "lines": 91,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/TextNavigationTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/TextNavigationTests.swift",
+      "sha256": "ba5c9b2081ff99d63795eddb10368bd924f35663885587fd1154c9ca2b3f86e4",
+      "bytes": 4651,
+      "lines": 72,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/BridgePlatformTests/UnifiedSettingsTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/BridgePlatformTests/UnifiedSettingsTests.swift",
+      "sha256": "9dd20797091fc6eab2cf12bda95c02373101ae1e0c6249789776d3b8fe8d6b6b",
+      "bytes": 3181,
+      "lines": 54,
+      "kind": "text",
+      "reviewer": "platform",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/InputSourceCoreTests/GuardDetectionPauseTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/InputSourceCoreTests/GuardDetectionPauseTests.swift",
+      "sha256": "87877180f895e828112213738ca4b55eb5f25b09d3a25f98f53172a03a6e7622",
+      "bytes": 1986,
+      "lines": 40,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/InputSourceCoreTests/GuardSelectionStoreTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/InputSourceCoreTests/GuardSelectionStoreTests.swift",
+      "sha256": "f8b8a1b11e3784974f58d065f849d95a99c44b07ee475e686c7d031bf192178a",
+      "bytes": 1629,
+      "lines": 34,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/InputSourceCoreTests/GuardStateMachineTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/InputSourceCoreTests/GuardStateMachineTests.swift",
+      "sha256": "dd611cfbf1955c2bdd98b3cfccb404caccb57885d9c66697c2ee0d5c12b7e2ff",
+      "bytes": 8076,
+      "lines": 165,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/InputSourceCoreTests/InputSourcePolicyTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/InputSourceCoreTests/InputSourcePolicyTests.swift",
+      "sha256": "8336b02652fd76a487a0183fabafa022b89fbfa2d36792ba66f1a31bab4db603",
+      "bytes": 2335,
+      "lines": 43,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/InputSourceCoreTests/InputSourceStatisticsTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/InputSourceCoreTests/InputSourceStatisticsTests.swift",
+      "sha256": "cadd789e72e9267ca83dbfff57c9282adb6341a5a885476ba91a37fb69ca6dff",
+      "bytes": 4953,
+      "lines": 98,
+      "kind": "text",
+      "reviewer": "core",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/InputSourceSupportTests/GuardControllerIntentTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/InputSourceSupportTests/GuardControllerIntentTests.swift",
+      "sha256": "b8624cd2c2748f6c87b3bac84baf5ff5c4f71c196543a56856aa244622c3446f",
+      "bytes": 9608,
+      "lines": 211,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/InputSourceSupportTests/ObserverLifetimeTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/InputSourceSupportTests/ObserverLifetimeTests.swift",
+      "sha256": "92077102615d526da696382215766a38651eb2e411f3b09b01307e6586f5d0c0",
+      "bytes": 714,
+      "lines": 19,
+      "kind": "text",
+      "reviewer": "main",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/InstallerTests/test_driver_runner.py",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/InstallerTests/test_driver_runner.py",
+      "sha256": "92ed1c978361828a3eeb1493ae33cc9fcda2c7cdf8609818fdbc7db925671624",
+      "bytes": 3194,
+      "lines": 65,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/InstallerTests/test_hid_sdk_build.py",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/InstallerTests/test_hid_sdk_build.py",
+      "sha256": "6c5d81b2ac4bb1d6114ae979a80e2859d9dfe22f9ec3d5b1da4dee379fa34710",
+      "bytes": 1817,
+      "lines": 28,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/InstallerTests/test_install_backend.py",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/InstallerTests/test_install_backend.py",
+      "sha256": "8fc11b3b3db977a7608a9648bdac43fcf88dc5911448b9d5ac88cb7d4e47c259",
+      "bytes": 35923,
+      "lines": 538,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/InstallerTests/test_source_version.py",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/InstallerTests/test_source_version.py",
+      "sha256": "998a88b3fb1e8ba5941931b47ecff30355350a2dc86d64a3005603e7d884b7f6",
+      "bytes": 1911,
+      "lines": 30,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/InstallerTests/test_uninstall_recovery.py",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/InstallerTests/test_uninstall_recovery.py",
+      "sha256": "4a150a3e034995fa8a93ba5ef964ce9c59dfd95f1f8b47b43740f4c3bf761748",
+      "bytes": 1998,
+      "lines": 32,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tests/MonitoringTests/test_monitor_runtime.py",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tests/MonitoringTests/test_monitor_runtime.py",
+      "sha256": "90bff59834c4233532aa1328dbd55704afd38c43871842fe3e0327569f034147",
+      "bytes": 1863,
+      "lines": 40,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tools/HIDBackend/README.md",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/README.md",
+      "sha256": "c7717729f431df265a1a6118e0d006aeed81e0efd37767b6b033b0cc38b078c8",
+      "bytes": 1588,
+      "lines": 17,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDLifecycle/CaptureLifecycle.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/Sources/HIDLifecycle/CaptureLifecycle.swift",
+      "sha256": "b08de597d4780eaa21019c486b8f4536c93a08e6c30e78f73c433176c314394a",
+      "bytes": 3152,
+      "lines": 70,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDLifecycle/ConnectionRetainer.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/Sources/HIDLifecycle/ConnectionRetainer.swift",
+      "sha256": "8c2ce18420f640a2c6a7920c9829e1403fe2e7c755319ad57b5ccbeeee04dc92",
+      "bytes": 1114,
+      "lines": 25,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDLifecycle/PassiveRunLoopLifetime.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/Sources/HIDLifecycle/PassiveRunLoopLifetime.swift",
+      "sha256": "c08013687d85feedce8bee1b9aae703439494d734ed9d8c3421e2c2f5574a5b7",
+      "bytes": 830,
+      "lines": 18,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDRuntime/DeviceCapture.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/Sources/HIDRuntime/DeviceCapture.swift",
+      "sha256": "090bb69718b5824bdbc2f01d90fbeec9e40c77b4d82f1ec02f10d73f41c74df7",
+      "bytes": 27328,
+      "lines": 421,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDRuntime/InputService.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/Sources/HIDRuntime/InputService.swift",
+      "sha256": "a8324dd295ab22be82178880c07066e15a0d595b542c3b21b615c2b1817e3542",
+      "bytes": 8232,
+      "lines": 141,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/HIDRuntime/RuntimeCommand.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/Sources/HIDRuntime/RuntimeCommand.swift",
+      "sha256": "54ecfddf0b13e988cd246f11e5bda1685e0b5818f37da35e56488b76e2acb801",
+      "bytes": 3057,
+      "lines": 54,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/VirtualHID/VirtualHID.cpp",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/Sources/VirtualHID/VirtualHID.cpp",
+      "sha256": "1feec21d629bb46dce23d5142402bef001b92c05f05e02bedfc8466a4ac69b11",
+      "bytes": 15229,
+      "lines": 297,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tools/HIDBackend/Sources/VirtualHID/include/VirtualHID.h",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/Sources/VirtualHID/include/VirtualHID.h",
+      "sha256": "3cfbec3d23935e9e64e2833b3fb7d6505302b4e17f44c49488d0c1d39747ebc5",
+      "bytes": 2885,
+      "lines": 61,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tools/HIDBackend/Tests/VirtualHIDTests/ConnectionLeaseTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/Tests/VirtualHIDTests/ConnectionLeaseTests.swift",
+      "sha256": "f006f2b7b3d065f2a6c1b439409ff68dc36fafce38cedd706edb8d2a39dbab4b",
+      "bytes": 1107,
+      "lines": 22,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tools/HIDBackend/Tests/VirtualHIDTests/ConnectionRetainerTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/Tests/VirtualHIDTests/ConnectionRetainerTests.swift",
+      "sha256": "ce3625ac4a2ac3dbb02628371b1572a58d8e4883bd927554d0570149d3f57889",
+      "bytes": 1168,
+      "lines": 32,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tools/HIDBackend/Tests/VirtualHIDTests/LifecycleTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/Tests/VirtualHIDTests/LifecycleTests.swift",
+      "sha256": "7394feb0f9bbb1374edabd60939a19caa6193f6306e804234f7448c18d9692f9",
+      "bytes": 3626,
+      "lines": 70,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tools/HIDBackend/Tests/VirtualHIDTests/ReportTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/Tests/VirtualHIDTests/ReportTests.swift",
+      "sha256": "ccefb7e79ad2373c900386b2d30f61725e7f793ea9b432d21dbfc4904a4c24d7",
+      "bytes": 6040,
+      "lines": 118,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tools/HIDBackend/Tests/VirtualHIDTests/RunLoopLifetimeTests.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/Tests/VirtualHIDTests/RunLoopLifetimeTests.swift",
+      "sha256": "209e42588a4a341fb44069e46c43ebd14ef22ec4a63e41b714168a06940544de",
+      "bytes": 848,
+      "lines": 22,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "Tools/ImageBenchmark/Benchmark.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/Tools/ImageBenchmark/Benchmark.swift",
+      "sha256": "12e195dbbcc6fc4f25297ab3ded81620d56e7cab87c6ae9c25f416beb5fffa2e",
+      "bytes": 2368,
+      "lines": 39,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "scripts/build-app.sh",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/scripts/build-app.sh",
+      "sha256": "1b699247cd5666048422e37086f3d0c501046cdbf0d4c81ff52d434faddf2610",
+      "bytes": 5359,
+      "lines": 73,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "scripts/build-environment.sh",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/scripts/build-environment.sh",
+      "sha256": "1e4c9b5cfb78d8536846437a76bb0a242f9f754f01dd7b6ddc21e73048e5483a",
+      "bytes": 267,
+      "lines": 4,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "scripts/generate-brand-assets.swift",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/scripts/generate-brand-assets.swift",
+      "sha256": "3bcc0d540bc4a3396b878f419c730fc34d29de8da179037483c2a01cf8ee5d01",
+      "bytes": 5261,
+      "lines": 95,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "scripts/generate-image-budget-fixtures.py",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/scripts/generate-image-budget-fixtures.py",
+      "sha256": "69a1693b1154479d6f3bf453d5be667dc8b53c5d5175894d02fd9d7298b4422e",
+      "bytes": 3095,
+      "lines": 66,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "scripts/monitor-runtime.py",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/scripts/monitor-runtime.py",
+      "sha256": "c41131f5c9b7092d88996649ff668259316e037e73db14ed9490ae55081a91d1",
+      "bytes": 8475,
+      "lines": 175,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "scripts/package-app-dmg.sh",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/scripts/package-app-dmg.sh",
+      "sha256": "4cee9c9c82922a1b0441fdec727c8fdc1a2914384dce56742d2860510b249137",
+      "bytes": 2122,
+      "lines": 32,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "scripts/package-single-app.sh",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/scripts/package-single-app.sh",
+      "sha256": "205576253651cdd8c2969067a99803c3ec1a2906e254ebab32c6fbab3deba5e2",
+      "bytes": 4564,
+      "lines": 58,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "scripts/prepare-hid-backend.sh",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/scripts/prepare-hid-backend.sh",
+      "sha256": "b194c3380d813d588f217e1c9fbf33ab39fb6f2d82d230824da1be1ee13f6da5",
+      "bytes": 2565,
+      "lines": 47,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "scripts/prepare-hid-sdk.py",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/scripts/prepare-hid-sdk.py",
+      "sha256": "713dd6606ebb507c083b0bbe6c31148600eaff533a705fda9fdaea216c6cad94",
+      "bytes": 2069,
+      "lines": 36,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "scripts/source-version.sh",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/scripts/source-version.sh",
+      "sha256": "e79eb5a5285613a6c1a1812ff3bf5d46fc3722569755f6f9418132d36be7b43b",
+      "bytes": 662,
+      "lines": 13,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    },
+    {
+      "path": "scripts/test.sh",
+      "absolute_path": "/Users/steven/Documents/ChatGPT/我/scripts/test.sh",
+      "sha256": "89aa148add7a004bf1679777500d63cc46b2504ceef05e91b3bdc3b34f2af6c7",
+      "bytes": 803,
+      "lines": 15,
+      "kind": "text",
+      "reviewer": "backend",
+      "method": "full_line_review"
+    }
+  ]
+}

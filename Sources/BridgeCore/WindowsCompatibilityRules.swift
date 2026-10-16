@@ -11,7 +11,9 @@ public enum WindowsCompatibilityRules {
         ShortcutRule(id: "windows.cut", input: .init(keyCode: 7, modifiers: [.control]), output: .init(keyCode: 7, modifiers: [.command])), // #15
         ShortcutRule(id: "windows.selectAll", input: .init(keyCode: 0, modifiers: [.control]), output: .init(keyCode: 0, modifiers: [.command])), // #16
     ]
-    public static let terminalClipboard = clipboard + [
+    public static let terminalClipboard = clipboard.filter { $0.id != "windows.copy" } + [
+        ShortcutRule(id: "terminal.copyOrInterrupt", input: .init(keyCode: 8, modifiers: .control),
+                     output: .init(keyCode: 8, modifiers: .control), action: .terminalCopyOrInterrupt),
         ShortcutRule(id: "terminal.interrupt", input: .init(keyCode: 8, modifiers: [.control, .shift]),
                      output: .init(keyCode: 8, modifiers: [.control]))
     ]

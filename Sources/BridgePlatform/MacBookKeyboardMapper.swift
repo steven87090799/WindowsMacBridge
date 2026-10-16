@@ -31,7 +31,7 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
     public init() {}
 }
 
-/// Native service properties, outside Event Tap callbacks. No key capture or periodic timer.
+/// Native service properties, outside Event Tap callbacks. No key capture or idle timer.
 @MainActor public final class MacBookKeyboardMapper {
     private struct Journal: Codable, Equatable {
         var bootID: String
@@ -168,6 +168,26 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
         enabled = false
         backend.stopObserving(); observing = false
         refresh()
+    }
+    /// Normal quit must verify restoration before the process and its key-edge
+    /// notifications disappear. Only this bounded shutdown window checks for
+    /// released keys; a failure retains ownership and the recovery journal.
+    public func restoreForTermination(maximumAttempts: Int = 61,
+        waitForRelease: @MainActor () async throws -> Void = {
+            try await Task.sleep(for: .milliseconds(50))
+        }) async -> Bool {
+        guard maximumAttempts > 0, !Task.isCancelled else { return false }
+        enabled = false
+        for attempt in 0..<maximumAttempts {
+            guard !Task.isCancelled else { return false }
+            refresh()
+            if !status.restorePending { return true }
+            if attempt + 1 < maximumAttempts {
+                do { try await waitForRelease() }
+                catch { return false }
+            }
+        }
+        return false
     }
     private func verified(id: UInt64, mapping: [NativeKeyMapping]) -> Bool {
         guard let actual = backend.services()?.first(where: { $0.identity.registryID == id })?.userMapping else { return false }

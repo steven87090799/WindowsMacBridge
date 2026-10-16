@@ -34,7 +34,7 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         var value = self; value.remoteSources = []; value.deviceInputs = []; return value
     }
     public var valid: Bool {
-        remoteSources.count <= 32 && deviceInputs.count <= 16 &&
+        (1...6).contains(schemaVersion) && remoteSources.count <= 32 && deviceInputs.count <= 16 &&
         remoteSources.allSatisfy { !$0.identity.isEmpty && $0.identity.utf8.count <= 256 } &&
         deviceInputs.allSatisfy { !$0.identity.isEmpty && $0.identity.utf8.count <= 128 } &&
         Set(remoteSources.map(\.identity)).count == remoteSources.count && Set(deviceInputs.map(\.identity)).count == deviceInputs.count
@@ -84,6 +84,7 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
 }
 
 @MainActor public final class SettingsStore {
+    public static let maximumEncodedBytes = 64 * 1024
     private let defaults: UserDefaults
     public private(set) var settings: BridgeSettings
     public private(set) var errorMessage: String?
@@ -92,7 +93,7 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         let defaultModifier: WindowsKeyModifier = .command
         if let data = defaults.data(forKey: "bridge.settings.v1") {
             do {
-                guard data.count <= 64 * 1024 else { throw CocoaError(.coderReadCorrupt) }
+                guard data.count <= Self.maximumEncodedBytes else { throw CocoaError(.coderReadCorrupt) }
                 let loaded = try JSONDecoder().decode(BridgeSettings.self, from: data)
                 guard (1...6).contains(loaded.schemaVersion), loaded.valid else { throw CocoaError(.coderReadCorrupt) }
                 settings = loaded
@@ -119,6 +120,10 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         do {
             guard next.valid else { throw CocoaError(.coderInvalidValue) }
             let data = try JSONEncoder().encode(next)
+            guard data.count <= Self.maximumEncodedBytes else {
+                errorMessage = "設定超過 64 KiB，未儲存；原設定已保留。"
+                return
+            }
             defaults.set(data, forKey: "bridge.settings.v1")
             settings = next; errorMessage = nil
         } catch { errorMessage = "設定儲存失敗。" }

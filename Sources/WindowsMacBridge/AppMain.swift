@@ -14,6 +14,7 @@ import InputSourceCore
     private var settingsWindow: NSWindow?
     private var lastTooltip: String?
     private var lastActive: Bool?
+    private var terminationTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -51,7 +52,41 @@ import InputSourceCore
             lastActive = active
         }
     }
-    func applicationWillTerminate(_ notification: Notification) { controller?.stop() }
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let controller else { return .terminateNow }
+        guard terminationTask == nil else { return .terminateLater }
+        controller.prepareForTermination()
+        terminationTask = Task { @MainActor [weak self] in
+            guard let self else {
+                sender.reply(toApplicationShouldTerminate: false)
+                return
+            }
+            while !Task.isCancelled {
+                if await controller.restoreNativeMappingForTermination() {
+                    terminationTask = nil
+                    sender.reply(toApplicationShouldTerminate: true)
+                    return
+                }
+                guard !Task.isCancelled else { return }
+                let alert = NSAlert()
+                alert.messageText = "鍵盤交換尚未還原"
+                alert.informativeText = "請放開所有按鍵後重試。若仍無法還原，請取消結束並在設定中重新檢查；還原紀錄已保留。"
+                alert.addButton(withTitle: "放鍵後重試")
+                alert.addButton(withTitle: "取消結束")
+                if alert.runModal() != .alertFirstButtonReturn {
+                    controller.cancelTermination()
+                    terminationTask = nil
+                    sender.reply(toApplicationShouldTerminate: false)
+                    return
+                }
+            }
+        }
+        return .terminateLater
+    }
+    func applicationWillTerminate(_ notification: Notification) {
+        terminationTask?.cancel(); terminationTask = nil
+        controller?.stop()
+    }
     private func installMainMenu() {
         let mainMenu = NSMenu()
         let appItem = NSMenuItem()
@@ -89,7 +124,7 @@ import InputSourceCore
     }
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        let enabled = action("啟用 Windows Mode", #selector(toggleEnabled), in: menu)
+        let enabled = action("Windows 模式總開關", #selector(toggleEnabled), in: menu)
         enabled.state = controller.settings.enabled ? .on : .off
         action("恢復／重啟引擎", #selector(resume), in: menu)
         let pause = NSMenuItem(title: "暫停所有輸入輔助", action: nil, keyEquivalent: "")
@@ -101,6 +136,9 @@ import InputSourceCore
         action("直到 App 重啟", #selector(pauseUntilRestart), in: submenu)
         pause.submenu = submenu; menu.addItem(pause)
         menu.addItem(.separator())
+        let textCapture = action("截圖文字擷取…", #selector(captureScreenshotText), in: menu)
+        textCapture.isEnabled = controller.canCaptureScreenshotText
+        if controller.screenshotStatus.isBusy { action("取消截圖／文字辨識", #selector(cancelScreenshot), in: menu) }
         label("輸入法：\(controller.sourceStatus.summary)", in: menu)
         let guardItem = action("啟用唯音輸入法守護", #selector(toggleGuard), in: menu)
         guardItem.state = controller.sourceStatus.enabled ? .on : .off
@@ -131,6 +169,8 @@ import InputSourceCore
         entry.target = self; menu.addItem(entry); return entry
     }
     @objc private func toggleGuard() { controller.inputSources.setEnabled(!controller.sourceStatus.enabled) }
+    @objc private func captureScreenshotText() { controller.captureScreenshotText() }
+    @objc private func cancelScreenshot() { controller.cancelScreenshot() }
     @objc private func selectChinese() { controller.inputSources.select(.vChewing) }
     @objc private func selectEnglish() { controller.inputSources.select(.abc) }
     @objc private func pauseSourceDetection(_ item: NSMenuItem) {
@@ -166,10 +206,19 @@ import InputSourceCore
     @MainActor static func main() {
         if HIDRuntimeCommand.handle(Array(CommandLine.arguments.dropFirst())) { return }
         guard geteuid() != 0 else { exit(77) }
+        // Older private diagnostic commands must never accidentally start the GUI.
+        if CommandLine.arguments.dropFirst().first == ScreenshotTextBudget.workerArgument { exit(64) }
+        if FeatureResourceCheck.handle(Array(CommandLine.arguments.dropFirst())) { return }
+        if FeatureVisualCheck.handle(Array(CommandLine.arguments.dropFirst())) { return }
         if CommandLine.arguments.contains("--self-check") {
             do {
                 let registry = try ApplicationRegistry()
                 if Bundle.main.bundleURL.pathExtension == "app" {
+                    guard let worker = IsolatedScreenshotTextRecognizer.bundledExecutable(),
+                          FileManager.default.isExecutableFile(atPath: worker.path) else {
+                        print("WindowsMacBridge self-check failed: OCR helper missing.")
+                        exit(1)
+                    }
                     let extensionURL = Bundle.main.bundleURL.appendingPathComponent("Contents/PlugIns/WindowsMacBridgeFinderSync.appex")
                     guard let finder = Bundle(url: extensionURL),
                           finder.infoDictionary?["CFBundleIdentifier"] as? String == "local.WindowsMacBridge.FinderSync",
