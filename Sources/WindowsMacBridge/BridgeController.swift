@@ -106,7 +106,6 @@ import IOKit.hid
     private let store = SettingsStore()
     let installationRecoveryPending: Bool
     private let screenshot = ScreenshotManager()
-    private var screenshotPreview: ScreenshotThumbnailPresenter?
     private let macBookKeyboard = MacBookKeyboardMapper()
     private let finderPublisher = FinderModePublisher()
     private var registry: ApplicationRegistry?
@@ -224,12 +223,6 @@ import IOKit.hid
         screenshot.onChange = { [weak self] status in
             if self?.screenshotStatus != status { self?.screenshotStatus = status }
         }
-        screenshot.onPreviewReady = { [weak self] preview in
-            guard let self else { return false }
-            if self.screenshotPreview == nil { self.screenshotPreview = ScreenshotThumbnailPresenter() }
-            return self.screenshotPreview?.present(preview) == true
-        }
-        screenshot.onDismissPreview = { [weak self] in self?.screenshotPreview?.dismiss() }
         screenshot.start(enabled: false)
         engine.setScreenshotHandler { [weak self] kind, source in self?.screenshot.requestCapture(kind, source: source) }
         remoteRegistry.onChange = { [weak self] in

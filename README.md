@@ -1,6 +1,6 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 52）開發版**，包含 Terminal／IDE 完整 Windows 相容規則、截圖浮動縮圖、按需啟動的獨立 OCR 程序，以及規則預覽與遠端校準介面；保留先前 HID／輸入法修復（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與本機原始碼是不同階段。
+Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 53）開發版**，包含 Terminal／IDE 完整 Windows 相容規則、macOS 原生截圖縮圖與編輯分享、按需啟動的獨立 OCR 程序，以及規則預覽與遠端校準介面；保留先前 HID／輸入法修復（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與本機原始碼是不同階段。
 
 ## 一般模式與進階模式已分開
 
@@ -11,7 +11,7 @@ Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、
 | 輸入後端 | 使用者層 EventTap | 可選 EventTap 或裝置 HID／VirtualHID |
 | 鍵盤範圍 | 所有鍵盤；EventTap 無可靠逐裝置 ID | HID 可設定實體鍵盤範圍與偏好 |
 | 基本權限 | 輔助功能與輸入監控 | 相同；HID 另驗證背景元件的讀取授權 |
-| 截圖 | 另需螢幕錄製；完成直接複製 | 相同 |
+| 截圖 | 另需螢幕錄製；原生存檔後自動複製 | 相同 |
 | Root Helper／XPC／Driver | 不建立 HID client、不連線、不自動安裝或提權 | 開啟進階選項、選 HID 並明確安裝後才使用 |
 | 登入時啟動 | 選用，使用者自行開啟 | 選用 |
 
@@ -34,7 +34,7 @@ App使用ad-hoc簽章、尚無Apple公證；更新可能需要重新核准本版
 | Ctrl複製／貼上／復原／全選／儲存、文字導覽、瀏覽器分頁 | 開 |
 | Alt+Tab、Alt+F4 | macOS原生切換／當前窗口關閉，保留未儲存提示 |
 | Finder Ctrl+X→V移動、F2、Delete、確認式ShiftDelete | 開；ShiftDelete由Finder原生確認；焦點無法確認時只貼上不搬移；不需FinderSync，根目錄監控已移除 |
-| Windows截圖與CmdShift3／4 | 開；完成直接寫PNG clipboard，取消／舊session不寫入 |
+| Windows截圖與CmdShift3／4 | 開；系統縮圖可編輯與分享，存檔後複製 PNG；取消／舊 session 不寫入 |
 | MacBook Fn／左Ctrl | 關，明確開關只改本機builtIn鍵盤 |
 | Windows鍵位置 | Command，可選Option |
 | 唯音守護／Carbon切換熱鍵 | 各自關；守護開啟後維持本 App 明確選定的唯音／ABC，預設唯音 |
@@ -49,13 +49,17 @@ App使用ad-hoc簽章、尚無Apple公證；更新可能需要重新核准本版
 
 進階抽屜勾選後才顯示後端、安裝／移除、Driver、裝置偏好與診斷。所有材料封裝在同一App；root模式用root-owned簽章鏡像，不讓root執行用戶可替換的Applications文件。共享官方Karabiner Driver不改簽章名稱、不因切一般或卸載本App的runtime被刪除。支持的Driver版本有checksum／簽章／交易恢復限制，不宣稱任意升級與降級都已驗收。
 
+## 截圖儲存位置
+
+所有圖片截圖遵循 macOS 截圖設定，預設儲存到桌面；按 ⌘⇧5 →「選項」→「儲存至」更改，也可切換「顯示浮動縮圖」。點開系統縮圖可標記、裁切與分享；存檔後才自動複製，因此可能須等縮圖消失或編輯完成。App 不刪除系統儲存的截圖。選擇刪除、僅分享或未在截圖資料夾存檔時，App 不另行複製。文字擷取不保留圖片檔案。
+
 ## 雙機與遠端
 
 Mac mini固定外接鍵盤、MacBook內建鍵盤，只有MacBook開啓Fn交換。兩端都裝同版、先用一般模式；[雙機步驟](Resources/TwoMacAcceptance.md)涵蓋UC兩個方向及來源Terminal／目的TextEdit。CRD incoming host用Google簽章身份辨識，raw Ctrl在Mac目的端翻譯，已是Command通過；遠端Windows viewer保持Windows Ctrl。UC隱藏metadata與不同Remote組合仍需實機驗收，不承諾100%。
 
 ## 資源與驗證
 
-一般模式沒有250ms／1s固定閒置輪詢，只有按鍵、系統通知及明確deadline；一般打字不會為計數喚醒主執行緒，遠端來源結束由kqueue事件通知。HID使用XPC ownership lease和Driver回報，放開所有鍵後不輪詢；尚有held output時保留單次安全檢查。截圖單輪、臨時PNG直接clipboard，TIFF／PDF按預算處理。代碼審查或CI不證明CPU穩定0.0–0.1%、完整App記憶體峰值、硬件交接或Driver恢復已通過。
+一般模式沒有250ms／1s固定閒置輪詢，只有按鍵、系統通知及明確deadline；一般打字不會為計數喚醒主執行緒，遠端來源結束由kqueue事件通知。HID使用XPC ownership lease和Driver回報，放開所有鍵後不輪詢；尚有held output時保留單次安全檢查。圖片截圖由 macOS 管理儲存、縮圖、編輯與分享；新存檔經事件通知及截圖標記驗證後複製，PNG／TIFF／PDF 按預算處理。文字擷取才使用私有暫存 PNG。代碼審查或CI不證明CPU穩定0.0–0.1%、完整App記憶體峰值、硬件交接或Driver恢復已通過。
 
 文字辨識只在明確框選後啟動獨立的短命 OCR 執行檔；主程式不直接連結 Vision，不預熱模型，一般截圖不啟動 OCR。工作結束即退出程序，系統層快取由 macOS 管理。辨識輸入限 2560 邊長／400 萬像素、結果限 64 KiB／1,000 行；工作逾時、取消或政策失效不寫入舊結果。像素快照透過已 unlink 的私有 regular-file descriptor 傳入，不保留命名 OCR 圖檔。行為依 [Apple Vision 文件](https://developer.apple.com/documentation/vision/recognizing-text-in-images) 實作；辨識準確度仍受字體、畫質與縮圖影響。
 

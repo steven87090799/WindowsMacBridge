@@ -35,15 +35,7 @@ import BridgePlatform
             screenshot.isBusy = true; screenshot.recognizingText = true; screenshot.lastResult = "正在本機辨識文字…"
             try render(AnyView(Form { ScreenshotTextCaptureSection(status: screenshot, canCapture: false, featuresEnabled: true) }.formStyle(.grouped)),
                        to: output.appendingPathComponent("screenshot-text-busy.png"), size: NSSize(width: 730, height: 400))
-            let sample = NSImage(size: NSSize(width: 480, height: 280), flipped: false) { rect in
-                NSColor.systemBlue.setFill(); rect.fill()
-                ("WindowsMacBridge\nScreenshot Preview" as NSString).draw(at: NSPoint(x: 24, y: 110),
-                    withAttributes: [.font:NSFont.systemFont(ofSize: 28, weight: .semibold), .foregroundColor:NSColor.white])
-                return true
-            }
-            let thumbnail = ScreenshotThumbnailView(image: sample, target: nil, openAction: nil, closeAction: nil)
-            try renderView(thumbnail, to: output.appendingPathComponent("screenshot-thumbnail.png"))
-            print("Rendered 6 generated feature checks; no controller, capture, clipboard or input services started.")
+            print("Rendered 5 generated feature checks; screenshot thumbnails are owned by macOS. No controller, capture, clipboard or input services started.")
         } catch { print("Feature layout verification failed: \(error)"); exit(1) }
         return true
     }
