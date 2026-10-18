@@ -10,6 +10,7 @@ public struct ScreenshotCaptureLifecycle: Sendable {
     private var sequence: UInt64 = 0
     private var active: Token?
     private var epoch: UInt64 = 0
+    public var hasActiveCapture: Bool { active != nil }
     public init() {}
     public mutating func configure(enabled: Bool, epoch: UInt64 = 0) {
         guard self.enabled != enabled || self.epoch != epoch else { return }

@@ -24,6 +24,7 @@ struct HIDProtocolTests {
         policy.bundleID = "com.apple.Safari"; policy.version = 999; #expect(!policy.valid)
         policy.version = HIDService.protocolVersion; policy.processID = -1; #expect(!policy.valid)
         policy.processID = 42; policy.version = 1; #expect(!policy.valid)
+        policy.version = 7; #expect(!policy.valid) // Previous helper cannot implement conditional Terminal copy.
     }
     @Test func remotePolicyAndGenerationRoundTripWithoutKeyboardPayload() throws {
         var policy = HIDConfiguration()
@@ -40,6 +41,7 @@ struct HIDProtocolTests {
     @Test func onlyFixedActionsAreDecoded() {
         for value in FinderAction.allCases { #expect(HIDActionCodec.decode(HIDActionCodec.encode(.finder(value))) == .finder(value)) }
         for value in SystemAction.allCases { #expect(HIDActionCodec.decode(HIDActionCodec.encode(.system(value))) == .system(value)) }
+        #expect(HIDActionCodec.decode(HIDActionCodec.encode(.terminalCopyOrInterrupt)) == .terminalCopyOrInterrupt)
         #expect(HIDActionCodec.decode("shell.rm") == nil); #expect(HIDActionCodec.decode("keyboard.inject") == nil)
         #expect(HIDActionCodec.decode("finder.unknown") == nil)
     }

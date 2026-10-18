@@ -9,6 +9,74 @@ import BridgePlatform
         return (name, UserDefaults(suiteName: name)!)
     }
 
+    @Test func unsupportedSchemaUpdateCannotReplaceReadablePreferences() {
+        let (name, defaults) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = SettingsStore(defaults: defaults)
+        store.update { $0.finderEnabled = false }
+        let previous = store.settings, data = defaults.data(forKey: "bridge.settings.v1")
+        store.update { $0.schemaVersion = 999 }
+        #expect(store.errorMessage != nil && store.settings == previous)
+        #expect(defaults.data(forKey: "bridge.settings.v1") == data)
+        #expect(SettingsStore(defaults: defaults).settings == previous)
+    }
+
+    @Test func rulePreviewUsesSavedOptionsWithoutEnablingOrChangingSettings() {
+        var settings = BridgeSettings()
+        settings.enabled = false; settings.windowsKeyModifier = .option; settings.winRunEnabled = true
+        settings.finderEnabled = false; settings.screenshotAutoCopy = false
+        let original = settings
+        let context = ApplicationContext(processID: 10, bundleID: "com.apple.TextEdit", mode: .macOS)
+        let preview = settings.shortcutPreview(context: context)
+        let run = ShortcutPreview.evaluate(.init(keyCode: 15, modifiers: .option), configuration: preview)
+        #expect(run.decision == .rewrite(keyCode: 49, modifiers: .command, ruleID: "windows.winR"))
+        #expect(ShortcutPreview.evaluate(.init(keyCode: 1, modifiers: [.option,.shift]), configuration: preview).decision == .passThrough)
+        let disabled = settings.shortcutPreview(context: context, enabled: false)
+        #expect(ShortcutPreview.evaluate(.init(keyCode: 8, modifiers: .control), configuration: disabled).decision == .passThrough)
+        #expect(settings == original && !settings.enabled)
+    }
+
+    @Test func oversizedUpdatePreservesTheLastReadableSettings() throws {
+        let (name, defaults) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = SettingsStore(defaults: defaults)
+        store.update { $0.macBookFnControlSwap = true }
+        let previous = store.settings
+        let saved = try #require(defaults.data(forKey: "bridge.settings.v1"))
+        store.update {
+            $0.overrides = Dictionary(uniqueKeysWithValues: (0..<2000).map {
+                ("com.example.application.\($0).long-bundle-identifier", ApplicationMode.macOS)
+            })
+        }
+        #expect(store.errorMessage != nil)
+        #expect(store.settings == previous)
+        #expect(defaults.data(forKey: "bridge.settings.v1") == saved)
+        #expect(SettingsStore(defaults: defaults).settings == previous)
+        store.update { $0.finderEnabled = false }
+        #expect(store.errorMessage == nil)
+        #expect(!SettingsStore(defaults: defaults).settings.finderEnabled)
+    }
+
+    @Test func encodedSizeBoundaryRoundTripsAndOneExtraByteIsRejected() throws {
+        let (name, defaults) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = SettingsStore(defaults: defaults)
+        var boundary = store.settings
+        boundary.overrides = ["a": .macOS]
+        let baseSize = try JSONEncoder().encode(boundary).count
+        let key = String(repeating: "a", count: 1 + SettingsStore.maximumEncodedBytes - baseSize)
+        boundary.overrides = [key: .macOS]
+        #expect(try JSONEncoder().encode(boundary).count == SettingsStore.maximumEncodedBytes)
+        store.update { $0 = boundary }
+        #expect(store.errorMessage == nil)
+        #expect(SettingsStore(defaults: defaults).settings == boundary)
+        let saved = defaults.data(forKey: "bridge.settings.v1")
+        store.update { $0.overrides = [key + "a": .macOS] }
+        #expect(store.errorMessage != nil)
+        #expect(store.settings == boundary)
+        #expect(defaults.data(forKey: "bridge.settings.v1") == saved)
+    }
+
     @Test func freshInstallWorksForChatWhileSensitiveAppsStayProtected() throws {
         let (name, defaults) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: name) }

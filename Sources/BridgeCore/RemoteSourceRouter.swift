@@ -33,6 +33,9 @@ public struct RemoteSourceRouter: Sendable {
     public mutating func update(_ snapshot: InputRoutingSnapshot, configuration: SourceTranslationConfiguration,
                                 preservingModifiersOnAppChange: Bool = false,
                                 release: (UInt16, Modifiers, Int32) -> Void = { _,_,_ in }) {
+        // Stable key-edge ticks deliver the same immutable values. No stream,
+        // frame or output can change here until either input actually changes.
+        guard self.snapshot != snapshot || self.configuration != configuration else { return }
         var normalized = configuration
         normalized.context = self.configuration.context; normalized.generation = self.configuration.generation
         let continuous = preservingModifiersOnAppChange && normalized == self.configuration &&

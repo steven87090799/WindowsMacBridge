@@ -3,6 +3,22 @@ import Testing
 import BridgeCore
 
 struct ReleasePolicyRegressionTests {
+    @Test func windowsMasterSwitchPausesAllItsFeaturesAndPreservesTheirSettings() {
+        var coordinator = RuntimePolicyCoordinator()
+        var input = RuntimePolicyInput()
+        input.shortcutEnabled = true; input.screenshotEnabled = true
+        input.foreground = .init(processID: 10, bundleID: "test", mode: .macOS)
+        let active = coordinator.transition(input)
+        #expect(active.permitsShortcuts && active.permitsPhysicalNormalization && active.permitsScreenshots)
+        input.shortcutEnabled = false
+        let disabled = coordinator.transition(input)
+        #expect(!disabled.permitsShortcuts && !disabled.permitsPhysicalNormalization && !disabled.permitsScreenshots)
+        #expect(disabled.input.screenshotEnabled)
+        input.shortcutEnabled = true
+        let resumed = coordinator.transition(input)
+        #expect(resumed.permitsShortcuts && resumed.permitsPhysicalNormalization && resumed.permitsScreenshots)
+        #expect(resumed.modifierEpoch != active.modifierEpoch)
+    }
     @Test func generationChangeCancelsCaptureWithoutReleasingSingleFlightEarly() throws {
         var lifecycle = ScreenshotCaptureLifecycle()
         lifecycle.configure(enabled: true, epoch: 1)

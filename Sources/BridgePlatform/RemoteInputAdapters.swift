@@ -136,15 +136,21 @@ public enum RemoteProcessResolver {
 public struct RemoteCalibrationResult: Sendable {
     public let identity: String, processID: Int32, session: UInt64
     public let semantics: RemoteSemantics
+    public let requestID: UInt64
 }
 /// Armed explicitly, records only whether ONE Ctrl+C became Control or Command, never text.
 public final class RemoteCalibrationInbox: @unchecked Sendable {
     private let lock = NSLock()
-    private var armed: (String, Int32, UInt64)?
+    private var armed: (String, Int32, UInt64, UInt64, SourceWorkGate?)?
     private var result: RemoteCalibrationResult?
+    private var sequence: UInt64 = 0
     public init() {}
-    public func arm(identity: String, processID: Int32, session: UInt64) {
-        lock.lock(); armed = (identity, processID, session); result = nil; lock.unlock()
+    @discardableResult public func arm(identity: String, processID: Int32, session: UInt64,
+                                      validity: SourceWorkGate? = nil) -> UInt64 {
+        lock.lock(); defer { lock.unlock() }
+        sequence &+= 1
+        armed = (identity, processID, session, sequence, validity); result = nil
+        return sequence
     }
     public func cancel() { lock.lock(); armed = nil; result = nil; lock.unlock() }
     /// Returns true when this event completed the armed calibration, so the
@@ -153,12 +159,13 @@ public final class RemoteCalibrationInbox: @unchecked Sendable {
     public func observe(processID: Int32, key: UInt16, phase: KeyPhase, flags: Modifiers, repeatKey: Bool) -> Bool {
         guard phase == .down && key == 8 && !repeatKey, lock.try() else { return false }
         defer { lock.unlock() }
-        guard let (identity, pid, session) = armed, pid == processID else { return false }
+        guard let (identity, pid, session, requestID, validity) = armed, pid == processID,
+              validity?.isCurrentWithoutWaiting ?? true else { return false }
         let semantics: RemoteSemantics
         if flags == .control { semantics = .windows }
         else if flags == .command { semantics = .alreadyTranslated }
         else { return false }
-        result = .init(identity: identity, processID: pid, session: session, semantics: semantics)
+        result = .init(identity: identity, processID: pid, session: session, semantics: semantics, requestID: requestID)
         armed = nil
         return true
     }
@@ -172,6 +179,13 @@ public struct RemoteSourceStatus: Equatable, Identifiable, Sendable {
     public let processID: Int32, session: UInt64
     public let transport: RemoteTransport, confidence: InputConfidence, semantics: RemoteSemantics
     public let observedInput: Bool, learned: Bool
+    public init(identity: String, displayName: String, processID: Int32, session: UInt64,
+                transport: RemoteTransport, confidence: InputConfidence, semantics: RemoteSemantics,
+                observedInput: Bool, learned: Bool) {
+        self.identity = identity; self.displayName = displayName; self.processID = processID; self.session = session
+        self.transport = transport; self.confidence = confidence; self.semantics = semantics
+        self.observedInput = observedInput; self.learned = learned
+    }
     public var support: InputSupportLevel {
         confidence == .known ? .detected : (semantics == .automatic ? .unknown : .generic)
     }

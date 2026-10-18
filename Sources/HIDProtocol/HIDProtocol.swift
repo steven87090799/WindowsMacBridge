@@ -4,7 +4,7 @@ import BridgeCore
 public enum HIDService {
     public static let name = "local.WindowsMacBridge.HIDHelper"
     public static let root = "/Library/Application Support/WindowsMacBridge"
-    public static let protocolVersion = 7
+    public static let protocolVersion = 8
 }
 
 /// Only bounded policy/status messages cross IPC. Never a stream of typed characters.
@@ -59,7 +59,7 @@ public struct HIDConfiguration: Codable, Sendable {
             keyboardScope == next.keyboardScope && windowsKeyModifier == next.windowsKeyModifier &&
             macBookFnControlSwap == next.macBookFnControlSwap && restartToken == next.restartToken &&
             winRunEnabled == next.winRunEnabled && winTaskViewEnabled == next.winTaskViewEnabled &&
-            (mode == .macOS || mode == .terminal) == (next.mode == .macOS || next.mode == .terminal) &&
+            mode.allowsTranslation == next.mode.allowsTranslation &&
             HIDCapturePolicy.requiresNativePassThrough(mode: mode, layoutSupported: layoutSupported, transportOnly: true) ==
             HIDCapturePolicy.requiresNativePassThrough(mode: next.mode, layoutSupported: next.layoutSupported, transportOnly: true)
     }
@@ -104,6 +104,7 @@ public struct HIDDeviceStatus: Codable, Equatable, Identifiable, Sendable {
 public enum HIDActionCodec {
     public static func encode(_ action: ShortcutAction) -> String {
         switch action {
+        case .terminalCopyOrInterrupt: "terminal.copyOrInterrupt"
         case .finder(let value): "finder." + value.rawValue
         case .system(let value): "system." + value.rawValue
         case .window(.close): "window.close"
@@ -111,6 +112,7 @@ public enum HIDActionCodec {
         }
     }
     public static func decode(_ id: String) -> ShortcutAction? {
+        if id == "terminal.copyOrInterrupt" { return .terminalCopyOrInterrupt }
         if id.hasPrefix("finder."), let value = FinderAction(rawValue: String(id.dropFirst(7))) { return .finder(value) }
         if id.hasPrefix("system."), let value = SystemAction(rawValue: String(id.dropFirst(7))) { return .system(value) }
         if id == "window.close" { return .window(.close) }

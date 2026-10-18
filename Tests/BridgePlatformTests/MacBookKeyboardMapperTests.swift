@@ -34,6 +34,92 @@ import BridgeCore
 }
 
 @MainActor struct MacBookKeyboardMapperTests {
+    @Test func normalQuitWaitsForKeyReleaseAndVerifiesRestoration() async {
+        let (name, defaults) = defaults()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal")
+        defer { defaults.removePersistentDomain(forName: name); try? FileManager.default.removeItem(at: url) }
+        let backend = KeyboardBackendFixture()
+        let other = NativeKeyMapping(0x700000039, 0x700000029)
+        backend.rows[0].userMapping = [other]
+        let mapper = MacBookKeyboardMapper(backend: backend, defaults: defaults, journalURL: url)
+        mapper.configure(enabled: true)
+        backend.keysNeutral = false
+        var waits = 0
+        let restored = await mapper.restoreForTermination(maximumAttempts: 4) {
+            waits += 1
+            #expect(backend.writes.count == 1)
+            #expect(FileManager.default.fileExists(atPath: url.path))
+            if waits == 2 { backend.keysNeutral = true }
+        }
+        #expect(restored && waits == 2)
+        #expect(backend.writes.count == 2 && backend.rows[0].userMapping == [other])
+        #expect(!mapper.status.restorePending && backend.change == nil)
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+        #expect(defaults.object(forKey: "macbook.fnControl.journal.v1") == nil)
+    }
+
+    @Test func quitTimeoutKeepsTheJournalAndCanBeRetriedAfterRelease() async {
+        let (name, defaults) = defaults()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal")
+        defer { defaults.removePersistentDomain(forName: name); try? FileManager.default.removeItem(at: url) }
+        let backend = KeyboardBackendFixture()
+        let mapper = MacBookKeyboardMapper(backend: backend, defaults: defaults, journalURL: url)
+        mapper.configure(enabled: true)
+        backend.keysNeutral = false
+        var waits = 0
+        let restored = await mapper.restoreForTermination(maximumAttempts: 3) { waits += 1 }
+        #expect(!restored && waits == 2)
+        #expect(mapper.status.restorePending && backend.writes.count == 1)
+        #expect(backend.rows[0].userMapping == MacBookFnControlMapping.swap)
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        backend.keysNeutral = true
+        let retried = await mapper.restoreForTermination(maximumAttempts: 1) { waits += 1 }
+        #expect(retried && waits == 2 && backend.rows[0].userMapping == [])
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test func quitCannotSucceedWithoutReadbackAndRetainsRecovery() async {
+        let (name, defaults) = defaults()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal")
+        defer { defaults.removePersistentDomain(forName: name); try? FileManager.default.removeItem(at: url) }
+        let backend = KeyboardBackendFixture()
+        let mapper = MacBookKeyboardMapper(backend: backend, defaults: defaults, journalURL: url)
+        mapper.configure(enabled: true)
+        backend.lieAboutWrite = true
+        let restored = await mapper.restoreForTermination(maximumAttempts: 2) {}
+        #expect(!restored && mapper.status.restorePending)
+        #expect(backend.rows[0].userMapping == MacBookFnControlMapping.swap)
+        #expect(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test func interruptedQuitWaitDoesNotDiscardPendingRestoration() async {
+        let (name, defaults) = defaults()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal")
+        defer { defaults.removePersistentDomain(forName: name); try? FileManager.default.removeItem(at: url) }
+        let backend = KeyboardBackendFixture()
+        let mapper = MacBookKeyboardMapper(backend: backend, defaults: defaults, journalURL: url)
+        mapper.configure(enabled: true); backend.keysNeutral = false
+        let restored = await mapper.restoreForTermination(maximumAttempts: 3) { throw CancellationError() }
+        #expect(!restored && mapper.status.restorePending && backend.writes.count == 1)
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        // Cancelling quit resumes the user's existing setting.
+        mapper.configure(enabled: true)
+        #expect(mapper.status.activeDevices == 1 && backend.writes.count == 1)
+        backend.keysNeutral = true
+        #expect(await mapper.restoreForTermination(maximumAttempts: 1))
+    }
+
+    @Test func quitWithNoOwnedMappingDoesNotWaitOrReadKeyboardInventory() async {
+        let (name, defaults) = defaults()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal")
+        defer { defaults.removePersistentDomain(forName: name); try? FileManager.default.removeItem(at: url) }
+        let backend = KeyboardBackendFixture(); backend.keysNeutral = false
+        let mapper = MacBookKeyboardMapper(backend: backend, defaults: defaults, journalURL: url)
+        var waits = 0
+        #expect(await mapper.restoreForTermination { waits += 1 })
+        #expect(waits == 0 && backend.inventoryReads == 0 && backend.writes.isEmpty)
+    }
+
     @Test func heldModifierDefersNativeSwapAndRestoreUntilNeutral() {
         let (name, defaults) = defaults()
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal")

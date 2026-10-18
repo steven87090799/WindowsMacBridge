@@ -67,7 +67,7 @@ struct WindowsFeatureTests {
         hold(.control, &disabled)
         #expect(disabled.process(.init(.down, keyCode: 123, modifiers: .control)) == .passThrough)
         var terminal = processor(mode: .terminal)
-        #expect(terminal.process(.init(.down, keyCode: 115)) == .passThrough)
+        #expect(terminal.process(.init(.down, keyCode: 115)) == .rewrite(keyCode: 123, modifiers: .command, ruleID: "text.home"))
     }
     @Test func finderExtrasAndPermanentDeleteGate() {
         for rule in WindowsCompatibilityRules.finderExtras {
@@ -93,7 +93,7 @@ struct WindowsFeatureTests {
                 value.reconcileNeutralHardware()
                 hold(selected.altFlag, &value)
                 let result = value.process(.init(.down, keyCode: 118, modifiers: selected.altFlag))
-                if mode == .macOS { #expect(result == .action(.window(.close), ruleID: "windows.altF4")) }
+                if [.macOS, .terminal, .ide].contains(mode) { #expect(result == .action(.window(.close), ruleID: "windows.altF4")) }
                 else { #expect(result == .passThrough) }
             }
         }
@@ -116,7 +116,7 @@ struct WindowsFeatureTests {
                     (UInt16(48), .rewrite(keyCode: 126, modifiers: .control, ruleID: "windows.winTab"))
                 ] {
                     let result = value.process(.init(.down, keyCode: key, modifiers: selected.flag))
-                    #expect(result == (mode == .macOS ? expected : .passThrough))
+                    #expect(result == ([.macOS, .terminal, .ide].contains(mode) ? expected : .passThrough))
                     _ = value.process(.init(.up, keyCode: key, modifiers: selected.flag))
                 }
             }

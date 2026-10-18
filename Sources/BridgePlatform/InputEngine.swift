@@ -613,7 +613,9 @@ public final class InputEngine: @unchecked Sendable {
             configureProcessor()
             result = nil
         case .action(let action, _):
-            if localDelivery && actions.submit(action, context: configuration.context, source: routed.validity) { result = nil }
+            // Never turn an unconfirmed selection-aware copy into a raw SIGINT
+            // when the bounded mailbox is full. Keep its repeat/up suppressed.
+            if localDelivery && (actions.submit(action, context: configuration.context, source: routed.validity) || action == .terminalCopyOrInterrupt) { result = nil }
             else if physical { processor.rejectAction(keyCode: key) }
             else { remote.rejectAction(keyCode: key, evidence: evidence) }
         case let .rewrite(outputKey, outputModifiers, ruleID):
