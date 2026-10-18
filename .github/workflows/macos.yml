@@ -5,6 +5,10 @@ on:
     branches: [main]
 permissions:
   contents: read
+# Compile the public Liquid Glass API into artifacts; retain macOS 14 runtime
+# support via availability checks. The macOS 15 runner defaults to Xcode 16.4.
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 jobs:
   hid-installer-package:
     runs-on: macos-15
@@ -30,8 +34,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Swift version
-        run: swift --version
+      - name: Swift and SDK versions
+        run: |
+          xcodebuild -version
+          xcrun --show-sdk-version
+          swift --version
       - name: Unit and AppKit tests with isolated memory regression
         env:
           SWIFT_BACKTRACE: enable=yes,interactive=no
@@ -56,6 +63,14 @@ jobs:
         run: python3 -m unittest discover -s Tests/MonitoringTests -v
       - name: Build and verify development app
         run: bash scripts/build-app.sh
+      - name: Render generated feature layouts without input services
+        run: |
+          bridge_app="$(cat build/APP_PATH.txt)"
+          "$bridge_app/Contents/MacOS/WindowsMacBridge" --render-feature-checks "$RUNNER_TEMP/feature-visual-checks"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WindowsMacBridge-generated-feature-layouts
+          path: ${{ runner.temp }}/feature-visual-checks/*.png
       - name: Build GitHub ZIP source without .git
         run: |
           bridge_zip_source="$(mktemp -d)"

@@ -19,7 +19,12 @@ import BridgePlatform
               let image = NSImage(data: value.thumbnailPNG) else { return false }
         preview = value
         let content = ScreenshotThumbnailView(image: image, target: self,
-            openAction: #selector(openPreview), closeAction: #selector(closePreview))
+            openAction: #selector(openPreview), closeAction: #selector(closePreview),
+            onHover: { [weak self] hovering in
+                guard let self else { return }
+                if hovering { self.expiration?.cancel(); self.expiration = nil }
+                else { self.scheduleExpiration() }
+            })
         let window = NSPanel(contentRect: content.bounds, styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.isOpaque = false
@@ -31,7 +36,7 @@ import BridgePlatform
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
         let frame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
-        window.setFrameOrigin(NSPoint(x: frame.maxX - content.bounds.width - 20, y: frame.minY + 20))
+        window.setFrameOrigin(NSPoint(x: max(frame.minX, frame.maxX - content.bounds.width - 24), y: frame.minY + 24))
         panel = window; window.orderFrontRegardless()
         scheduleExpiration()
         return true
@@ -99,25 +104,83 @@ import BridgePlatform
     }
 }
 
-/// A bounded image view; constructed only for a completed capture or an explicit
-/// generated layout check. No full-resolution image data is retained here.
-@MainActor final class ScreenshotThumbnailView: NSVisualEffectView {
-    init(image: NSImage, target: AnyObject?, openAction: Selector?, closeAction: Selector?) {
-        super.init(frame: NSRect(x: 0, y: 0, width: 220, height: 160))
-        material = .hudWindow; blendingMode = .withinWindow; state = .active
-        wantsLayer = true; layer?.cornerRadius = 12; layer?.masksToBounds = true
+/// A larger, bounded card. The image stays small; the full original remains on
+/// disk only for explicitly opening Quick Look. No input or clipboard services.
+@MainActor final class ScreenshotThumbnailView: NSView {
+    private let onHover: (Bool) -> Void
+    private var hoverArea: NSTrackingArea?
+
+    init(image: NSImage, target: AnyObject?, openAction: Selector?, closeAction: Selector?,
+         onHover: @escaping (Bool) -> Void = { _ in }) {
+        self.onHover = onHover
+        super.init(frame: NSRect(x: 0, y: 0, width: 320, height: 248))
+        let content = NSView(frame: bounds)
+        content.autoresizingMask = [.width, .height]
+        // The screenshot UI is ours. Only the material uses the public system
+        // glass API; this never invokes screencapture's delayed -u mode.
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView(frame: bounds)
+            glass.style = .regular; glass.cornerRadius = 22
+            glass.autoresizingMask = [.width, .height]
+            glass.contentView = content
+            addSubview(glass)
+        } else {
+            addFrostedBackground(content)
+        }
+        #else
+        addFrostedBackground(content)
+        #endif
+
         let imageButton = NSButton(image: image, target: target, action: openAction)
         imageButton.isBordered = false; imageButton.imageScaling = .scaleProportionallyUpOrDown
-        imageButton.frame = NSRect(x: 12, y: 34, width: 196, height: 114)
+        imageButton.frame = NSRect(x: 12, y: 64, width: 296, height: 172)
+        imageButton.wantsLayer = true
+        imageButton.layer?.cornerRadius = 12; imageButton.layer?.masksToBounds = true
+        imageButton.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.08).cgColor
         imageButton.setAccessibilityLabel("開啟截圖快速查看")
-        imageButton.toolTip = "開啟快速查看"; addSubview(imageButton)
-        let label = NSTextField(labelWithString: "截圖已複製")
-        label.font = .systemFont(ofSize: 12); label.frame = NSRect(x: 14, y: 10, width: 160, height: 17)
-        addSubview(label)
-        let close = NSButton(image: NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "關閉截圖縮圖") ?? NSImage(),
+        imageButton.toolTip = "點擊放大查看截圖"; content.addSubview(imageButton)
+
+        let symbol = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil) ?? NSImage()
+        let success = NSImageView(image: symbol)
+        success.frame = NSRect(x: 16, y: 23, width: 22, height: 22)
+        success.contentTintColor = .systemGreen; success.setAccessibilityElement(false)
+        content.addSubview(success)
+        let title = NSTextField(labelWithString: "截圖已複製")
+        title.font = .systemFont(ofSize: 13, weight: .semibold)
+        title.textColor = .labelColor; title.frame = NSRect(x: 46, y: 32, width: 218, height: 18)
+        content.addSubview(title)
+        let hint = NSTextField(labelWithString: "可直接貼上 · 點圖放大")
+        hint.font = .systemFont(ofSize: 11); hint.textColor = .secondaryLabelColor
+        hint.frame = NSRect(x: 46, y: 15, width: 218, height: 16)
+        content.addSubview(hint)
+        let close = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: "關閉截圖縮圖") ?? NSImage(),
             target: target, action: closeAction)
-        close.isBordered = false; close.frame = NSRect(x: 184, y: 7, width: 24, height: 24)
-        close.setAccessibilityLabel("關閉截圖縮圖"); addSubview(close)
+        close.isBordered = false; close.contentTintColor = .secondaryLabelColor
+        close.frame = NSRect(x: 276, y: 20, width: 28, height: 28)
+        close.setAccessibilityLabel("關閉截圖縮圖"); close.toolTip = "關閉預覽，圖片仍在剪貼簿"
+        content.addSubview(close)
     }
+
+    private func addFrostedBackground(_ content: NSView) {
+        let effect = NSVisualEffectView(frame: bounds)
+        effect.material = .popover; effect.blendingMode = .behindWindow; effect.state = .active
+        effect.autoresizingMask = [.width, .height]
+        effect.wantsLayer = true; effect.layer?.cornerRadius = 22; effect.layer?.masksToBounds = true
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
+            effect.state = .inactive
+            effect.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        }
+        addSubview(effect); effect.addSubview(content)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+        addTrackingArea(area); hoverArea = area
+    }
+    override func mouseEntered(with event: NSEvent) { onHover(true) }
+    override func mouseExited(with event: NSEvent) { onHover(false) }
     required init?(coder: NSCoder) { nil }
 }

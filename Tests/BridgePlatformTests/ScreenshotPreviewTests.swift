@@ -56,6 +56,7 @@ private struct PreviewTextRecognizer: ScreenshotTextRecognizing {
         let url = try #require(driver.url); defer { try? FileManager.default.removeItem(at: url) }
         try png().write(to: url); driver.completion?(0,nil)
         try await wait(manager)
+        for _ in 0..<500 where previews.isEmpty { try await Task.sleep(for: .milliseconds(2)) }
         let preview = try #require(previews.first)
         #expect(previews.count == 1 && preview.ownsSourceFile && preview.sourceURL == url)
         #expect(preview.thumbnailPNG.count <= ScreenshotPreviewPreparation.maximumPNGBytes)
@@ -70,6 +71,7 @@ private struct PreviewTextRecognizer: ScreenshotTextRecognizing {
         _ = configure(manager); manager.onPreviewReady = { _ in false }
         manager.requestCapture(.region); let url = try #require(driver.url)
         try png().write(to: url); driver.completion?(0,nil); try await wait(manager)
+        for _ in 0..<500 where FileManager.default.fileExists(atPath: url.path) { try await Task.sleep(for: .milliseconds(2)) }
         #expect(!FileManager.default.fileExists(atPath: url.path))
         #expect(board.data(forType: .init("public.png")) != nil)
     }
@@ -121,7 +123,7 @@ private struct PreviewTextRecognizer: ScreenshotTextRecognizing {
         let thumbnail = try #require(ScreenshotPreviewPreparation.thumbnail(png: bytes))
         let source = try #require(CGImageSourceCreateWithData(thumbnail as CFData,nil))
         let image = try #require(CGImageSourceCreateImageAtIndex(source,0,nil))
-        #expect(image.width <= 480 && image.height <= 480 && thumbnail.count <= 1024 * 1024)
+        #expect(image.width <= ScreenshotPreviewPreparation.maximumDimension && image.height <= ScreenshotPreviewPreparation.maximumDimension && thumbnail.count <= 1024 * 1024)
         #expect(ScreenshotPreviewPreparation.thumbnail(png: Data("invalid".utf8)) == nil)
     }
 }

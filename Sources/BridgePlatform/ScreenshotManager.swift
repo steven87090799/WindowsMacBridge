@@ -19,7 +19,7 @@ public struct ScreenshotImagePayload: Sendable {
 }
 
 private enum ScreenshotProcessedOutput: Sendable {
-    case image(ScreenshotImagePayload, thumbnail: Data?), text(String)
+    case image(ScreenshotImagePayload), text(String)
 }
 
 /// ImageIO writes incrementally. Refuse a chunk before it can grow the encoded
@@ -215,6 +215,9 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private var awaitingNeutral = false
     private var jobTimer: DispatchSourceTimer?
     private var processing: Task<Result<ScreenshotProcessedOutput, ScreenshotFailure>, Never>?
+    private var previewPreparation: Task<Data?, Never>?
+    private var previewGeneration: UInt64 = 0
+    private let prepareThumbnail: @Sendable (Data) -> Data?
     private var textJobToken: ScreenshotCaptureLifecycle.Token?
     private let textRecognizer: any ScreenshotTextRecognizing
     private let prepareImage: @Sendable (URL) -> Result<ScreenshotImagePayload, ScreenshotFailure>
@@ -229,7 +232,8 @@ public struct ScreenshotStatus: Equatable, Sendable {
                 authorization: (@MainActor () -> Bool)? = nil,
                 prepareImage: @escaping @Sendable (URL) -> Result<ScreenshotImagePayload, ScreenshotFailure> = ScreenshotImagePreparation.prepareResult,
                 captureTimeout: TimeInterval = 120, captureDirectory: URL? = nil,
-                textRecognizer: any ScreenshotTextRecognizing = IsolatedScreenshotTextRecognizer()) {
+                textRecognizer: any ScreenshotTextRecognizing = IsolatedScreenshotTextRecognizer(),
+                prepareThumbnail: @escaping @Sendable (Data) -> Data? = ScreenshotPreviewPreparation.thumbnail) {
         // Initialize the shared marker outside the native event callback.
         _ = EventRewriter.generatedEventMarker
         self.defaults = defaults
@@ -239,6 +243,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         self.validatesNativeContext = authorization == nil
         self.captureDirectoryOverride = captureDirectory
         self.prepareImage = prepareImage
+        self.prepareThumbnail = prepareThumbnail
         self.textRecognizer = textRecognizer
         self.captureTimeout = captureTimeout.isFinite && captureTimeout > 0 ? min(120, captureTimeout) : 120
         self.authorization = authorization ?? { !IsSecureEventInputEnabled() && CGPreflightScreenCaptureAccess() }
@@ -266,7 +271,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
             verifyAndRepair(reason: "功能啟用")
 
         } else {
-            onDismissPreview?()
+            dismissPreview()
             if nativeSelectionOutstanding { nativeSelectionCancelled = true }
             pendingNativeURL = nil
             activeJob?.cancel(.policyCancelled)
@@ -286,7 +291,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         let nativeContinuity = sameScreenshotKeys && policy.permitsScreenshots &&
             runtimePolicy.map { $0.permitsScreenshots && policy.preservesModifiers(from: $0) } == true
         let preserveNativeJob = nativeContinuity && nativeFileJob
-        if !nativeContinuity { onDismissPreview?() }
+        if !nativeContinuity { dismissPreview() }
         if let previous = runtimePolicy {
             var normalized = policy.input
             normalized.foreground = previous.input.foreground
@@ -319,7 +324,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     public func applyInputRouting(_ routing: InputRoutingSnapshot) {
         inputRouting = routing
         if sourceJob?.validForAsyncWork == false {
-            onDismissPreview?()
+            dismissPreview()
             activeJob?.cancel(.policyCancelled); processing?.cancel(); capture.invalidate()
             sourceJob = nil
         }
@@ -356,7 +361,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     public func stop() {
-        onDismissPreview?()
+        dismissPreview()
         pendingNativeURL = nil
         destroyTap()
         destroyNativeTap()
@@ -656,13 +661,19 @@ public struct ScreenshotStatus: Equatable, Sendable {
         }
     }
 
+    private func dismissPreview() {
+        previewGeneration &+= 1
+        previewPreparation?.cancel(); previewPreparation = nil
+        onDismissPreview?()
+    }
+
     private func beginCapture(_ token: ScreenshotCaptureLifecycle.Token, kind: ScreenshotKind) {
         guard sourceJob?.validForAsyncWork ?? true, capture.isCurrent(token) else {
             if textJobToken == token { textJobToken = nil }
             _ = capture.complete(token); updateWorkStatus(); return
         }
         if textJobToken != token { textJobToken = nil }
-        onDismissPreview?()
+        dismissPreview()
         jobKind = kind
         // An explicit screenshot is the only general-mode action that may request
         // screen recording. Never request it during startup or a status check.
@@ -715,7 +726,8 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     private func finishCapture(exitCode: Int32, failure: ScreenshotFailure?, url: URL, token: ScreenshotCaptureLifecycle.Token) async {
-        let temporary = isTemporary(url)
+        // Location alone never grants ownership of a system-created file.
+        let temporary = !nativeFileJob && isTemporary(url)
         var previewOwnsTemporary = false
         defer {
             if temporary && !previewOwnsTemporary { try? fileManager.removeItem(at: url) }
@@ -746,6 +758,8 @@ public struct ScreenshotStatus: Equatable, Sendable {
         let recognizesText = textJobToken == token
         // OS-owned native files already have the system's own floating thumbnail.
         let preparesPreview = onPreviewReady != nil && !nativeFileJob && !recognizesText
+        let generation = previewGeneration
+        let previewSource = sourceJob
         let recognizer = textRecognizer
         let work = Task.detached(priority: .userInitiated) {
             guard !Task.isCancelled else { return Result<ScreenshotProcessedOutput, ScreenshotFailure>.failure(.policyCancelled) }
@@ -758,7 +772,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
                     let text = await recognizer.recognize(png: image.png)
                     return Task.isCancelled ? .failure(.policyCancelled) : text.map { .text($0) }
                 }
-                return .success(.image(image, thumbnail: preparesPreview ? ScreenshotPreviewPreparation.thumbnail(png: image.png) : nil))
+                return .success(.image(image))
             }
         }
         processing = work
@@ -794,7 +808,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
             } else { setStatus(issue: "文字無法寫入剪貼簿。", result: "writeFailed") }
             return // Never log recognized text or retain it in status/preferences.
         }
-        guard case .image(let image, let thumbnail) = output else { return }
+        guard case .image(let image) = output else { return }
         let result = ScreenshotClipboard.write(image, to: clipboard)
         switch result {
         case .unreadableImage:
@@ -807,13 +821,22 @@ public struct ScreenshotStatus: Equatable, Sendable {
             return
         case .success: break
         }
-        if let thumbnail {
+        setStatus(issue: nil, result: "截圖已複製，可直接貼上")
+        // Copy is committed before optional UI work. A slow thumbnail cannot
+        // delay pasting, and a newer capture/policy change invalidates this UI.
+        log(temporary ? "截圖已複製（\(jobKind)）" : "截圖已儲存並複製（\(jobKind)）")
+        if preparesPreview {
+            let prepare = prepareThumbnail
+            let work = Task.detached(priority: .utility) { prepare(image.png) }
+            previewPreparation = work
+            let thumbnail = await work.value
+            guard previewGeneration == generation else { return }
+            previewPreparation = nil
+            guard !work.isCancelled, enabled, captureAllowed,
+                  previewSource?.validForAsyncWork ?? true, let thumbnail else { return }
             let accepted = onPreviewReady?(.init(thumbnailPNG: thumbnail, sourceURL: url, ownsSourceFile: temporary)) == true
             previewOwnsTemporary = accepted && temporary
         }
-        setStatus(issue: nil, result: "截圖已複製，可直接貼上")
-        // Paths contain the account name; log only the outcome and kind.
-        log(temporary ? "截圖已複製（\(jobKind)）" : "截圖已儲存並複製（\(jobKind)）")
     }
 
     private func isAuthorized() -> Bool {
@@ -843,13 +866,13 @@ public struct ScreenshotStatus: Equatable, Sendable {
     func noteNativeScreenshotShortcut() {
         nativeSelectionOutstanding = true; nativeSelectionCancelled = false
     }
-    func acceptNativeScreenshot(_ url: URL) {
+    func acceptNativeScreenshot(_ url: URL, source: SourceWorkToken? = nil) {
         guard !nativeSelectionCancelled else { nativeSelectionOutstanding = false; return }
         nativeSelectionOutstanding = false
-        guard enabled, captureAllowed else { return }
+        guard enabled, captureAllowed, source?.validForAsyncWork ?? true else { return }
         guard let token = capture.begin() else { pendingNativeURL = url; return }
         textJobToken = nil
-        sourceJob = nil; nativeFileJob = true; jobKind = .fullScreen
+        sourceJob = source; nativeFileJob = true; jobKind = .fullScreen
         scheduleCaptureTimeout(token)
         setStatus(issue: nil, result: "正在複製 macOS 截圖")
         Task { [weak self] in

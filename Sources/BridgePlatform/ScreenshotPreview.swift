@@ -15,7 +15,7 @@ public struct ScreenshotPreview: Sendable {
 }
 
 public enum ScreenshotPreviewPreparation {
-    public static let maximumDimension = 480
+    public static let maximumDimension = 720
     public static let maximumPNGBytes = 1024 * 1024
     public static func thumbnail(png: Data) -> Data? {
         autoreleasepool {

@@ -24,9 +24,11 @@ TextEdit、Safari 各測 Ctrl+A/C/X/V/Z/Y/F/S/P、Ctrl+Tab、Ctrl+Shift+Tab、Ct
 
 ## 4. 截圖與記憶體
 
-Windows 截圖鍵與 CmdShift3／4 成功複製後都應在螢幕右下角顯示縮圖，不搶焦點，約五秒後消失；點擊用系統快速查看。新截圖取代舊縮圖；取消、失敗、OCR 與失效工作不顯示圖片縮圖。原生截圖已顯示系統縮圖時不重複加一個。暫停或關閉截圖功能時關閉自己的縮圖與查看程序，清理自己的暫存檔。
+Win+Shift+S／PrintScreen 框選、Alt+PrintScreen 當前窗口、Win+PrintScreen 全屏存檔，完成選區後直接 Ctrl+V／Cmd+V，不應等待系統縮圖消失或貼上上一份內容。CmdShift3 全屏、CmdShift4 選區也走自製預覽與複製；暫停或關閉後恢復系統原生行為。以可丟棄文字設置測試剪貼簿，再截產生的測試圖片確認貼上是新圖，記錄擷取完成到可貼上的時間。
 
-Win+Shift+S／PrintScreen框選、Alt+PrintScreen當前窗口、Win+PrintScreen全屏存檔，完成後直接 Ctrl+V／Cmd+V。CmdShift3全屏、CmdShift4選區也複製；暫停或關閉功能後恢復系統原生行為。Esc取消保持原clipboard。框選尚未結束→Pause／換backend／鎖屏／切App／關功能再開，舊結果不得寫入。核准／撤銷 ScreenCapture 後結果不得顯示偽成功；磁碟／程序／解碼／編碼失敗各有錯誤。
+複製成功後右下角應有 320×248 自製預覽，標示「截圖已複製」、貼上提示與關閉按鈕，圖片完整依比例顯示。檢查寬／高／小圖、亮／暗模式與多螢幕邊緣；macOS 26+ 且 SDK 支援時採 Liquid Glass，舊版毛玻璃，減少透明度／高對比下文字與操作仍清楚。預設 5 秒消失，移入時保留，移出重新計時。點圖用系統快速查看放大；連續截圖最多一個預覽及一個快速查看程序。這些快捷鍵不應另顯示 macOS 浮動縮圖。
+
+一般框選／視窗／CmdShift3、4 的暫存 PNG 在預覽或快速查看結束後刪除；Win+PrintScreen 在桌面保留 PNG，關預覽不能刪除。⌘⇧5 的原生截圖及其檔案不由自製預覽管理。Esc 取消保持原 clipboard；框選中→Pause／換 backend／鎖屏／關功能再開，舊結果不得寫入，縮圖準備中暫停／新截圖後不得冒出舊預覽。核准／撤銷 ScreenCapture 不得偽成功；磁碟／程序／解碼／編碼失敗各有錯誤。
 
 展開控制中心／選單列面板（包含螢幕共享面板），保持面板開啟，分別按 Win+Shift+S／PrintScreen；應可框選並貼上面板內容。全螢幕截圖也應可用，Alt+PrintScreen 仍只接受前景 App 的視窗。跨 Mac Universal Control 測試時，來源 Mac 不得因為沒有本機事件接收程序而啟動截圖。
 

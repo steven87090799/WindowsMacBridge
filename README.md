@@ -1,6 +1,6 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 52）開發版**，包含 Terminal／IDE 完整 Windows 相容規則、截圖浮動縮圖、按需啟動的獨立 OCR 程序，以及規則預覽與遠端校準介面；保留先前 HID／輸入法修復（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與本機原始碼是不同階段。
+Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 54）開發版**，包含 Terminal／IDE 完整 Windows 相容規則、放大的自製玻璃截圖預覽、按需啟動的獨立 OCR 程序，以及規則預覽與遠端校準介面；保留先前 HID／輸入法修復（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與本機原始碼是不同階段。
 
 ## 一般模式與進階模式已分開
 
@@ -48,6 +48,12 @@ App使用ad-hoc簽章、尚無Apple公證；更新可能需要重新核准本版
 一般模式EventTap使用全部鍵盤，沒有可靠逐裝置ID。舊HID選擇不自動解鎖新進階模式，已有App規則、鍵位與明確功能選擇保留。Settings schema 6，損壞設置安全停用。
 
 進階抽屜勾選後才顯示後端、安裝／移除、Driver、裝置偏好與診斷。所有材料封裝在同一App；root模式用root-owned簽章鏡像，不讓root執行用戶可替換的Applications文件。共享官方Karabiner Driver不改簽章名稱、不因切一般或卸載本App的runtime被刪除。支持的Driver版本有checksum／簽章／交易恢復限制，不宣稱任意升級與降級都已驗收。
+
+## 截圖與儲存位置
+
+Win+Shift+S／PrintScreen、Alt+PrintScreen 及攔截的 ⌘⇧3／4 使用 App 私有暫存 PNG；擷取成功先複製，再顯示自製「截圖已複製」預覽，不等待 macOS 浮動縮圖存檔。預覽消失或點開的快速查看關閉後清除自己的暫存原圖。只有 Win+PrintScreen 明確保存全螢幕圖片到桌面，檔案不隨預覽關閉刪除。文字擷取完成後清除圖片。
+
+預覽由 220×160 放大為 320×248，採圓角圖片區與主副文字；macOS 26+ 且建置 SDK 支援時使用 Apple Liquid Glass，較舊版本使用毛玻璃。一般顯示 5 秒，滑鼠移入會保留，移出重新計時；點圖開啟系統快速查看。需要原生標記／分享工具時可用 ⌘⇧5；停用本 App 截圖功能後 ⌘⇧3／4 也恢復系統行為，該路徑才遵循系統截圖儲存位置。
 
 ## 雙機與遠端
 
