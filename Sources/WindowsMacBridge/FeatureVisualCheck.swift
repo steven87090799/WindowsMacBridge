@@ -35,10 +35,34 @@ import BridgePlatform
             screenshot.isBusy = true; screenshot.recognizingText = true; screenshot.lastResult = "正在本機辨識文字…"
             try render(AnyView(Form { ScreenshotTextCaptureSection(status: screenshot, canCapture: false, featuresEnabled: true) }.formStyle(.grouped)),
                        to: output.appendingPathComponent("screenshot-text-busy.png"), size: NSSize(width: 730, height: 400))
-            print("Rendered 5 generated feature checks; screenshot thumbnails are owned by macOS. No controller, capture, clipboard or input services started.")
+            for dark in [false, true] {
+                let sample = generatedScreenshot(size: NSSize(width: 720, height: 420))
+                let thumbnail = ScreenshotThumbnailView(image: sample, target: nil, openAction: nil, closeAction: nil)
+                thumbnail.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                try renderView(thumbnail, to: output.appendingPathComponent(dark ? "screenshot-thumbnail-dark.png" : "screenshot-thumbnail-light.png"))
+            }
+            let portrait = ScreenshotThumbnailView(image: generatedScreenshot(size: NSSize(width: 360, height: 720)),
+                target: nil, openAction: nil, closeAction: nil)
+            try renderView(portrait, to: output.appendingPathComponent("screenshot-thumbnail-portrait.png"))
+            print("Rendered 8 generated feature checks; no controller, capture, clipboard or input services started.")
         } catch { print("Feature layout verification failed: \(error)"); exit(1) }
         return true
     }
+    private static func generatedScreenshot(size: NSSize) -> NSImage {
+        NSImage(size: size, flipped: false) { rect in
+            NSGradient(starting: NSColor(srgbRed: 0.13, green: 0.24, blue: 0.58, alpha: 1),
+                       ending: NSColor(srgbRed: 0.35, green: 0.65, blue: 0.76, alpha: 1))?.draw(in: rect, angle: 35)
+            let inset = rect.insetBy(dx: 28, dy: 28)
+            NSColor.white.withAlphaComponent(0.14).setFill()
+            NSBezierPath(roundedRect: inset, xRadius: 20, yRadius: 20).fill()
+            ("WindowsMacBridge" as NSString).draw(at: NSPoint(x: 48, y: rect.midY + 12),
+                withAttributes: [.font: NSFont.systemFont(ofSize: size.width < 500 ? 22 : 34, weight: .semibold), .foregroundColor: NSColor.white])
+            ("Screenshot preview" as NSString).draw(at: NSPoint(x: 48, y: rect.midY - 24),
+                withAttributes: [.font: NSFont.systemFont(ofSize: 20), .foregroundColor: NSColor.white.withAlphaComponent(0.8)])
+            return true
+        }
+    }
+
     private static func render(_ content: AnyView, to url: URL, size: NSSize) throws {
         let host = NSHostingView(rootView: content)
         host.frame = NSRect(origin: .zero, size: size)

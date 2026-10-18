@@ -13,38 +13,25 @@ public protocol ScreenshotCaptureJob: AnyObject, Sendable {
                 completion: @escaping @Sendable (Int32, ScreenshotFailure?) -> Void) throws -> any ScreenshotCaptureJob
 }
 
-/// System presentation owns its destination, floating thumbnail and editor.
-/// A successful process exit does not imply that the user has saved a file.
-@MainActor protocol SystemScreenshotCaptureDriving: ScreenshotCaptureDriving {
-    func launchSystemUI(kind: ScreenshotKind, processID: Int32,
-                        completion: @escaping @Sendable (Int32, ScreenshotFailure?) -> Void) throws -> any ScreenshotCaptureJob
-}
-
-@MainActor final class NativeScreenshotCaptureDriver: SystemScreenshotCaptureDriving {
+@MainActor final class NativeScreenshotCaptureDriver: ScreenshotCaptureDriving {
     func launch(to url: URL, kind: ScreenshotKind, processID: Int32,
                 completion: @escaping @Sendable (Int32, ScreenshotFailure?) -> Void) throws -> any ScreenshotCaptureJob {
         try launch(destination: url, kind: kind, processID: processID, completion: completion)
     }
 
-    func launchSystemUI(kind: ScreenshotKind, processID: Int32,
-                        completion: @escaping @Sendable (Int32, ScreenshotFailure?) -> Void) throws -> any ScreenshotCaptureJob {
-        try launch(destination: nil, kind: kind, processID: processID, completion: completion)
-    }
-
-    /// `-u` delegates storage and post-capture presentation to macOS. It ignores
-    /// command-line file paths; only private OCR captures request a PNG path.
-    nonisolated static func arguments(kind: ScreenshotKind, destination: URL?, windowID: NSNumber? = nil) throws -> [String] {
-        var args = destination == nil ? ["-u", "-p"] : ["-x", "-t", "png"]
-        if kind == .region { args += destination == nil ? ["-i"] : ["-i", "-s"] }
+    /// A private PNG completes without waiting for macOS floating-thumbnail storage.
+    nonisolated static func arguments(kind: ScreenshotKind, destination: URL, windowID: NSNumber? = nil) throws -> [String] {
+        var args = ["-x", "-t", "png"]
+        if kind == .region { args += ["-i", "-s"] }
         if kind == .activeWindow {
             guard let windowID else { throw ScreenshotFailure.processFailure }
             args += ["-l", windowID.stringValue]
         }
-        if let destination { args.append(destination.path) }
+        args.append(destination.path)
         return args
     }
 
-    private func launch(destination: URL?, kind: ScreenshotKind, processID: Int32,
+    private func launch(destination: URL, kind: ScreenshotKind, processID: Int32,
                         completion: @escaping @Sendable (Int32, ScreenshotFailure?) -> Void) throws -> any ScreenshotCaptureJob {
         let job = NativeScreenshotJob(prepareArguments: {
             guard !IsSecureEventInputEnabled(), CGPreflightScreenCaptureAccess() else { throw ScreenshotFailure.permissionDenied }

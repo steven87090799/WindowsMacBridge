@@ -166,6 +166,9 @@ public struct ScreenshotStatus: Equatable, Sendable {
 @MainActor public final class ScreenshotManager {
     public var onChange: ((ScreenshotStatus) -> Void)?
     public var onPeriodicCheck: (() -> Void)?
+    /// Returning true transfers ownership of a temporary capture to the presenter.
+    public var onPreviewReady: ((ScreenshotPreview) -> Bool)?
+    public var onDismissPreview: (() -> Void)?
     public private(set) var status = ScreenshotStatus()
     public var logPath: String { logURL.path }
 
@@ -212,6 +215,9 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private var awaitingNeutral = false
     private var jobTimer: DispatchSourceTimer?
     private var processing: Task<Result<ScreenshotProcessedOutput, ScreenshotFailure>, Never>?
+    private var previewPreparation: Task<Data?, Never>?
+    private var previewGeneration: UInt64 = 0
+    private let prepareThumbnail: @Sendable (Data) -> Data?
     private var textJobToken: ScreenshotCaptureLifecycle.Token?
     private let textRecognizer: any ScreenshotTextRecognizing
     private let prepareImage: @Sendable (URL) -> Result<ScreenshotImagePayload, ScreenshotFailure>
@@ -220,17 +226,14 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private var nativeFileJob = false
     private var nativeSelectionOutstanding = false
     private var nativeSelectionCancelled = false
-    private let nativeObserver = NativeScreenshotObserver()
-    private var nativeObservationGeneration: UInt64 = 0
-    private var systemUIJobToken: ScreenshotCaptureLifecycle.Token?
-    private var pendingSystemURL: URL?
 
     public init(defaults: UserDefaults = .standard, fileManager: FileManager = .default,
                 driver: (any ScreenshotCaptureDriving)? = nil, clipboard: NSPasteboard = .general,
                 authorization: (@MainActor () -> Bool)? = nil,
                 prepareImage: @escaping @Sendable (URL) -> Result<ScreenshotImagePayload, ScreenshotFailure> = ScreenshotImagePreparation.prepareResult,
                 captureTimeout: TimeInterval = 120, captureDirectory: URL? = nil,
-                textRecognizer: any ScreenshotTextRecognizing = IsolatedScreenshotTextRecognizer()) {
+                textRecognizer: any ScreenshotTextRecognizing = IsolatedScreenshotTextRecognizer(),
+                prepareThumbnail: @escaping @Sendable (Data) -> Data? = ScreenshotPreviewPreparation.thumbnail) {
         // Initialize the shared marker outside the native event callback.
         _ = EventRewriter.generatedEventMarker
         self.defaults = defaults
@@ -240,6 +243,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         self.validatesNativeContext = authorization == nil
         self.captureDirectoryOverride = captureDirectory
         self.prepareImage = prepareImage
+        self.prepareThumbnail = prepareThumbnail
         self.textRecognizer = textRecognizer
         self.captureTimeout = captureTimeout.isFinite && captureTimeout > 0 ? min(120, captureTimeout) : 120
         self.authorization = authorization ?? { !IsSecureEventInputEnabled() && CGPreflightScreenCaptureAccess() }
@@ -267,7 +271,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
             verifyAndRepair(reason: "功能啟用")
 
         } else {
-            stopNativeObservation()
+            dismissPreview()
             if nativeSelectionOutstanding { nativeSelectionCancelled = true }
             pendingNativeURL = nil
             activeJob?.cancel(.policyCancelled)
@@ -287,7 +291,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         let nativeContinuity = sameScreenshotKeys && policy.permitsScreenshots &&
             runtimePolicy.map { $0.permitsScreenshots && policy.preservesModifiers(from: $0) } == true
         let preserveNativeJob = nativeContinuity && nativeFileJob
-        if !nativeContinuity { stopNativeObservation() }
+        if !nativeContinuity { dismissPreview() }
         if let previous = runtimePolicy {
             var normalized = policy.input
             normalized.foreground = previous.input.foreground
@@ -320,7 +324,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     public func applyInputRouting(_ routing: InputRoutingSnapshot) {
         inputRouting = routing
         if sourceJob?.validForAsyncWork == false {
-            stopNativeObservation()
+            dismissPreview()
             activeJob?.cancel(.policyCancelled); processing?.cancel(); capture.invalidate()
             sourceJob = nil
         }
@@ -330,8 +334,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         physicalPreferences = Array(preferences.prefix(16))
         // No physical device ID exists at this stage. Conservatively cancel local work;
         // a classified remote job has its own validity token and remains independent.
-        if sourceJob == nil && (activeJob != nil || processing != nil || nativeSelectionOutstanding) {
-            stopNativeObservation()
+        if sourceJob == nil && (activeJob != nil || processing != nil) {
             activeJob?.cancel(.policyCancelled); processing?.cancel(); capture.invalidate()
         }
     }
@@ -350,8 +353,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         beginCapture(token, kind: .region)
     }
     public func cancelCapture() {
-        guard capture.hasActiveCapture || nativeSelectionOutstanding else { return }
-        stopNativeObservation()
+        guard capture.hasActiveCapture else { return }
         capture.invalidate(); pendingNativeURL = nil
         activeJob?.cancel(.userCancelled); processing?.cancel()
         jobTimer?.cancel(); jobTimer = nil
@@ -359,7 +361,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     public func stop() {
-        stopNativeObservation()
+        dismissPreview()
         pendingNativeURL = nil
         destroyTap()
         destroyNativeTap()
@@ -659,13 +661,19 @@ public struct ScreenshotStatus: Equatable, Sendable {
         }
     }
 
+    private func dismissPreview() {
+        previewGeneration &+= 1
+        previewPreparation?.cancel(); previewPreparation = nil
+        onDismissPreview?()
+    }
+
     private func beginCapture(_ token: ScreenshotCaptureLifecycle.Token, kind: ScreenshotKind) {
         guard sourceJob?.validForAsyncWork ?? true, capture.isCurrent(token) else {
             if textJobToken == token { textJobToken = nil }
             _ = capture.complete(token); updateWorkStatus(); return
         }
         if textJobToken != token { textJobToken = nil }
-        stopNativeObservation()
+        dismissPreview()
         jobKind = kind
         // An explicit screenshot is the only general-mode action that may request
         // screen recording. Never request it during startup or a status check.
@@ -675,10 +683,6 @@ public struct ScreenshotStatus: Equatable, Sendable {
         guard isAuthorized() else {
             if textJobToken == token { textJobToken = nil }
             if capture.complete(token) { setStatus(issue: "螢幕錄製權限不可用。", result: "permissionDenied") }
-            return
-        }
-        if textJobToken != token, let systemDriver = driver as? any SystemScreenshotCaptureDriving {
-            beginSystemCapture(token, kind: kind, driver: systemDriver)
             return
         }
         let destination = captureURL()
@@ -706,76 +710,6 @@ public struct ScreenshotStatus: Equatable, Sendable {
         }
     }
 
-    private func stopNativeObservation() {
-        nativeObservationGeneration &+= 1
-        nativeObserver.stop()
-        pendingSystemURL = nil
-        if nativeSelectionOutstanding { nativeSelectionCancelled = true }
-    }
-
-    private func beginSystemCapture(_ token: ScreenshotCaptureLifecycle.Token, kind: ScreenshotKind,
-                                    driver: any SystemScreenshotCaptureDriving) {
-        // macOS ignores output paths in -u mode. Observe only new, OS-marked
-        // saves in the user's configured folder, after an explicit capture.
-        noteNativeScreenshotShortcut()
-        nativeFileJob = true
-        let generation = nativeObservationGeneration
-        let source = sourceJob
-        nativeObserver.onScreenshot = { [weak self] url in
-            guard let self, self.nativeObservationGeneration == generation,
-                  !self.nativeSelectionCancelled, self.enabled, self.captureAllowed,
-                  source?.validForAsyncWork ?? true else { return }
-            self.nativeObserver.stop()
-            self.nativeObservationGeneration &+= 1
-            if self.systemUIJobToken == token {
-                self.pendingSystemURL = url
-            } else {
-                self.acceptNativeScreenshot(url, source: source)
-            }
-        }
-        let observesFiles = nativeObserver.start(directory: nativeScreenshotDirectory())
-        systemUIJobToken = token
-        activeJobToken = token
-        scheduleCaptureTimeout(token)
-        setStatus(issue: nil, result: "正在使用 macOS 原生截圖")
-        do {
-            activeJob = try driver.launchSystemUI(kind: kind,
-                processID: runtimePolicy?.input.foreground.processID ?? 0) { [weak self] code, failure in
-                Task { @MainActor [weak self] in
-                    self?.finishSystemCapture(token, exitCode: code, failure: failure, observesFiles: observesFiles)
-                }
-            }
-        } catch {
-            finishSystemCapture(token, exitCode: 1, failure: (error as? ScreenshotFailure) ?? .processFailure,
-                                observesFiles: observesFiles)
-        }
-    }
-
-    private func finishSystemCapture(_ token: ScreenshotCaptureLifecycle.Token, exitCode: Int32,
-                                     failure: ScreenshotFailure?, observesFiles: Bool) {
-        guard systemUIJobToken == token else { return }
-        systemUIJobToken = nil
-        if activeJobToken == token { activeJobToken = nil; activeJob = nil }
-        jobTimer?.cancel(); jobTimer = nil
-        // Release the slot even if the system editor is still open, or the user
-        // shares/deletes instead of saving. No missing-private-file failure.
-        let current = capture.complete(token)
-        guard current, sourceJob?.validForAsyncWork ?? true, !nativeSelectionCancelled else {
-            stopNativeObservation(); updateWorkStatus(); return
-        }
-        if let failure = failure ?? (exitCode == 0 ? nil : .processFailure) {
-            stopNativeObservation()
-            setStatus(issue: failure == .userCancelled ? nil : "截圖失敗：\(failure.rawValue)", result: failure.rawValue)
-            return
-        }
-        setStatus(issue: observesFiles ? nil : "原生截圖可使用，但無法觀察儲存位置以自動複製。",
-                  result: observesFiles ? "已交由 macOS；存檔後自動複製" : "已交由 macOS；自動複製不可用")
-        if let url = pendingSystemURL {
-            pendingSystemURL = nil
-            acceptNativeScreenshot(url, source: sourceJob)
-        }
-    }
-
     private func scheduleCaptureTimeout(_ token: ScreenshotCaptureLifecycle.Token) {
         jobTimer?.cancel()
         let timer = DispatchSource.makeTimerSource(queue: .main)
@@ -784,7 +718,6 @@ public struct ScreenshotStatus: Equatable, Sendable {
             MainActor.assumeIsolated {
                 guard let self, self.capture.isCurrent(token) else { return }
                 self.capture.invalidate()
-                self.stopNativeObservation()
                 self.processing?.cancel(); self.activeJob?.cancel(.timedOut)
                 self.setStatus(issue: "截圖工作逾時。", result: "timedOut")
             }
@@ -793,11 +726,11 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     private func finishCapture(exitCode: Int32, failure: ScreenshotFailure?, url: URL, token: ScreenshotCaptureLifecycle.Token) async {
-        // A system-owned save may itself be in /tmp. Its location never grants
-        // us ownership; only our direct, private file jobs may delete output.
+        // Location alone never grants ownership of a system-created file.
         let temporary = !nativeFileJob && isTemporary(url)
+        var previewOwnsTemporary = false
         defer {
-            if temporary { try? fileManager.removeItem(at: url) }
+            if temporary && !previewOwnsTemporary { try? fileManager.removeItem(at: url) }
             if activeDestination == url { activeDestination = nil }
             if textJobToken == token { textJobToken = nil }
             updateWorkStatus()
@@ -823,6 +756,10 @@ public struct ScreenshotStatus: Equatable, Sendable {
         }
         let prepare = prepareImage
         let recognizesText = textJobToken == token
+        // OS-owned native files already have the system's own floating thumbnail.
+        let preparesPreview = onPreviewReady != nil && !nativeFileJob && !recognizesText
+        let generation = previewGeneration
+        let previewSource = sourceJob
         let recognizer = textRecognizer
         let work = Task.detached(priority: .userInitiated) {
             guard !Task.isCancelled else { return Result<ScreenshotProcessedOutput, ScreenshotFailure>.failure(.policyCancelled) }
@@ -885,8 +822,21 @@ public struct ScreenshotStatus: Equatable, Sendable {
         case .success: break
         }
         setStatus(issue: nil, result: "截圖已複製，可直接貼上")
-        // Paths contain the account name; log only the outcome and kind.
+        // Copy is committed before optional UI work. A slow thumbnail cannot
+        // delay pasting, and a newer capture/policy change invalidates this UI.
         log(temporary ? "截圖已複製（\(jobKind)）" : "截圖已儲存並複製（\(jobKind)）")
+        if preparesPreview {
+            let prepare = prepareThumbnail
+            let work = Task.detached(priority: .utility) { prepare(image.png) }
+            previewPreparation = work
+            let thumbnail = await work.value
+            guard previewGeneration == generation else { return }
+            previewPreparation = nil
+            guard !work.isCancelled, enabled, captureAllowed,
+                  previewSource?.validForAsyncWork ?? true, let thumbnail else { return }
+            let accepted = onPreviewReady?(.init(thumbnailPNG: thumbnail, sourceURL: url, ownsSourceFile: temporary)) == true
+            previewOwnsTemporary = accepted && temporary
+        }
     }
 
     private func isAuthorized() -> Bool {

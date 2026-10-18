@@ -1,3 +1,5 @@
+> 歷史紀錄：build 53 的原生縮圖造成存檔前複製延遲。使用者重新選擇自製預覽，build 54 現行行為見 [CustomScreenshotPreview-2026-10-18](CustomScreenshotPreview-2026-10-18.md)。
+
 # Build 53：使用 macOS 原生截圖介面
 
 Windows 截圖鍵及原本被攔截的 ⌘⇧3／4 改用 `screencapture -u -p`。`-u` 啟用系統完成介面，`-p` 使用系統截圖設定。右下角縮圖、標記、裁切、分享與刪除由系統處理；移除自訂縮圖面板、縮圖 PNG 產生與 `qlmanage` 程序。這些參數依本機 `man screencapture` 的公開介面實作，沒有使用私有 API。

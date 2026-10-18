@@ -24,9 +24,11 @@ TextEdit、Safari 各測 Ctrl+A/C/X/V/Z/Y/F/S/P、Ctrl+Tab、Ctrl+Shift+Tab、Ct
 
 ## 4. 截圖與記憶體
 
-Windows 截圖鍵與 CmdShift3／4 應顯示 macOS 原生浮動縮圖（系統「顯示浮動縮圖」須啟用）；點擊後可標記、裁切、分享或刪除。沒有「截圖已複製」自訂面板或 qlmanage 查看程序。驗證系統截圖位置（預設桌面及自訂資料夾）、存檔格式、縮圖開關均遵循系統設定；圖片在存檔後才自動複製，編輯後按完成應複製編輯結果，且已儲存的檔案不會被 App 刪除。刪除、僅分享或不在截圖資料夾存檔時不應由 App 清除或覆蓋剪貼簿。
+Win+Shift+S／PrintScreen 框選、Alt+PrintScreen 當前窗口、Win+PrintScreen 全屏存檔，完成選區後直接 Ctrl+V／Cmd+V，不應等待系統縮圖消失或貼上上一份內容。CmdShift3 全屏、CmdShift4 選區也走自製預覽與複製；暫停或關閉後恢復系統原生行為。以可丟棄文字設置測試剪貼簿，再截產生的測試圖片確認貼上是新圖，記錄擷取完成到可貼上的時間。
 
-Win+Shift+S／PrintScreen 框選、Alt+PrintScreen 當前窗口、Win+PrintScreen 全屏存檔，系統存檔後 Ctrl+V／Cmd+V。CmdShift3 全屏、CmdShift4 選區也複製；暫停或關閉功能後恢復系統原生行為。Esc 取消保持原 clipboard。框選或編輯尚未結束→Pause／換 backend／鎖屏／關功能再開，舊結果不得寫入；普通切換 App 到貼上目標應保留原生存檔的複製。核准／撤銷 ScreenCapture 後結果不得顯示偽成功；磁碟／程序／解碼／編碼失敗各有錯誤。
+複製成功後右下角應有 320×248 自製預覽，標示「截圖已複製」、貼上提示與關閉按鈕，圖片完整依比例顯示。檢查寬／高／小圖、亮／暗模式與多螢幕邊緣；macOS 26+ 且 SDK 支援時採 Liquid Glass，舊版毛玻璃，減少透明度／高對比下文字與操作仍清楚。預設 5 秒消失，移入時保留，移出重新計時。點圖用系統快速查看放大；連續截圖最多一個預覽及一個快速查看程序。這些快捷鍵不應另顯示 macOS 浮動縮圖。
+
+一般框選／視窗／CmdShift3、4 的暫存 PNG 在預覽或快速查看結束後刪除；Win+PrintScreen 在桌面保留 PNG，關預覽不能刪除。⌘⇧5 的原生截圖及其檔案不由自製預覽管理。Esc 取消保持原 clipboard；框選中→Pause／換 backend／鎖屏／關功能再開，舊結果不得寫入，縮圖準備中暫停／新截圖後不得冒出舊預覽。核准／撤銷 ScreenCapture 不得偽成功；磁碟／程序／解碼／編碼失敗各有錯誤。
 
 展開控制中心／選單列面板（包含螢幕共享面板），保持面板開啟，分別按 Win+Shift+S／PrintScreen；應可框選並貼上面板內容。全螢幕截圖也應可用，Alt+PrintScreen 仍只接受前景 App 的視窗。跨 Mac Universal Control 測試時，來源 Mac 不得因為沒有本機事件接收程序而啟動截圖。
 
@@ -52,7 +54,7 @@ ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再�
 
 一般模式、關閉診斷、設置窗口關閉，開機等待兩分鐘，Activity Monitor觀察5分鐘，目標平均0.0–0.1%，不能只看一張瞬間截圖。主App沒有固定250ms／1s閒置timer；按鍵、App/session通知和明確deadline會產生正常短暫活動。記錄同PID累計CPU增量、RSS與physical footprint；PID/version改變重新建baseline。自己的HID root process應無client後結束，共享Karabiner進程可能因其他軟件繼續運行。
 
-分別從Git clone和無.git ZIP做Release arm64 build，核對Info版本／commit、資源allowlist、簽章與DMG App→Applications拖入；登入開關只改本App。停止／移除進階runtime保留共享Driver。沒有自制 MRU 或窗口遍歷切換器；AltTab 只使用 macOS native path。截圖縮圖由系統建立；App 沒有自己的縮圖視窗或固定輪詢。
+分別從Git clone和無.git ZIP做Release arm64 build，核對Info版本／commit、資源allowlist、簽章與DMG App→Applications拖入；登入開關只改本App。停止／移除進階runtime保留共享Driver。沒有自制 MRU 或窗口遍歷切換器；AltTab 只使用 macOS native path。截圖縮圖只在成功截圖後短暫建立，未使用時沒有視窗與固定輪詢。
 
 ## 9. 規則預覽、遠端校準與文字擷取
 
