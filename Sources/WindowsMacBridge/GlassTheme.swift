@@ -2,7 +2,9 @@ import AppKit
 import SwiftUI
 
 extension View {
-    func bridgeNavigationGlass() -> some View { modifier(BridgeNavigationMaterial()) }
+    // Only the selected control needs live glass. A native opaque sidebar
+    // color avoids stacked glass and a second large backdrop rendering pass.
+    func bridgeNavigationSurface() -> some View { background(Color(nsColor: .windowBackgroundColor)) }
     @ViewBuilder func bridgeGlassButton() -> some View {
         #if compiler(>=6.2)
         if #available(macOS 26.0, *) { buttonStyle(.glass) }
@@ -11,27 +13,6 @@ extension View {
         buttonStyle(.bordered)
         #endif
     }
-}
-
-private struct BridgeNavigationMaterial: ViewModifier {
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorSchemeContrast) private var contrast
-    @ViewBuilder func body(content: Content) -> some View {
-        if reduceTransparency || contrast == .increased {
-            content.background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 16))
-        } else {
-            // Keep labels and semantic status colors outside the effect's
-            // content layer; the AppKit view supplies only the native backdrop.
-            content.background(BridgeNavigationBackdrop())
-        }
-    }
-}
-
-private struct BridgeNavigationBackdrop: NSViewRepresentable {
-    func makeNSView(context: Context) -> BridgeGlassPanelView {
-        BridgeGlassPanelView(frame: .zero, content: NSView(), cornerRadius: 16)
-    }
-    func updateNSView(_ view: BridgeGlassPanelView, context: Context) {}
 }
 
 /// AppKit counterpart for the nonactivating screenshot panel. Accessibility

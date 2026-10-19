@@ -1,7 +1,5 @@
 import SwiftUI
 
-private typealias NavigationState<Value> = SwiftUI.State<Value>
-
 extension SettingsPage {
     var symbol: String {
         switch self {
@@ -30,7 +28,7 @@ extension SettingsPage {
     }
 }
 
-/// Native split-view navigation, grouped forms and a standard macOS toolbar.
+/// A fixed settings sidebar and grouped forms in a standard macOS window.
 /// Injected content keeps visual checks independent of live input services.
 struct GlassSettingsChrome<Content: View>: View {
     @Binding var selection: SettingsPage
@@ -40,36 +38,10 @@ struct GlassSettingsChrome<Content: View>: View {
     let version: String
     var onHelp: () -> Void = {}
     @ViewBuilder var content: () -> Content
-    @NavigationState private var columnVisibility = NavigationSplitViewVisibility.all
-    @FocusState private var sidebarFocused: Bool
-    @Environment(\.controlActiveState) private var controlActiveState
-
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            List(selection: Binding<SettingsPage?>(get: { selection }, set: { if let page = $0 { selection = page } })) {
-                Section("設定") {
-                    ForEach(SettingsPage.allCases.filter { advanced || $0 != .diagnostics }, id: \.self) { page in
-                        HStack(spacing: 10) {
-                            Image(systemName: page.symbol).renderingMode(.template)
-                                .foregroundStyle(selection == page && controlActiveState == .key ?
-                                    Color(nsColor: .selectedControlTextColor) : Color.primary)
-                                .frame(width: 20)
-                                .accessibilityHidden(true)
-                            Text(page.rawValue)
-                        }
-                        .tag(page)
-                        .help(page.detail)
-                        .padding(.vertical, 4)
-                        .accessibilityElement(children: .combine)
-                    }
-                }
-            }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
-            .focusable()
-            .focused($sidebarFocused)
-            .navigationSplitViewColumnWidth(min: 184, ideal: 214, max: 260)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                SettingsNavigation(selection: $selection, advanced: advanced)
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 7) {
                         Circle().fill(isOperating ? Color.green : Color.secondary).frame(width: 7, height: 7)
@@ -78,13 +50,19 @@ struct GlassSettingsChrome<Content: View>: View {
                         Spacer()
                         Text(version).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                     }
-                    Text(status).font(.caption2).foregroundStyle(.secondary).lineLimit(3)
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(status).font(.caption2).foregroundStyle(.secondary).lineLimit(3)
+                        Spacer(minLength: 0)
+                        Button(action: onHelp) { Label("使用說明", systemImage: "questionmark.circle").labelStyle(.iconOnly) }
+                            .buttonStyle(.plain).focusEffectDisabled().help("開啟使用說明")
+                    }
                 }
                 .padding(16)
             }
-            .bridgeNavigationGlass()
-            .padding(.horizontal, 8).padding(.bottom, 8)
-        } detail: {
+            .frame(width: 218)
+            .frame(maxHeight: .infinity)
+            .bridgeNavigationSurface()
+            Divider()
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(selection.rawValue).font(.title2.weight(.semibold))
@@ -96,42 +74,10 @@ struct GlassSettingsChrome<Content: View>: View {
                 content()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .frame(minWidth: 500)
+            .frame(minWidth: 500, maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .windowBackgroundColor))
         }
-        .navigationSplitViewStyle(.balanced)
-        .navigationTitle("WindowsMacBridge")
-        // Hosting an NSWindow does not consistently install the automatic
-        // sidebar item. Keep one standard toolbar control with no glass bubble.
-        .toolbar(removing: .sidebarToggle)
-        .defaultFocus($sidebarFocused, true)
-        .toolbar {
-            sidebarToggle
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: onHelp) { Label("使用說明", systemImage: "questionmark.circle") }
-                    .help("開啟使用說明")
-            }
-        }
+        .clipped()
         .frame(minWidth: 730, minHeight: 600)
-    }
-
-    @ToolbarContentBuilder private var sidebarToggle: some ToolbarContent {
-        #if compiler(>=6.2)
-        if #available(macOS 26.0, *) {
-            ToolbarItem(placement: .navigation) { sidebarButton }
-                .sharedBackgroundVisibility(.hidden)
-        } else { ToolbarItem(placement: .navigation) { sidebarButton } }
-        #else
-        ToolbarItem(placement: .navigation) { sidebarButton }
-        #endif
-    }
-
-    private var sidebarButton: some View {
-        Button {
-            columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
-        } label: { Label("顯示或隱藏側邊欄", systemImage: "sidebar.left") }
-            .buttonStyle(.borderless)
-            .help("顯示或隱藏側邊欄")
-            .keyboardShortcut("s", modifiers: [.command, .control])
     }
 }
