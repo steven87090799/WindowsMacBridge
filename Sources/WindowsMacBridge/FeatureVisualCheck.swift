@@ -13,6 +13,11 @@ import BridgePlatform
             let output = URL(fileURLWithPath: arguments[1], isDirectory: true)
             try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
             NSApplication.shared.setActivationPolicy(.prohibited)
+            for page in SettingsPage.allCases {
+                guard NSImage(systemSymbolName: page.symbol, accessibilityDescription: nil) != nil else {
+                    throw CocoaError(.fileReadCorruptFile)
+                }
+            }
             let applications = [ApplicationContext(processID: 1, bundleID: "com.apple.Terminal", displayName: "Terminal", mode: .terminal),
                 .init(processID: 2, bundleID: "com.apple.finder", displayName: "Finder", mode: .macOS),
                 .init(processID: 3, bundleID: "test.remote", displayName: "遠端 Windows", mode: .remoteWindows)]
@@ -44,7 +49,39 @@ import BridgePlatform
             let portrait = ScreenshotThumbnailView(image: generatedScreenshot(size: NSSize(width: 360, height: 720)),
                 target: nil, openAction: nil, closeAction: nil)
             try renderView(portrait, to: output.appendingPathComponent("screenshot-thumbnail-portrait.png"))
-            print("Rendered 8 generated feature checks; no controller, capture, clipboard or input services started.")
+            for dark in [false, true] {
+                let mode = dark ? "dark" : "light"
+                let rules = GlassSettingsChrome(selection: .constant(.preview), advanced: true,
+                    isOperating: true, status: "Windows 快捷鍵已啟用", version: "0.6.0 (55)") {
+                    ShortcutPreviewView(settings: BridgeSettings(), applications: applications)
+                }
+                try render(AnyView(rules), to: output.appendingPathComponent("glass-settings-\(mode).png"),
+                           size: NSSize(width: 1040, height: 780), dark: dark)
+                let remote = GlassSettingsChrome(selection: .constant(.remoteCalibration), advanced: false,
+                    isOperating: false, status: "請確認鍵盤權限", version: "0.6.0 (55)") {
+                    RemoteCalibrationView(sources: [source], status: calibration, canCalibrate: true, preferenceNotice: nil)
+                }
+                try render(AnyView(remote), to: output.appendingPathComponent("glass-calibration-\(mode).png"),
+                           size: NSSize(width: 1040, height: 780), dark: dark)
+            }
+            let compact = GlassSettingsChrome(selection: .constant(.preview), advanced: false,
+                isOperating: true, status: "Windows 快捷鍵已啟用", version: "0.6.0 (55)") {
+                ShortcutPreviewView(settings: BridgeSettings(), applications: applications)
+            }
+            try render(AnyView(compact), to: output.appendingPathComponent("glass-settings-minimum.png"),
+                       size: NSSize(width: 730, height: 600))
+            try render(AnyView(compact), to: output.appendingPathComponent("glass-settings-high-contrast.png"),
+                       size: NSSize(width: 1040, height: 780), highContrast: true)
+            for dark in [false, true] {
+                let textCapture = GlassSettingsChrome(selection: .constant(.general), advanced: false,
+                    isOperating: true, status: "Windows 快捷鍵已啟用", version: "0.6.0 (55)") {
+                    Form { ScreenshotTextCaptureSection(status: screenshot, canCapture: false, featuresEnabled: true) }
+                        .formStyle(.grouped).scrollContentBackground(.hidden)
+                }
+                try render(AnyView(textCapture), to: output.appendingPathComponent(dark ? "glass-text-dark.png" : "glass-text-light.png"),
+                           size: NSSize(width: 1040, height: 780), dark: dark)
+            }
+            print("Rendered 16 generated feature checks; no controller, capture, clipboard or input services started.")
         } catch { print("Feature layout verification failed: \(error)"); exit(1) }
         return true
     }
@@ -63,10 +100,24 @@ import BridgePlatform
         }
     }
 
-    private static func render(_ content: AnyView, to url: URL, size: NSSize) throws {
-        let host = NSHostingView(rootView: content)
-        host.frame = NSRect(origin: .zero, size: size)
-        try renderView(host, to: url)
+    private static func render(_ content: AnyView, to url: URL, size: NSSize, dark: Bool = false, highContrast: Bool = false) throws {
+        let appearance = NSAppearance(named: highContrast ? .accessibilityHighContrastAqua : (dark ? .darkAqua : .aqua))!
+        var renderedWindow: NSWindow?
+        // Native symbol images can be cached when a hidden host is first created.
+        // Supply the same drawing appearance during creation and rasterization.
+        appearance.performAsCurrentDrawingAppearance {
+            let window = SettingsWindowFactory.make(content: content.environment(\.colorScheme, dark ? .dark : .light))
+            window.appearance = appearance
+            renderedWindow = window
+        }
+        guard let window = renderedWindow else { throw CocoaError(.fileWriteUnknown) }
+        window.setContentSize(size)
+        for _ in 0..<10 { RunLoop.current.run(until: Date().addingTimeInterval(0.02)) }
+        guard let host = window.contentView?.superview else { throw CocoaError(.fileWriteUnknown) }
+        host.layoutSubtreeIfNeeded()
+        try writePNG(host, to: url)
+        print("Native layout: \(url.lastPathComponent), toolbar=\(window.toolbar != nil)")
+        window.contentViewController = nil; window.close()
     }
     private static func renderView(_ host: NSView, to url: URL) throws {
         let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -74,10 +125,15 @@ import BridgePlatform
         window.contentView = host
         for _ in 0..<10 { RunLoop.current.run(until: Date().addingTimeInterval(0.02)) }
         host.layoutSubtreeIfNeeded()
+        try writePNG(host, to: url)
+        window.contentView = nil; window.close()
+    }
+    private static func writePNG(_ host: NSView, to url: URL) throws {
         guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { throw CocoaError(.fileWriteUnknown) }
-        host.cacheDisplay(in: host.bounds, to: bitmap)
+        host.effectiveAppearance.performAsCurrentDrawingAppearance {
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+        }
         guard let png = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
         try png.write(to: url, options: .withoutOverwriting)
-        window.contentView = nil; window.close()
     }
 }

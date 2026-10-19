@@ -12,7 +12,8 @@ struct ScreenshotTextCaptureSection: View {
             Text("框選畫面中的文字，使用 Apple Vision 在本機辨識繁體中文及英文，再複製文字。只在按下按鈕時執行，完成後釋放辨識程序。")
                 .font(.callout).foregroundStyle(.secondary)
             HStack {
-                Button("框選擷取文字…", action: onCapture).disabled(!canCapture)
+                Button(action: onCapture) { Label("框選擷取文字…", systemImage: "text.viewfinder") }
+                    .bridgeGlassButton().disabled(!canCapture)
                 if status.isBusy { Button("取消截圖／辨識", action: onCancel) }
             }
             Text(status.lastResult).font(.caption).foregroundStyle(.secondary)
