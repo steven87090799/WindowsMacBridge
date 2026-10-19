@@ -1,6 +1,6 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 54）開發版**，包含 Terminal／IDE 完整 Windows 相容規則、放大的自製玻璃截圖預覽、按需啟動的獨立 OCR 程序，以及規則預覽與遠端校準介面；保留先前 HID／輸入法修復（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與本機原始碼是不同階段。
+Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 55）開發版**，採用原生 macOS 側邊欄、工具列及系統玻璃外觀；包含 Terminal／IDE 完整 Windows 相容規則、放大的自製玻璃截圖預覽、按需啟動的獨立 OCR 程序，以及規則預覽與遠端校準介面；保留先前 HID／輸入法修復（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與本機原始碼是不同階段。
 
 ## 一般模式與進階模式已分開
 
@@ -64,6 +64,8 @@ Mac mini固定外接鍵盤、MacBook內建鍵盤，只有MacBook開啓Fn交換�
 一般模式沒有250ms／1s固定閒置輪詢，只有按鍵、系統通知及明確deadline；一般打字不會為計數喚醒主執行緒，遠端來源結束由kqueue事件通知。HID使用XPC ownership lease和Driver回報，放開所有鍵後不輪詢；尚有held output時保留單次安全檢查。截圖單輪、臨時PNG直接clipboard，TIFF／PDF按預算處理。代碼審查或CI不證明CPU穩定0.0–0.1%、完整App記憶體峰值、硬件交接或Driver恢復已通過。
 
 文字辨識只在明確框選後啟動獨立的短命 OCR 執行檔；主程式不直接連結 Vision，不預熱模型，一般截圖不啟動 OCR。工作結束即退出程序，系統層快取由 macOS 管理。辨識輸入限 2560 邊長／400 萬像素、結果限 64 KiB／1,000 行；工作逾時、取消或政策失效不寫入舊結果。像素快照透過已 unlink 的私有 regular-file descriptor 傳入，不保留命名 OCR 圖檔。行為依 [Apple Vision 文件](https://developer.apple.com/documentation/vision/recognizing-text-in-images) 實作；辨識準確度仍受字體、畫質與縮圖影響。
+
+[2026-10-19 資源研究](Docs/BackgroundResources-2026-10-19.md) 分開記錄已安裝 build 54 的背景量測與 build 55 的合成 UI 生命週期檢查，附可重現數據。液態玻璃可見時的 GPU 成本仍待實機 profiling；無 GUI 自檢不能當成完整 App 的記憶體數字。
 
 - [操作說明](Resources/UserGuide.md)
 - [人工驗收八類功能](Resources/AcceptanceGuide.md)

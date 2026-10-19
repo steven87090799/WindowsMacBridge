@@ -118,16 +118,17 @@ import InputSourceCore
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, window === settingsWindow else { return }
         // A hidden NSHostingView still observes @Published values and performs layout.
-        window.contentView = nil
+        SettingsWindowFactory.releaseContent(of: window)
         window.delegate = nil
         settingsWindow = nil
     }
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        let enabled = action("Windows 模式總開關", #selector(toggleEnabled), in: menu)
+        let enabled = action("Windows 模式總開關", #selector(toggleEnabled), in: menu, symbol: "keyboard")
         enabled.state = controller.settings.enabled ? .on : .off
-        action("恢復／重啟引擎", #selector(resume), in: menu)
+        action("恢復／重啟引擎", #selector(resume), in: menu, symbol: "arrow.clockwise")
         let pause = NSMenuItem(title: "暫停所有輸入輔助", action: nil, keyEquivalent: "")
+        pause.image = NSImage(systemSymbolName: "pause.circle", accessibilityDescription: nil)
         let submenu = NSMenu()
         for minutes in [5, 15, 60] {
             let entry = action("\(minutes) 分鐘", #selector(pauseTimed(_:)), in: submenu)
@@ -136,7 +137,7 @@ import InputSourceCore
         action("直到 App 重啟", #selector(pauseUntilRestart), in: submenu)
         pause.submenu = submenu; menu.addItem(pause)
         menu.addItem(.separator())
-        let textCapture = action("截圖文字擷取…", #selector(captureScreenshotText), in: menu)
+        let textCapture = action("截圖文字擷取…", #selector(captureScreenshotText), in: menu, symbol: "text.viewfinder")
         textCapture.isEnabled = controller.canCaptureScreenshotText
         if controller.screenshotStatus.isBusy { action("取消截圖／文字辨識", #selector(cancelScreenshot), in: menu) }
         label("輸入法：\(controller.sourceStatus.summary)", in: menu)
@@ -157,15 +158,16 @@ import InputSourceCore
         chinese.isEnabled = controller.sourceStatus.suspension == nil
         english.isEnabled = controller.sourceStatus.suspension == nil
         menu.addItem(.separator())
-        action("設定／Profiles／診斷…", #selector(showSettings), in: menu)
-        action("結束 WindowsMacBridge", #selector(quit), in: menu)
+        action("設定…", #selector(showSettings), in: menu, symbol: "slider.horizontal.3")
+        action("結束 WindowsMacBridge", #selector(quit), in: menu, symbol: "power")
     }
     private func label(_ title: String, in menu: NSMenu) {
         let entry = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         entry.isEnabled = false; menu.addItem(entry)
     }
-    @discardableResult private func action(_ title: String, _ selector: Selector, in menu: NSMenu) -> NSMenuItem {
+    @discardableResult private func action(_ title: String, _ selector: Selector, in menu: NSMenu, symbol: String? = nil) -> NSMenuItem {
         let entry = NSMenuItem(title: title, action: selector, keyEquivalent: "")
+        if let symbol { entry.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
         entry.target = self; menu.addItem(entry); return entry
     }
     @objc private func toggleGuard() { controller.inputSources.setEnabled(!controller.sourceStatus.enabled) }
@@ -187,13 +189,7 @@ import InputSourceCore
         controller.refreshPermissions()
         controller.settingsPage = .permissions
         if settingsWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 840, height: 740),
-                                  styleMask: [.titled, .closable, .miniaturizable, .resizable],
-                                  backing: .buffered, defer: false)
-            window.title = "WindowsMacBridge"
-            window.contentMinSize = NSSize(width: 730, height: 600)
-            window.contentView = NSHostingView(rootView: SettingsView(controller: controller))
-            window.isReleasedWhenClosed = false
+            let window = SettingsWindowFactory.make(content: SettingsView(controller: controller))
             window.delegate = self
             window.center(); settingsWindow = window
         }
@@ -210,6 +206,7 @@ import InputSourceCore
         if CommandLine.arguments.dropFirst().first == ScreenshotTextBudget.workerArgument { exit(64) }
         if FeatureResourceCheck.handle(Array(CommandLine.arguments.dropFirst())) { return }
         if FeatureVisualCheck.handle(Array(CommandLine.arguments.dropFirst())) { return }
+        if FeatureUIResourceCheck.handle(Array(CommandLine.arguments.dropFirst())) { return }
         if CommandLine.arguments.contains("--self-check") {
             do {
                 let registry = try ApplicationRegistry()

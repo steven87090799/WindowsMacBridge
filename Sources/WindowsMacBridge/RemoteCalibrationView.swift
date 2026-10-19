@@ -90,6 +90,7 @@ struct RemoteCalibrationView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .onAppear(perform: onDiscover)
         .onDisappear { if status.isActive { onCancel() } }
     }

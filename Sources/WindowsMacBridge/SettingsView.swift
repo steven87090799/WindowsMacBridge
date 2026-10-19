@@ -18,16 +18,12 @@ struct SettingsView: View {
     @ObservedObject var controller: BridgeController
 
     var body: some View {
-        // NSTabView's pane path emits CoreUI bundle-lookup faults on macOS 27,
-        // including text-only tab items. Keep one page mounted under a native picker.
-        VStack(spacing: 16) {
-            Picker("設定分類", selection: Binding(get: { controller.settingsPage }, set: { page in
-                // Native picker callbacks can arrive during a SwiftUI update on macOS 27.
-                // Publish the page replacement after that update finishes.
-                DispatchQueue.main.async { controller.settingsPage = page }
-            })) {
-                ForEach(SettingsPage.allCases.filter { controller.settings.isAdvancedModeEnabled || $0 != .diagnostics }, id: \.self) { Text($0.rawValue).tag($0) }
-            }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 560)
+        GlassSettingsChrome(selection: Binding(get: { controller.settingsPage }, set: { page in
+            // Publish after native selection callbacks finish their SwiftUI update.
+            DispatchQueue.main.async { controller.settingsPage = page }
+        }), advanced: controller.settings.isAdvancedModeEnabled,
+            isOperating: controller.isOperating, status: controller.summary,
+            version: AppBuildInfo.current.versionLabel, onHelp: controller.openUserGuide) {
             Group {
                 switch controller.settingsPage {
                 case .permissions: permissionList
@@ -40,8 +36,6 @@ struct SettingsView: View {
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .padding(18)
-        .frame(minWidth: 730, minHeight: 600)
     }
 
     private func explanation(_ text: String) -> some View {
@@ -53,13 +47,13 @@ struct SettingsView: View {
         let keyboardNeeded = controller.settings.enabled || controller.settings.screenshotAutoCopy || controller.settings.macBookFnControlSwap
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("權限設定").font(.title2.bold())
+                Text("授權項目").font(.headline)
                 Spacer()
                     Button("重新檢查") { controller.refreshPermissions(userInitiated: true, recheckScreenshotFolder: true) }
             }
             explanation("依序核准輔助功能與輸入監控；需要截圖時再核准螢幕錄製。每列只申請自己的權限，回來後確認通過才顯示綠燈。登入時啟動為選用。")
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 10) {
                     permissionRow("輔助功能（\(KeyboardPermissionRequest.settingsTitle)）",
                                   verification: controller.permissionChecklist.verification(for: [.accessibility, .posting]),
                                   required: keyboardNeeded,
@@ -121,7 +115,6 @@ struct SettingsView: View {
                     }
                 }
             }
-            .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
             HStack {
                 Text("WindowsMacBridge \(AppBuildInfo.current.versionLabel)")
                 Spacer()
@@ -133,6 +126,7 @@ struct SettingsView: View {
                 explanation("回到此頁會自動檢查。系統不一定會提示重開；若第一項顯示「需重新開啟」，請按該列按鈕。")
             }
         }
+        .padding(20)
         .onAppear { controller.refreshPermissions() }
     }
 
@@ -162,13 +156,14 @@ struct SettingsView: View {
                 Spacer()
                 Text(label).font(.callout).foregroundStyle(color)
                     Button(granted ? grantedActionLabel : actionLabel, action: action)
-                        .buttonStyle(.bordered)
+                        .bridgeGlassButton()
                         .accessibilityLabel("\(granted ? grantedActionLabel : actionLabel)：\(title)")
             }
             .padding(.vertical, 10)
-            Divider()
         }
         .padding(.horizontal, 16)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.70),
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         // Keep each action exposed to VoiceOver and keyboard navigation.
         .accessibilityElement(children: .contain)
     }
@@ -176,8 +171,11 @@ struct SettingsView: View {
     private var general: some View {
         Form {
             Section("WindowsMacBridge · \(AppBuildInfo.current.versionLabel)") {
-                Text(controller.isOperating ? "🟢 運作中" : controller.summary)
-                    .font(.headline)
+                HStack(spacing: 8) {
+                    Circle().fill(controller.isOperating ? Color.green : Color.secondary).frame(width: 8, height: 8)
+                        .accessibilityHidden(true)
+                    Text(controller.isOperating ? "運作中" : controller.summary).font(.headline)
+                }
                 if controller.status.fault != nil { Button("重新啟動引擎") { controller.resume() } }
                 Toggle("Windows 模式總開關", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
                 explanation("統一控制 Windows 快捷鍵、Fn／Ctrl 交換、Finder 加強與截圖自動複製。登入啟動與唯音輸入法守護各自獨立。")
@@ -258,7 +256,7 @@ struct SettingsView: View {
                     }
                 }
             }
-        }.formStyle(.grouped)
+        }.formStyle(.grouped).scrollContentBackground(.hidden)
         .onAppear { controller.refreshMacBookKeyboard() }
     }
 
@@ -347,13 +345,12 @@ struct SettingsView: View {
                 }
                 explanation("守護日誌只含來源 ID、切換結果與狀態；最多兩個約 512 KiB 檔案，不保存輸入文字。")
             }
-        }.formStyle(.grouped)
+        }.formStyle(.grouped).scrollContentBackground(.hidden)
         .onAppear { controller.refreshSourceStatistics() }
     }
 
     private var profiles: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("App 規則").font(.title2)
             explanation("規則依 App 的 bundle ID 套用到整個 App。本機 App、Terminal 與 IDE 都套用完整 Windows 相容快捷鍵；Terminal 的 Ctrl+C 有選取時複製、沒有選取時中斷；Ctrl+Shift+C 明確中斷。")
             if let app = controller.targetApp {
                 HStack {
@@ -384,6 +381,8 @@ struct SettingsView: View {
                     Text(profileExplanation(controller.settings.overrides[id] ?? .disabled)).font(.caption).foregroundStyle(.secondary)
                 }.padding(.vertical, 4)
             }.frame(minHeight: 130)
+                .scrollContentBackground(.hidden)
+                .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
             DisclosureGroup("各 Profile 的用途") {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
@@ -464,7 +463,7 @@ struct SettingsView: View {
                 }
                 explanation("所有鍵盤處理留在本機。不讀取或保存輸入文字、密碼、剪貼簿內容，也不上傳事件；Finder 只讀取剪貼簿版本與類型。")
             }
-        }.formStyle(.grouped)
+        }.formStyle(.grouped).scrollContentBackground(.hidden)
         .onAppear { controller.refreshEngineStatus() }
     }
 }

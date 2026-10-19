@@ -57,7 +57,7 @@ struct ShortcutPreviewView: View {
                 Table(rows) {
                     TableColumn("送到 Mac 的按鍵") { Text(ShortcutPreview.label($0.input)).monospaced() }
                         .width(min: 180, ideal: 210)
-                    TableColumn("預期輸出／操作") { Text($0.output).textSelection(.enabled) }
+                    TableColumn("預期輸出／操作") { Text($0.output).textSelection(.enabled).help($0.output) }
                 }.frame(minHeight: 260)
                 if mode == .terminal {
                     Text("Ctrl+C 會在實際按下時確認選取範圍；若 App 無法提供選取狀態，僅嘗試複製。Ctrl+Shift+C 可明確中斷命令。")
@@ -65,15 +65,20 @@ struct ShortcutPreviewView: View {
                 }
             }
             Section("自選組合") {
-                HStack {
-                    Picker("按鍵", selection: $key) {
-                        ForEach(ShortcutPreview.selectableKeys, id: \.self) { Text(ShortcutPreview.keyLabel($0)).tag($0) }
-                    }.frame(maxWidth: 170)
-                    modifierToggle("Ctrl", .control)
-                    modifierToggle("Option", .option)
-                    modifierToggle("Command", .command)
-                    modifierToggle("Shift", .shift)
-                    modifierToggle("Fn", .fn)
+                ViewThatFits(in: .horizontal) {
+                    customKeyControls
+                    VStack(alignment: .leading, spacing: 10) {
+                        keyPicker
+                        HStack {
+                            modifierToggle("Ctrl", .control)
+                            modifierToggle("Option", .option)
+                            modifierToggle("Command", .command)
+                        }
+                        HStack {
+                            modifierToggle("Shift", .shift)
+                            modifierToggle("Fn", .fn)
+                        }
+                    }
                 }
                 if let customResult {
                     LabeledContent(ShortcutPreview.label(customResult.input), value: customResult.output)
@@ -84,6 +89,7 @@ struct ShortcutPreviewView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .onAppear { reloadApplications() }
         .onChange(of: settings.overrides) { _, _ in reloadApplications() }
         .onChange(of: applicationIDs) { _, _ in reloadApplications() }
@@ -91,6 +97,23 @@ struct ShortcutPreviewView: View {
         .onChange(of: configuration, initial: true) { _, value in updateResults(value) }
         .onChange(of: key) { _, _ in updateCustomResult() }
         .onChange(of: modifiers) { _, _ in updateCustomResult() }
+    }
+
+    private var keyPicker: some View {
+        Picker("按鍵", selection: $key) {
+            ForEach(ShortcutPreview.selectableKeys, id: \.self) { Text(ShortcutPreview.keyLabel($0)).tag($0) }
+        }.frame(maxWidth: 170)
+    }
+
+    private var customKeyControls: some View {
+        HStack {
+            keyPicker
+            modifierToggle("Ctrl", .control)
+            modifierToggle("Option", .option)
+            modifierToggle("Command", .command)
+            modifierToggle("Shift", .shift)
+            modifierToggle("Fn", .fn)
+        }
     }
 
     private func modifierToggle(_ title: String, _ flag: Modifiers) -> some View {

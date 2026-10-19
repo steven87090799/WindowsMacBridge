@@ -67,10 +67,16 @@ jobs:
         run: |
           bridge_app="$(cat build/APP_PATH.txt)"
           "$bridge_app/Contents/MacOS/WindowsMacBridge" --render-feature-checks "$RUNNER_TEMP/feature-visual-checks"
+      - name: Verify generated UI ownership after repeated close
+        run: |
+          bridge_app="$(cat build/APP_PATH.txt)"
+          "$bridge_app/Contents/MacOS/WindowsMacBridge" --ui-resource-check "$RUNNER_TEMP/ui-resource-check.json"
       - uses: actions/upload-artifact@v4
         with:
           name: WindowsMacBridge-generated-feature-layouts
-          path: ${{ runner.temp }}/feature-visual-checks/*.png
+          path: |
+            ${{ runner.temp }}/feature-visual-checks/*.png
+            ${{ runner.temp }}/ui-resource-check.json
       - name: Build GitHub ZIP source without .git
         run: |
           bridge_zip_source="$(mktemp -d)"

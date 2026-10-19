@@ -116,21 +116,8 @@ import BridgePlatform
         super.init(frame: NSRect(x: 0, y: 0, width: 320, height: 248))
         let content = NSView(frame: bounds)
         content.autoresizingMask = [.width, .height]
-        // The screenshot UI is ours. Only the material uses the public system
-        // glass API; this never invokes screencapture's delayed -u mode.
-        #if compiler(>=6.2)
-        if #available(macOS 26.0, *) {
-            let glass = NSGlassEffectView(frame: bounds)
-            glass.style = .regular; glass.cornerRadius = 22
-            glass.autoresizingMask = [.width, .height]
-            glass.contentView = content
-            addSubview(glass)
-        } else {
-            addFrostedBackground(content)
-        }
-        #else
-        addFrostedBackground(content)
-        #endif
+        // Shared native glass/frosted material; screenshot delivery stays unchanged.
+        addSubview(BridgeGlassPanelView(frame: bounds, content: content, cornerRadius: 22))
 
         let imageButton = NSButton(image: image, target: target, action: openAction)
         imageButton.isBordered = false; imageButton.imageScaling = .scaleProportionallyUpOrDown
@@ -160,18 +147,6 @@ import BridgePlatform
         close.frame = NSRect(x: 276, y: 20, width: 28, height: 28)
         close.setAccessibilityLabel("關閉截圖縮圖"); close.toolTip = "關閉預覽，圖片仍在剪貼簿"
         content.addSubview(close)
-    }
-
-    private func addFrostedBackground(_ content: NSView) {
-        let effect = NSVisualEffectView(frame: bounds)
-        effect.material = .popover; effect.blendingMode = .behindWindow; effect.state = .active
-        effect.autoresizingMask = [.width, .height]
-        effect.wantsLayer = true; effect.layer?.cornerRadius = 22; effect.layer?.masksToBounds = true
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
-            effect.state = .inactive
-            effect.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-        }
-        addSubview(effect); effect.addSubview(content)
     }
 
     override func updateTrackingAreas() {
