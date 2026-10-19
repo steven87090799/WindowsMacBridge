@@ -9,6 +9,7 @@ public struct InputSourceStatus: Equatable, Sendable {
     public var hotkeyEnabled = false
     public var hotkeyRegistered = false
     public var selectionInProgress = false
+    public var selectionConfirmed = false
     public var preset = HotkeyPreset.controlOptionCommandSpace
     public var desired = DesiredInputSource.vChewing
     public var summary = "輸入法守護未啟動"
@@ -156,6 +157,7 @@ public struct InputSourceStatus: Equatable, Sendable {
         let current = controller.inputSources.currentSource()
         result.current = current.identifier ?? "unknown"
         result.currentName = current.localizedName ?? result.current
+        result.selectionConfirmed = suspension == nil && controller.isSelectionConfirmed(currentIdentifier: current.identifier)
         result.traditional = controller.inputSources.discovery.traditional?.summary ?? "未找到唯音繁體"
         result.abc = controller.inputSources.discovery.abc?.summary ?? "未找到 ABC"
         result.issue = issue ?? hotkeyIssue ?? (controller.isEnabled ? controller.issueDescription : nil)
@@ -175,9 +177,6 @@ public struct InputSourceStatus: Equatable, Sendable {
     public func readRecentLog(_ completion: @escaping @MainActor (String) -> Void) {
         FileLogger.shared.readRecent { text in Task { @MainActor in completion(text) } }
     }
-    /// Resource measurements run only when settings are opened or refreshed.
-    public var memoryUsageDescription: String { DiagnosticMetrics.currentMemorySnapshot()?.description ?? "無法讀取" }
-
     public static func acquireSingleInstance() -> Bool {
         if SingleInstanceGuard.shared.acquire() { return true }
         SingleInstanceGuard.shared.activateExistingInstanceIfPossible()

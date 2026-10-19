@@ -59,6 +59,17 @@ private final class TestInputSources: InputSourceProviding {
 }
 
 @MainActor @Suite(.serialized) struct GuardControllerIntentTests {
+    @Test func greenSelectionIndicatorRequiresActualDesiredSourceAndActiveGuard() {
+        let fixture = GuardFixture(); defer { fixture.close() }
+        fixture.start()
+        #expect(fixture.controller.isSelectionConfirmed(currentIdentifier: "test.vChewing"))
+        #expect(!fixture.controller.isSelectionConfirmed(currentIdentifier: "test.ABC"))
+        #expect(!fixture.controller.isSelectionConfirmed(currentIdentifier: nil))
+        fixture.controller.setHostSuspended(true)
+        #expect(!fixture.controller.isSelectionConfirmed(currentIdentifier: "test.vChewing"))
+        let disabled = GuardFixture(enabled: false); defer { disabled.close() }
+        #expect(!disabled.controller.isSelectionConfirmed(currentIdentifier: "test.vChewing"))
+    }
     @Test func secureInputWaitIsOneBoundedPassNotAStandingPoll() async throws {
         let fixture = GuardFixture(enabled: false, secureRecoveryDelays: [0.02, 0.02, 0.02]); defer { fixture.close() }
         fixture.sources.current = "test.vChewing"

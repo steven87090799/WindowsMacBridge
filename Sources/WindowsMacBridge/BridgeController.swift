@@ -15,7 +15,6 @@ import IOKit.hid
     let inputSources = InputSourceCoordinator()
     @Published var sourceStatus = InputSourceStatus()
     @Published var sourceDiagnostics = ""
-    @Published var sourceMemoryUsage = "尚未讀取"
     @Published var sourceLog = ""
     @Published var status = EngineStatus()
     @Published var context = ApplicationContext()
@@ -521,7 +520,6 @@ import IOKit.hid
     }
     func refreshSourceStatistics() {
         sourceStatus = inputSources.status
-        sourceMemoryUsage = inputSources.memoryUsageDescription
     }
     private func publish() {
         guard running else { return }

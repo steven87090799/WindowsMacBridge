@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import Darwin
 import MachO
+import BridgePlatform
 
 /// Explicit generated-content lifecycle probe. Never starts BridgeController,
 /// input, capture, OCR, permissions, clipboard access or visible windows.
@@ -40,11 +41,15 @@ import MachO
                 observations.append(snapshot("closed-batch-\(batch)"))
             }
             drain(seconds: 5)
+            let visibilityChecks = try verifyPerformanceVisibility(owners: &owners)
+            exercisePerformance(count: 10, owners: &owners)
+            drain(seconds: 2)
             observations.append(snapshot("final-closed"))
             let retained = owners.filter { $0.value != nil }.map(\.kind)
             let result: [String: Any] = [
                 "scope": "generated-offscreen-UI-only-no-input-engine-no-GPU-measurement",
                 "settings_cycles": 33, "panel_cycles": 33,
+                "performance_page_cycles": 10, "performance_visibility_checks": visibilityChecks,
                 "weak_objects_checked": owners.count, "retained_objects": retained,
                 "closed_idle_wall_seconds": closedWall, "closed_idle_cpu_seconds": closedCPU,
                 "closed_idle_single_core_cpu_percent": closedCPU / closedWall * 100,
@@ -56,6 +61,76 @@ import MachO
             if !retained.isEmpty { exit(1) }
         } catch { print("UI resource check failed: \(error)"); exit(1) }
         return true
+    }
+
+    private final class VisibilityFixtureWindow: NSWindow {
+        var fixtureVisible = false
+        var fixtureOccluded = false
+        var fixtureMiniaturized = false
+        override var isVisible: Bool { fixtureVisible }
+        override var isMiniaturized: Bool { fixtureMiniaturized }
+        override var occlusionState: NSWindow.OcclusionState { fixtureOccluded ? [] : [.visible] }
+    }
+
+    private static func verifyPerformanceVisibility(owners: inout [WeakObject]) throws -> [String] {
+        var checks = [String]()
+        try autoreleasepool {
+            let monitor = PerformanceMonitor()
+            let probe = PerformanceVisibilityView()
+            probe.onChange = { [weak monitor] in monitor?.setVisible($0) }
+            let window = VisibilityFixtureWindow(contentRect: NSRect(x: 0, y: 0, width: 10, height: 10),
+                styleMask: [.borderless], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = probe
+            owners.append(WeakObject(monitor, kind: "visibility-monitor"))
+            owners.append(WeakObject(probe, kind: "visibility-observer"))
+            owners.append(WeakObject(window, kind: "visibility-window"))
+            @MainActor func check(_ label: String, sampling: Bool) throws {
+                NotificationCenter.default.post(name: NSWindow.didChangeOcclusionStateNotification, object: window)
+                drain(seconds: 0.05)
+                guard monitor.isSampling == sampling else { throw CocoaError(.validationMissingMandatoryProperty) }
+                checks.append(label)
+            }
+            try check("never-shown-window-stopped", sampling: false)
+            window.fixtureVisible = true
+            try check("visible-page-started", sampling: true)
+            window.fixtureOccluded = true
+            try check("occluded-window-stopped", sampling: false)
+            window.fixtureOccluded = false
+            try check("uncovered-page-restarted", sampling: true)
+            window.fixtureMiniaturized = true
+            try check("minimized-window-stopped", sampling: false)
+            window.fixtureMiniaturized = false
+            try check("restored-page-restarted", sampling: true)
+            NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.willSleepNotification, object: nil)
+            try check("sleep-stopped", sampling: false)
+            NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didWakeNotification, object: nil)
+            try check("wake-restarted", sampling: true)
+            window.contentView = nil
+            try check("removed-page-stopped", sampling: false)
+            window.contentView = probe
+            try check("reattached-page-restarted", sampling: true)
+            window.close()
+            try check("closed-window-stopped", sampling: false)
+            window.contentView = nil
+        }
+        return checks
+    }
+
+    private static func exercisePerformance(count: Int, owners: inout [WeakObject]) {
+        for _ in 0..<count {
+            autoreleasepool {
+                let monitor = PerformanceMonitor()
+                let window = SettingsWindowFactory.make(content: PerformanceView(monitor: monitor))
+                owners.append(WeakObject(monitor, kind: "performance-monitor"))
+                owners.append(WeakObject(window, kind: "performance-window"))
+                if let host = window.contentViewController { owners.append(WeakObject(host, kind: "performance-host")) }
+                window.contentView?.layoutSubtreeIfNeeded()
+                SettingsWindowFactory.releaseContent(of: window)
+                window.close()
+            }
+            drain(seconds: 0.05)
+        }
     }
 
     private static func exerciseSettings(count: Int, owners: inout [WeakObject]) {

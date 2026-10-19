@@ -11,6 +11,8 @@ import SwiftUI
         window.contentMinSize = NSSize(width: 730, height: 600)
         window.title = "WindowsMacBridge"
         window.titlebarAppearsTransparent = true
+        window.isOpaque = false
+        window.backgroundColor = .clear
         window.toolbarStyle = .unified
         window.isReleasedWhenClosed = false
         return window
