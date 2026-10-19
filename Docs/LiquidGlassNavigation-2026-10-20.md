@@ -38,6 +38,8 @@
 
 Runner 可用性與工具鏈路徑取自 [actions/runner-images 官方清單](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)；這個 runner 標籤目前仍標為 preview，執行狀態與產物必須以本次 commit 的 CI 為準。
 
+主線第一次成品檢查發現，Swift 6.4 / Swift Build 即使在 SDK 27 下編譯，執行檔的 `LC_BUILD_VERSION.sdk` 仍可能被寫成最低部署版本 14.0；獨立的最小 Swift Package 也重現相同結果。建置腳本現以所選 SDK 的實際版本明確傳入 linker 的 `-platform_version macos 14.0 <sdk>`，保留 macOS 14 最低需求。打包前對主程式、OCR worker 與 Finder extension 逐一檢查連結 SDK 和最低部署版本，SDK 不符即停止，不能只因 Xcode 版本正確就發布。這會讓系統的 linked-on-or-after 外觀判斷取得正確來源；實際玻璃效果仍需可見視窗驗收。
+
 離屏程序沒有進入 `NSApplication.run()`，因此所有 AppKit 關閉操作都放在局部 autorelease pool 內，模擬正常原生事件迴圈會排空的釋放範圍。開發時新增的卸載測試曾把關閉操作放在外層，造成 5 個原生視窗延後釋放的誤判；程序記憶體圖確認持有者是外層 autorelease pool，修正後獨立 5 次卸載／還原檢查的 35 個弱參照全部釋放。沒有為了通過測試移除檢查或改成只隱藏視圖。
 
 ## 本機結果
