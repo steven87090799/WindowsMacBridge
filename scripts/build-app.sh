@@ -5,8 +5,15 @@ cd "$task_root"
 source "$task_root/scripts/build-environment.sh"
 bash "$task_root/scripts/prepare-hid-backend.sh"
 configuration="${CONFIGURATION:-release}"
-swift build --scratch-path "$task_scratch" -c "$configuration" --product WindowsMacBridge --jobs "${BRIDGE_BUILD_JOBS:-2}"
-swift build --scratch-path "$task_scratch" -c "$configuration" --product WindowsMacBridgeTextWorker --jobs "${BRIDGE_BUILD_JOBS:-2}"
+bridge_sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
+bridge_sdk_version="$(xcrun --sdk macosx --show-sdk-version)"
+[[ "$bridge_sdk_version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || exit 1
+# Swift 6.4 can stamp the deployment target as the linked SDK even when -sdk
+# points at SDK 27. Keep macOS 14 support, but record the actual selected SDK so
+# linked-on-or-after system appearance decisions see the current generation.
+bridge_sdk_link=(-Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$bridge_sdk_version")
+swift build --scratch-path "$task_scratch" --sdk "$bridge_sdk_path" -c "$configuration" --product WindowsMacBridge --jobs "${BRIDGE_BUILD_JOBS:-2}" "${bridge_sdk_link[@]}"
+swift build --scratch-path "$task_scratch" --sdk "$bridge_sdk_path" -c "$configuration" --product WindowsMacBridgeTextWorker --jobs "${BRIDGE_BUILD_JOBS:-2}" "${bridge_sdk_link[@]}"
 binary_directory="$(swift build --scratch-path "$task_scratch" -c "$configuration" --show-bin-path)"
 mkdir -p "$task_scratch/Artifacts"
 bridge_stage="$(mktemp -d "$task_scratch/Artifacts/.app-stage.XXXXXX")"
@@ -46,12 +53,16 @@ bridge_optimization=-Onone
 if [[ "$configuration" == release ]]; then bridge_optimization="${FINDER_RELEASE_OPTIMIZATION:--O}"; fi
 [[ "$bridge_optimization" == -Onone || "$bridge_optimization" == -O || "$bridge_optimization" == -Osize ]] || exit 1
 swiftc "$bridge_optimization" -emit-executable -parse-as-library -module-name WindowsMacBridgeFinderSync \
-    -target arm64-apple-macos14.0 -framework FinderSync -framework AppKit \
+    -target arm64-apple-macos14.0 -sdk "$bridge_sdk_path" "${bridge_sdk_link[@]}" -framework FinderSync -framework AppKit \
     -Xlinker -e -Xlinker _NSExtensionMain \
     "$task_root/Sources/BridgeCore/FinderPathSelection.swift" \
     "$task_root/Sources/BridgeCore/FinderModeSignal.swift" \
     "$task_root/Extensions/FinderSync/FinderSync.swift" \
     -o "$extension_directory/Contents/MacOS/WindowsMacBridgeFinderSync"
+python3 "$task_root/scripts/verify-build-sdk.py" "$bridge_sdk_version" \
+    "$app_directory/Contents/MacOS/WindowsMacBridge" \
+    "$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker" \
+    "$extension_directory/Contents/MacOS/WindowsMacBridgeFinderSync"
 # File providers can attach FinderInfo to generated bundles; codesign rejects it.
 # Only generated app metadata is affected, never source files or user documents.
 /usr/bin/xattr -dr com.apple.FinderInfo "$app_directory" 2>/dev/null || true
