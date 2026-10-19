@@ -11,16 +11,31 @@ env:
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 jobs:
   hid-installer-package:
-    runs-on: macos-15
-    timeout-minutes: 15
+    # Build the deliverable with the stable 27 SDK and exercise real native
+    # glass code. The other job retains the macOS 15 / Xcode 26.3 fallback gate.
+    runs-on: xcode-27
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
+      - name: Verify current-generation SDK
+        run: |
+          xcodebuild -version
+          swift --version
+          sdk_version="$(xcrun --sdk macosx --show-sdk-version)"
+          [[ "$sdk_version" == 27.* ]]
       - name: Build App and package complete drag-install DMG without installation
         run: |
           bash scripts/build-app.sh
           export BRIDGE_RELEASE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)-preview.1"
           bash scripts/package-single-app.sh
           bash scripts/package-app-dmg.sh
+      - name: Verify native glass layouts and UI release on macOS 27
+        run: |
+          bridge_app="$(cat build/APP_PATH.txt)"
+          "$bridge_app/Contents/MacOS/WindowsMacBridge" --render-feature-checks "$RUNNER_TEMP/native-glass-layouts"
+          "$bridge_app/Contents/MacOS/WindowsMacBridge" --ui-resource-check "$RUNNER_TEMP/native-glass-resources.json"
       - uses: actions/upload-artifact@v4
         with:
           name: WindowsMacBridge-HID-installer-development
@@ -29,6 +44,12 @@ jobs:
             build/download/*.zip.sha256
             build/download/*.dmg
             build/download/*.dmg.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WindowsMacBridge-native-glass-feature-layouts
+          path: |
+            ${{ runner.temp }}/native-glass-layouts/*.png
+            ${{ runner.temp }}/native-glass-resources.json
   test-and-package:
     runs-on: macos-15
     timeout-minutes: 15

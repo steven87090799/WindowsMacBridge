@@ -15,13 +15,36 @@ import BridgePlatform
 
     static func handle(_ arguments: [String]) -> Bool {
         guard arguments.first == "--ui-resource-check" else { return false }
-        guard arguments.count == 2 else { exit(64) }
+        guard arguments.count == 2 || (arguments.count == 3 && arguments[2] == "--suspension-only") else { exit(64) }
         let destination = URL(fileURLWithPath: arguments[1])
         do {
             guard !FileManager.default.fileExists(atPath: destination.path) else { throw CocoaError(.fileWriteFileExists) }
             NSApplication.shared.setActivationPolicy(.prohibited)
             var observations = [[String: Any]]()
             var owners = [WeakObject]()
+            if arguments.count == 3 {
+                try exerciseSuspendedSettings(count: 5, owners: &owners)
+                drain(seconds: 2)
+                let retained = owners.filter { $0.value != nil }.map(\.kind)
+                let windows = owners.compactMap { owner -> [String: Any]? in
+                    guard let window = owner.value as? NSWindow else { return nil }
+                    return ["kind": owner.kind, "visible": window.isVisible,
+                        "in_app_windows": NSApp.windows.contains { $0 === window },
+                        "window_controller": String(describing: window.windowController),
+                        "delegate": String(describing: window.delegate),
+                        "toolbar": String(describing: window.toolbar),
+                        "content_controller": String(describing: window.contentViewController),
+                        "content_view": String(describing: window.contentView),
+                        "first_responder": String(describing: window.firstResponder)]
+                }
+                let result: [String: Any] = ["scope": "generated-suspended-window-ownership-only",
+                    "weak_objects_checked": owners.count, "retained_objects": retained, "retained_windows": windows]
+                try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
+                    .write(to: destination, options: .withoutOverwriting)
+                print("Suspension check: \(owners.count) weak owners, \(retained.count) retained")
+                if !retained.isEmpty { exit(1) }
+                return true
+            }
             drain(seconds: 2)
             observations.append(snapshot("appkit-no-window"))
             // Warm up framework caches before looking for growth across batches.
@@ -43,16 +66,27 @@ import BridgePlatform
             drain(seconds: 5)
             let visibilityChecks = try verifyPerformanceVisibility(owners: &owners)
             exercisePerformance(count: 10, owners: &owners)
+            try exerciseNavigation(count: 10, owners: &owners)
+            try exerciseSuspendedSettings(count: 5, owners: &owners)
             drain(seconds: 2)
+            let finalIdleCPU = cpuSeconds(), finalIdleStart = ProcessInfo.processInfo.systemUptime
+            drain(seconds: 30)
+            let finalCPU = cpuSeconds() - finalIdleCPU
+            let finalWall = ProcessInfo.processInfo.systemUptime - finalIdleStart
             observations.append(snapshot("final-closed"))
             let retained = owners.filter { $0.value != nil }.map(\.kind)
             let result: [String: Any] = [
                 "scope": "generated-offscreen-UI-only-no-input-engine-no-GPU-measurement",
                 "settings_cycles": 33, "panel_cycles": 33,
                 "performance_page_cycles": 10, "performance_visibility_checks": visibilityChecks,
+                "navigation_cycles": 10, "navigation_selections": 80, "tab_traversals_without_selection_change": 120,
+                "suspended_and_restored_windows": 5,
                 "weak_objects_checked": owners.count, "retained_objects": retained,
                 "closed_idle_wall_seconds": closedWall, "closed_idle_cpu_seconds": closedCPU,
                 "closed_idle_single_core_cpu_percent": closedCPU / closedWall * 100,
+                "after_navigation_closed_idle_wall_seconds": finalWall,
+                "after_navigation_closed_idle_cpu_seconds": finalCPU,
+                "after_navigation_closed_idle_single_core_cpu_percent": finalCPU / finalWall * 100,
                 "observations": observations
             ]
             let data = try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
@@ -130,6 +164,92 @@ import BridgePlatform
                 window.close()
             }
             drain(seconds: 0.05)
+        }
+    }
+
+    private final class NavigationFixture: ObservableObject {
+        @Published var selection: SettingsPage = .general
+    }
+
+    private struct NavigationFixtureView: View {
+        @ObservedObject var model: NavigationFixture
+        var body: some View {
+            GlassSettingsChrome(selection: $model.selection, advanced: true, isOperating: true,
+                status: "Generated navigation fixture", version: "fixture") {
+                Form { Text("Generated content only; no live services") }.formStyle(.grouped)
+            }
+        }
+    }
+
+    private static func exerciseNavigation(count: Int, owners: inout [WeakObject]) throws {
+        for _ in 0..<count {
+            try autoreleasepool {
+                let model = NavigationFixture()
+                let window = SettingsWindowFactory.make(content: NavigationFixtureView(model: model))
+                owners.append(WeakObject(model, kind: "navigation-state"))
+                owners.append(WeakObject(window, kind: "navigation-window"))
+                if let host = window.contentViewController { owners.append(WeakObject(host, kind: "navigation-host")) }
+                if let view = window.contentView { owners.append(WeakObject(view, kind: "navigation-view")) }
+                for page in SettingsPage.allCases {
+                    model.selection = page
+                    window.contentView?.layoutSubtreeIfNeeded()
+                    drain(seconds: 0.02)
+                }
+                // Tab moves focus; it must never silently change the page.
+                let beforeTab = model.selection
+                for _ in 0..<12 { window.selectNextKeyView(nil) }
+                guard model.selection == beforeTab else { throw CocoaError(.validationMultipleErrors) }
+                // Interrupt the last finite glass transition by releasing it.
+                SettingsWindowFactory.releaseContent(of: window)
+                window.close()
+            }
+            drain(seconds: 0.08)
+        }
+    }
+
+    private static func exerciseSuspendedSettings(count: Int, owners: inout [WeakObject]) throws {
+        for _ in 0..<count {
+            var window: NSWindow?
+            var originalFrame = NSRect.zero
+            var suspendedOwners = [WeakObject]()
+            autoreleasepool {
+                let model = NavigationFixture()
+                let created = SettingsWindowFactory.make(content: NavigationFixtureView(model: model))
+                window = created
+                suspendedOwners.append(WeakObject(model, kind: "suspended-navigation-state"))
+                if let host = created.contentViewController { suspendedOwners.append(WeakObject(host, kind: "suspended-host")) }
+                if let view = created.contentView { suspendedOwners.append(WeakObject(view, kind: "suspended-view")) }
+                created.contentView?.layoutSubtreeIfNeeded()
+                originalFrame = created.frame
+                SettingsWindowFactory.releaseContent(of: created)
+            }
+            drain(seconds: 0.15)
+            // Hide/minimize retains the NSWindow but must release its entire UI.
+            guard suspendedOwners.allSatisfy({ $0.value == nil }) else {
+                throw NSError(domain: "UIResourceCheck", code: 1, userInfo: [NSLocalizedDescriptionKey:
+                    "Suspended window retained UI: \(suspendedOwners.filter { $0.value != nil }.map(\.kind))"])
+            }
+            owners.append(contentsOf: suspendedOwners)
+            // close() autoreleases AppKit objects. In this explicit CLI probe
+            // NSApplication.run() is never entered, so give teardown its own
+            // event-equivalent pool instead of retaining it until process exit.
+            try autoreleasepool {
+                guard let current = window else { throw CocoaError(.validationMultipleErrors) }
+                owners.append(WeakObject(current, kind: "suspended-restored-window"))
+                let frame = current.frame
+                guard frame == originalFrame else { throw CocoaError(.validationMultipleErrors) }
+                let model = NavigationFixture()
+                model.selection = .performance
+                SettingsWindowFactory.restoreContent(of: current, content: NavigationFixtureView(model: model))
+                owners.append(WeakObject(model, kind: "restored-navigation-state"))
+                if let host = current.contentViewController { owners.append(WeakObject(host, kind: "restored-host")) }
+                if let view = current.contentView { owners.append(WeakObject(view, kind: "restored-view")) }
+                current.contentView?.layoutSubtreeIfNeeded()
+                SettingsWindowFactory.releaseContent(of: current)
+                guard current.frame == frame else { throw CocoaError(.validationMultipleErrors) }
+                current.close(); window = nil
+            }
+            drain(seconds: 0.1)
         }
     }
 

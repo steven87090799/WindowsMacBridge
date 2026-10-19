@@ -11,8 +11,8 @@ import SwiftUI
         window.contentMinSize = NSSize(width: 730, height: 600)
         window.title = "WindowsMacBridge"
         window.titlebarAppearsTransparent = true
-        window.isOpaque = false
-        window.backgroundColor = .clear
+        window.isOpaque = true
+        window.backgroundColor = .windowBackgroundColor
         window.toolbarStyle = .unified
         window.isReleasedWhenClosed = false
         return window
@@ -21,7 +21,17 @@ import SwiftUI
     static func releaseContent(of window: NSWindow) {
         // Release both owners: an offscreen hosting controller still observes
         // published values even after its view has been removed from the window.
+        let frame = window.frame
         window.contentViewController = nil
         window.contentView = nil
+        window.toolbar = nil
+        window.setFrame(frame, display: false)
+    }
+
+    static func restoreContent<Content: View>(of window: NSWindow, content: @autoclosure () -> Content) {
+        guard window.contentViewController == nil else { return }
+        let frame = window.frame
+        window.contentViewController = NSHostingController(rootView: content())
+        window.setFrame(frame, display: false)
     }
 }

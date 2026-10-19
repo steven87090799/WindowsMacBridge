@@ -122,6 +122,25 @@ import InputSourceCore
         window.delegate = nil
         settingsWindow = nil
     }
+    func applicationDidHide(_ notification: Notification) {
+        if let window = settingsWindow { SettingsWindowFactory.releaseContent(of: window) }
+    }
+    func applicationDidUnhide(_ notification: Notification) {
+        if let window = settingsWindow, !window.isMiniaturized {
+            restoreSettingsContent(of: window)
+        }
+    }
+    func windowDidMiniaturize(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === settingsWindow else { return }
+        SettingsWindowFactory.releaseContent(of: window)
+    }
+    func windowDidDeminiaturize(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === settingsWindow else { return }
+        restoreSettingsContent(of: window)
+    }
+    private func restoreSettingsContent(of window: NSWindow) {
+        SettingsWindowFactory.restoreContent(of: window, content: SettingsView(controller: controller))
+    }
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let enabled = action("Windows 模式總開關", #selector(toggleEnabled), in: menu, symbol: "keyboard")
@@ -193,7 +212,10 @@ import InputSourceCore
             window.delegate = self
             window.center(); settingsWindow = window
         }
-        settingsWindow?.makeKeyAndOrderFront(nil)
+        if let window = settingsWindow {
+            restoreSettingsContent(of: window)
+            window.makeKeyAndOrderFront(nil)
+        }
         NSApp.activate(ignoringOtherApps: true)
     }
 }

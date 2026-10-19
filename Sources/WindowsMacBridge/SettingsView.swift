@@ -19,10 +19,8 @@ struct SettingsView: View {
     @ObservedObject var controller: BridgeController
 
     var body: some View {
-        GlassSettingsChrome(selection: Binding(get: { controller.settingsPage }, set: { page in
-            // Publish after native selection callbacks finish their SwiftUI update.
-            DispatchQueue.main.async { controller.settingsPage = page }
-        }), advanced: controller.settings.isAdvancedModeEnabled,
+        GlassSettingsChrome(selection: Binding(get: { controller.settingsPage }, set: { controller.settingsPage = $0 }),
+            advanced: controller.settings.isAdvancedModeEnabled,
             isOperating: controller.isOperating, status: controller.summary,
             version: AppBuildInfo.current.versionLabel, onHelp: controller.openUserGuide) {
             Group {
