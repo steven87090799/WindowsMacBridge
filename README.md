@@ -65,6 +65,8 @@ Mac mini固定外接鍵盤、MacBook內建鍵盤，只有MacBook開啓Fn交換�
 
 文字辨識只在明確框選後啟動獨立的短命 OCR 執行檔；主程式不直接連結 Vision，不預熱模型，一般截圖不啟動 OCR。工作結束即退出程序，系統層快取由 macOS 管理。辨識輸入限 2560 邊長／400 萬像素、結果限 64 KiB／1,000 行；工作逾時、取消或政策失效不寫入舊結果。像素快照透過已 unlink 的私有 regular-file descriptor 傳入，不保留命名 OCR 圖檔。行為依 [Apple Vision 文件](https://developer.apple.com/documentation/vision/recognizing-text-in-images) 實作；辨識準確度仍受字體、畫質與縮圖影響。
 
+[2026-10-19 資源研究](Docs/BackgroundResources-2026-10-19.md) 分開記錄已安裝 build 54 的背景量測與 build 55 的合成 UI 生命週期檢查，附可重現數據。液態玻璃可見時的 GPU 成本仍待實機 profiling；無 GUI 自檢不能當成完整 App 的記憶體數字。
+
 - [操作說明](Resources/UserGuide.md)
 - [人工驗收八類功能](Resources/AcceptanceGuide.md)
 - [外部審查逐項核對、修復與支援缺口](Docs/DualModeReview-2026-10-03.md)

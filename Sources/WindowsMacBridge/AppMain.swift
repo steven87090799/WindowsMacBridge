@@ -118,8 +118,7 @@ import InputSourceCore
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, window === settingsWindow else { return }
         // A hidden NSHostingView still observes @Published values and performs layout.
-        window.contentViewController = nil
-        window.contentView = nil
+        SettingsWindowFactory.releaseContent(of: window)
         window.delegate = nil
         settingsWindow = nil
     }
@@ -207,6 +206,7 @@ import InputSourceCore
         if CommandLine.arguments.dropFirst().first == ScreenshotTextBudget.workerArgument { exit(64) }
         if FeatureResourceCheck.handle(Array(CommandLine.arguments.dropFirst())) { return }
         if FeatureVisualCheck.handle(Array(CommandLine.arguments.dropFirst())) { return }
+        if FeatureUIResourceCheck.handle(Array(CommandLine.arguments.dropFirst())) { return }
         if CommandLine.arguments.contains("--self-check") {
             do {
                 let registry = try ApplicationRegistry()

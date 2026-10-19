@@ -1,0 +1,351 @@
+{
+  "study_date": "2026-10-19",
+  "platform": {
+    "chip": "Apple M2",
+    "memory_bytes": 17179869184,
+    "logical_cpu": 8,
+    "os": "macOS 27.0 (26A428)",
+    "build_toolchain": "Swift 6.4",
+    "configuration": "release"
+  },
+  "source_baseline": "ef687b178049733cde717a1276c7679497dd1a5a",
+  "installed": {
+    "version": "0.6.0",
+    "build": "54",
+    "revision": "b25e8e8ade88996cd91e67da53b2575a9d9e3e44",
+    "baseline": {
+      "main": {
+        "samples": 21,
+        "wall_seconds": 300.0,
+        "cpu_seconds_ps_rounded": 0.009999999999999787,
+        "mean_cpu_percent": 0.0033333333333332624,
+        "max_interval_cpu_percent": 0.0667,
+        "rss_min_mib": 27.34375,
+        "rss_max_mib": 33.8125,
+        "rss_end_mib": 29.375,
+        "footprint_start": "72.1M",
+        "footprint_end": "72.1M",
+        "precise": {
+          "wall_seconds": 120.049362875,
+          "cpu_seconds": 0.0037914170000004077,
+          "mean_single_core_cpu_percent": 0.003158215011893213,
+          "interrupt_wakeups_delta": 40,
+          "package_idle_wakeups_delta": 2,
+          "disk_read_bytes_delta": 0,
+          "disk_written_bytes_delta": 0,
+          "footprint_start_mib": 72.14158630371094,
+          "footprint_end_mib": 72.14158630371094,
+          "lifetime_peak_footprint_mib": 83.86033630371094,
+          "same_process_birth": true
+        }
+      },
+      "finder-extension": {
+        "samples": 21,
+        "wall_seconds": 299.4,
+        "cpu_seconds_ps_rounded": 0.0,
+        "mean_cpu_percent": 0.0,
+        "max_interval_cpu_percent": 0.0,
+        "rss_min_mib": 16.265625,
+        "rss_max_mib": 17.84375,
+        "rss_end_mib": 16.265625,
+        "footprint_start": "8001K",
+        "footprint_end": "8033K",
+        "precise": {
+          "wall_seconds": 120.0509895,
+          "cpu_seconds": 0.0,
+          "mean_single_core_cpu_percent": 0.0,
+          "interrupt_wakeups_delta": 0,
+          "package_idle_wakeups_delta": 0,
+          "disk_read_bytes_delta": 0,
+          "disk_written_bytes_delta": 0,
+          "footprint_start_mib": 7.8444366455078125,
+          "footprint_end_mib": 7.8444366455078125,
+          "lifetime_peak_footprint_mib": 10.672561645507812,
+          "same_process_birth": true
+        }
+      }
+    },
+    "tap_registration_metadata": {
+      "scope": "tap-registration-metadata-only-no-events",
+      "pid": 68194,
+      "enabled_taps": 3,
+      "enabled_full_keyboard_masks": 3,
+      "disabled_taps": 0
+    }
+  },
+  "candidate": {
+    "build": "55",
+    "installed": false,
+    "scope": "generated offscreen UI; no BridgeController or input engine",
+    "ui_lifecycle": {
+      "closed_idle_cpu_seconds": 0.0008859999999999979,
+      "closed_idle_single_core_cpu_percent": 0.002952615031811181,
+      "closed_idle_wall_seconds": 30.007298291660845,
+      "observations": [
+        {
+          "cpu_seconds": 0.045844,
+          "loaded_ocr_frameworks": [
+            "/System/Library/Frameworks/Vision.framework/Versions/A/Vision",
+            "/System/Library/Frameworks/Vision.framework/libfaceCore.dylib",
+            "/System/Library/Frameworks/CoreML.framework/Versions/A/CoreML"
+          ],
+          "phase": "appkit-no-window",
+          "physical_footprint_bytes": 7308032,
+          "resident_bytes": 32342016,
+          "uptime_seconds": 143041.19017958335
+        },
+        {
+          "cpu_seconds": 0.489053,
+          "loaded_ocr_frameworks": [
+            "/System/Library/Frameworks/Vision.framework/Versions/A/Vision",
+            "/System/Library/Frameworks/Vision.framework/libfaceCore.dylib",
+            "/System/Library/Frameworks/CoreML.framework/Versions/A/CoreML"
+          ],
+          "phase": "warmed-closed",
+          "physical_footprint_bytes": 34685912,
+          "resident_bytes": 89341952,
+          "uptime_seconds": 143044.05100195835
+        },
+        {
+          "cpu_seconds": 0.498998,
+          "loaded_ocr_frameworks": [
+            "/System/Library/Frameworks/Vision.framework/Versions/A/Vision",
+            "/System/Library/Frameworks/Vision.framework/libfaceCore.dylib",
+            "/System/Library/Frameworks/CoreML.framework/Versions/A/CoreML"
+          ],
+          "phase": "warmed-closed-idle",
+          "physical_footprint_bytes": 32621528,
+          "resident_bytes": 89260032,
+          "uptime_seconds": 143074.06736629168
+        },
+        {
+          "cpu_seconds": 1.5548039999999999,
+          "loaded_ocr_frameworks": [
+            "/System/Library/Frameworks/Vision.framework/Versions/A/Vision",
+            "/System/Library/Frameworks/Vision.framework/libfaceCore.dylib",
+            "/System/Library/Frameworks/CoreML.framework/Versions/A/CoreML"
+          ],
+          "phase": "closed-batch-1",
+          "physical_footprint_bytes": 33047512,
+          "resident_bytes": 89702400,
+          "uptime_seconds": 143078.40451679166
+        },
+        {
+          "cpu_seconds": 2.606479,
+          "loaded_ocr_frameworks": [
+            "/System/Library/Frameworks/Vision.framework/Versions/A/Vision",
+            "/System/Library/Frameworks/Vision.framework/libfaceCore.dylib",
+            "/System/Library/Frameworks/CoreML.framework/Versions/A/CoreML"
+          ],
+          "phase": "closed-batch-2",
+          "physical_footprint_bytes": 33178584,
+          "resident_bytes": 89866240,
+          "uptime_seconds": 143082.73858533334
+        },
+        {
+          "cpu_seconds": 3.6780429999999997,
+          "loaded_ocr_frameworks": [
+            "/System/Library/Frameworks/Vision.framework/Versions/A/Vision",
+            "/System/Library/Frameworks/Vision.framework/libfaceCore.dylib",
+            "/System/Library/Frameworks/CoreML.framework/Versions/A/CoreML"
+          ],
+          "phase": "closed-batch-3",
+          "physical_footprint_bytes": 33211352,
+          "resident_bytes": 89915392,
+          "uptime_seconds": 143087.11802908333
+        },
+        {
+          "cpu_seconds": 3.6873240000000003,
+          "loaded_ocr_frameworks": [
+            "/System/Library/Frameworks/Vision.framework/Versions/A/Vision",
+            "/System/Library/Frameworks/Vision.framework/libfaceCore.dylib",
+            "/System/Library/Frameworks/CoreML.framework/Versions/A/CoreML"
+          ],
+          "phase": "final-closed",
+          "physical_footprint_bytes": 33162200,
+          "resident_bytes": 89866240,
+          "uptime_seconds": 143092.13455683333
+        }
+      ],
+      "panel_cycles": 33,
+      "retained_objects": [],
+      "scope": "generated-offscreen-UI-only-no-input-engine-no-GPU-measurement",
+      "settings_cycles": 33,
+      "weak_objects_checked": 198
+    }
+  },
+  "synthetic_ocr": {
+    "kind": "generated-ocr-roundtrip",
+    "parent_after_bytes": 5014152,
+    "parent_before_bytes": 5456520,
+    "parent_cpu_seconds": 0.004447999999999997,
+    "runs": [
+      {
+        "parent_footprint_bytes": 4915848,
+        "seconds": 24.030107083322946,
+        "text_characters": 15
+      },
+      {
+        "parent_footprint_bytes": 4981384,
+        "seconds": 0.42788274999475107,
+        "text_characters": 15
+      },
+      {
+        "parent_footprint_bytes": 5014152,
+        "seconds": 0.24460133331012912,
+        "text_characters": 15
+      }
+    ],
+    "wall_seconds": 24.70263929167413,
+    "worker_max_rss_bytes": 233488384,
+    "worker_max_rss_mib": 222.671875,
+    "worker_source_revision": "0e4e839881e27e18574f25ad27952c0a701e026f",
+    "remaining_owned_workers_after_check": 0,
+    "worker_artifact_run_id": 39192914659,
+    "worker_artifact_source_matches_ui_baseline": true
+  },
+  "synthetic_routing": {
+    "kind": "synthetic-routing-update",
+    "measurements": [
+      {
+        "cpu_seconds": 0.0068059999999999996,
+        "footprint_after_bytes": 2310672,
+        "footprint_before_bytes": 2064912,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.025,
+        "p95_batch_mean_microseconds": 0.05,
+        "p99_batch_mean_microseconds": 0.0542,
+        "primed_events": 0,
+        "sources": 0,
+        "wall_seconds": 0.00681904167868197
+      },
+      {
+        "cpu_seconds": 0.006373999999999998,
+        "footprint_after_bytes": 2359848,
+        "footprint_before_bytes": 2359848,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0292,
+        "p95_batch_mean_microseconds": 0.0375,
+        "p99_batch_mean_microseconds": 0.0417,
+        "primed_events": 0,
+        "sources": 0,
+        "wall_seconds": 0.0063733749848324805
+      },
+      {
+        "cpu_seconds": 0.006029000000000003,
+        "footprint_after_bytes": 2376232,
+        "footprint_before_bytes": 2376232,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0291,
+        "p95_batch_mean_microseconds": 0.0334,
+        "p99_batch_mean_microseconds": 0.0375,
+        "primed_events": 0,
+        "sources": 0,
+        "wall_seconds": 0.006029375013895333
+      },
+      {
+        "cpu_seconds": 0.005762000000000003,
+        "footprint_after_bytes": 2490920,
+        "footprint_before_bytes": 2490920,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.025,
+        "p95_batch_mean_microseconds": 0.0333,
+        "p99_batch_mean_microseconds": 0.0375,
+        "primed_events": 4,
+        "sources": 1,
+        "wall_seconds": 0.005766416667029262
+      },
+      {
+        "cpu_seconds": 0.005461000000000001,
+        "footprint_after_bytes": 2507304,
+        "footprint_before_bytes": 2507304,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.025,
+        "p95_batch_mean_microseconds": 0.0292,
+        "p99_batch_mean_microseconds": 0.0334,
+        "primed_events": 4,
+        "sources": 1,
+        "wall_seconds": 0.005563458340475336
+      },
+      {
+        "cpu_seconds": 0.004929000000000003,
+        "footprint_after_bytes": 2507304,
+        "footprint_before_bytes": 2507304,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0209,
+        "p95_batch_mean_microseconds": 0.025,
+        "p99_batch_mean_microseconds": 0.0292,
+        "primed_events": 4,
+        "sources": 1,
+        "wall_seconds": 0.004929416667437181
+      },
+      {
+        "cpu_seconds": 0.004716999999999999,
+        "footprint_after_bytes": 2621992,
+        "footprint_before_bytes": 2621992,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0208,
+        "p95_batch_mean_microseconds": 0.025,
+        "p99_batch_mean_microseconds": 0.0291,
+        "primed_events": 64,
+        "sources": 16,
+        "wall_seconds": 0.004717208328656852
+      },
+      {
+        "cpu_seconds": 0.004550000000000005,
+        "footprint_after_bytes": 2638376,
+        "footprint_before_bytes": 2638376,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0208,
+        "p95_batch_mean_microseconds": 0.025,
+        "p99_batch_mean_microseconds": 0.025,
+        "primed_events": 64,
+        "sources": 16,
+        "wall_seconds": 0.004560375004075468
+      },
+      {
+        "cpu_seconds": 0.004338999999999996,
+        "footprint_after_bytes": 2638376,
+        "footprint_before_bytes": 2638376,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0208,
+        "p95_batch_mean_microseconds": 0.0209,
+        "p99_batch_mean_microseconds": 0.025,
+        "primed_events": 64,
+        "sources": 16,
+        "wall_seconds": 0.004338625003583729
+      }
+    ]
+  },
+  "sampler_validation": {
+    "getrusage_cpu_delta_seconds": 0.750005,
+    "snapshot_cpu_delta_seconds": 0.7508980829999999,
+    "wrong_executable_exit": 65,
+    "invalid_pid_exit": 64,
+    "timebase": [
+      125,
+      3
+    ]
+  },
+  "gpu": {
+    "measured": false,
+    "reason": "powermetrics requires superuser; xctrace unavailable; WindowServer is shared",
+    "custom_continuous_render_loop_found": false
+  },
+  "source_sha256": {
+    "Sources/WindowsMacBridge/FeatureUIResourceCheck.swift": "67b4685d76beb85e0647761069ac3eed111eae856f8d611dc51a8cacb9654b6c",
+    "Sources/WindowsMacBridge/SettingsWindowFactory.swift": "d3bd9d80ab25df5b4a7f895962713194774df782ee2ce795a875a34825d9e875",
+    "Sources/WindowsMacBridge/GlassTheme.swift": "9cfbf551b0c7dd2c4bed820b88ad72dc55d830b55c21daae0133eaef0c6df458",
+    "Sources/WindowsMacBridge/GlassSettingsChrome.swift": "a977d50db84dc0898474d22e7b4fee643bd2d91d1d0bb33ded483ce534ff1b18",
+    "Sources/WindowsMacBridge/ScreenshotThumbnailPresenter.swift": "5366f8828d4b37a75f5e1a97f4292dc3aa44641bbdb4287764b6d49459c0cbfb",
+    "Tools/ResourceStudy/process-resource-snapshot.c": "515893f55090a1cd65e99c887633c21b449cdab3fcde5a541e518cda953b3b8e",
+    "Sources/WindowsMacBridge/AppMain.swift": "0fd7a2cdc3e52162d3aa2dbd3e354c6d6817ca8cff2ed4191f63218985bde51d"
+  },
+  "limits": [
+    "5 minute background observation, not a controlled physical-input workload or long-term leak proof",
+    "GUI fixture not full candidate app; no visible glass GPU profiling",
+    "Framework presence does not prove OCR models retained or running",
+    "OCR parent metrics exclude worker and system service allocations",
+    "RSS, footprint and separate-process peaks must not be added as interchangeable values"
+  ]
+}

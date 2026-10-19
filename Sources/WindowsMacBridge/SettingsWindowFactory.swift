@@ -15,4 +15,11 @@ import SwiftUI
         window.isReleasedWhenClosed = false
         return window
     }
+
+    static func releaseContent(of window: NSWindow) {
+        // Release both owners: an offscreen hosting controller still observes
+        // published values even after its view has been removed from the window.
+        window.contentViewController = nil
+        window.contentView = nil
+    }
 }
