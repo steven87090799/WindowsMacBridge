@@ -11,6 +11,7 @@ enum SettingsPage: String, CaseIterable {
     case profiles = "App 規則"
     case preview = "規則預覽"
     case remoteCalibration = "遠端校準"
+    case performance = "CPU 與記憶體"
     case diagnostics = "診斷"
 }
 
@@ -32,6 +33,7 @@ struct SettingsView: View {
                 case .profiles: profiles
                 case .preview: ShortcutPreviewView(controller: controller)
                 case .remoteCalibration: RemoteCalibrationView(controller: controller)
+                case .performance: PerformanceView()
                 case .diagnostics: diagnostics
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -263,7 +265,7 @@ struct SettingsView: View {
     private var inputSources: some View {
         Form {
             Section("唯音繁體／ABC") {
-                Text(controller.sourceStatus.summary).font(.headline)
+                InputSourceStatusLabel(status: controller.sourceStatus)
                 Toggle("啟用輸入法守護", isOn: Binding(get: { controller.sourceStatus.enabled }, set: { controller.inputSources.setEnabled($0) }))
                 explanation("預設關閉。開啟後維持唯音繁體；如需英文，請按此頁的 ABC 或使用本 App 的切換快捷鍵。守護只記住這兩種明確操作，系統選單或其他程式切換後會回到守護目標。唯音輸入法本體需另行安裝。")
                 LabeledContent("目前輸入法", value: controller.sourceStatus.currentName)
@@ -315,7 +317,6 @@ struct SettingsView: View {
                 LabeledContent("切換失敗", value: "\(statistics.failedSelections) 次")
                 LabeledContent("Secure Input 等待", value: "\(statistics.secureInputWaits) 次")
                 LabeledContent("最後成功切換", value: statistics.lastSuccessfulSelection?.formatted(date: .abbreviated, time: .standard) ?? "尚無")
-                LabeledContent("記憶體", value: controller.sourceMemoryUsage)
                 if statistics.previousStatisticsImported {
                     Text("已接續舊版唯音助手的統計資料").font(.caption).foregroundStyle(.secondary)
                 }
@@ -326,7 +327,7 @@ struct SettingsView: View {
                     }.joined(separator: "\n")).font(.caption).foregroundStyle(.secondary)
                 }
                 Button("重新整理統計") { controller.refreshSourceStatistics() }
-                explanation("統計會持久保存，唯音恢復時間最多保留 20 筆。記憶體只在開啟此頁或按重新整理時讀取；不記錄輸入文字。")
+                explanation("這些是輸入法切換次數，會持久保存；唯音恢復時間最多保留 20 筆，不記錄輸入文字。CPU 與記憶體請至左側專頁查看，只在該頁可見時取樣。")
             }
             Section("守護等待時間") {
                 Stepper("修正延遲：\(controller.sourceStatus.debounceMilliseconds) ms", value: Binding(get: { controller.sourceStatus.debounceMilliseconds }, set: { controller.inputSources.setDebounce($0) }), in: 200...1200, step: 50)

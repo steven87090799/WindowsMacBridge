@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import BridgeCore
 import BridgePlatform
+import InputSourceSupport
 
 /// Explicit, offscreen developer check with generated values only. Does not
 /// create a BridgeController, start input, request permissions or show windows.
@@ -51,21 +52,42 @@ import BridgePlatform
             try renderView(portrait, to: output.appendingPathComponent("screenshot-thumbnail-portrait.png"))
             for dark in [false, true] {
                 let mode = dark ? "dark" : "light"
+                let metrics = PerformanceReading(uptime: 12, processCPUSeconds: 0.404, cpuTicks: [120, 30, 150, 0],
+                    physicalMemory: 16 << 30, activeMemory: 5 << 30, wiredMemory: 2 << 30,
+                    compressedMemory: 1 << 30, processFootprint: 72 << 20)
+                let previous = PerformanceReading(uptime: 10, processCPUSeconds: 0.4, cpuTicks: [100, 20, 80, 0],
+                    physicalMemory: 16 << 30, activeMemory: 5 << 30, wiredMemory: 2 << 30,
+                    compressedMemory: 1 << 30, processFootprint: 72 << 20)
+                let performance = GlassSettingsChrome(selection: .constant(.performance), advanced: false,
+                    isOperating: true, status: "Generated fixture", version: "fixture") {
+                    PerformanceReadout(snapshot: PerformanceSnapshot(current: metrics, previous: previous))
+                }
+                try render(AnyView(performance), to: output.appendingPathComponent("performance-\(mode).png"),
+                           size: NSSize(width: 1040, height: 780), dark: dark)
+                var selected = InputSourceStatus()
+                selected.summary = "● 唯音繁體已選擇"; selected.selectionConfirmed = true
+                let input = GlassSettingsChrome(selection: .constant(.inputSources), advanced: false,
+                    isOperating: true, status: "Generated fixture", version: "fixture") {
+                    Form { Section("唯音繁體／ABC") { InputSourceStatusLabel(status: selected) } }
+                        .formStyle(.grouped).scrollContentBackground(.hidden)
+                }
+                try render(AnyView(input), to: output.appendingPathComponent("input-source-status-\(mode).png"),
+                           size: NSSize(width: 1040, height: 780), dark: dark)
                 let rules = GlassSettingsChrome(selection: .constant(.preview), advanced: true,
-                    isOperating: true, status: "Windows 快捷鍵已啟用", version: "0.6.0 (55)") {
+                    isOperating: true, status: "Windows 快捷鍵已啟用", version: AppBuildInfo.current.versionLabel) {
                     ShortcutPreviewView(settings: BridgeSettings(), applications: applications)
                 }
                 try render(AnyView(rules), to: output.appendingPathComponent("glass-settings-\(mode).png"),
                            size: NSSize(width: 1040, height: 780), dark: dark)
                 let remote = GlassSettingsChrome(selection: .constant(.remoteCalibration), advanced: false,
-                    isOperating: false, status: "請確認鍵盤權限", version: "0.6.0 (55)") {
+                    isOperating: false, status: "請確認鍵盤權限", version: AppBuildInfo.current.versionLabel) {
                     RemoteCalibrationView(sources: [source], status: calibration, canCalibrate: true, preferenceNotice: nil)
                 }
                 try render(AnyView(remote), to: output.appendingPathComponent("glass-calibration-\(mode).png"),
                            size: NSSize(width: 1040, height: 780), dark: dark)
             }
             let compact = GlassSettingsChrome(selection: .constant(.preview), advanced: false,
-                isOperating: true, status: "Windows 快捷鍵已啟用", version: "0.6.0 (55)") {
+                isOperating: true, status: "Windows 快捷鍵已啟用", version: AppBuildInfo.current.versionLabel) {
                 ShortcutPreviewView(settings: BridgeSettings(), applications: applications)
             }
             try render(AnyView(compact), to: output.appendingPathComponent("glass-settings-minimum.png"),
@@ -74,14 +96,14 @@ import BridgePlatform
                        size: NSSize(width: 1040, height: 780), highContrast: true)
             for dark in [false, true] {
                 let textCapture = GlassSettingsChrome(selection: .constant(.general), advanced: false,
-                    isOperating: true, status: "Windows 快捷鍵已啟用", version: "0.6.0 (55)") {
+                    isOperating: true, status: "Windows 快捷鍵已啟用", version: AppBuildInfo.current.versionLabel) {
                     Form { ScreenshotTextCaptureSection(status: screenshot, canCapture: false, featuresEnabled: true) }
                         .formStyle(.grouped).scrollContentBackground(.hidden)
                 }
                 try render(AnyView(textCapture), to: output.appendingPathComponent(dark ? "glass-text-dark.png" : "glass-text-light.png"),
                            size: NSSize(width: 1040, height: 780), dark: dark)
             }
-            print("Rendered 16 generated feature checks; no controller, capture, clipboard or input services started.")
+            print("Rendered 20 generated feature checks; no controller, capture, clipboard or input services started.")
         } catch { print("Feature layout verification failed: \(error)"); exit(1) }
         return true
     }

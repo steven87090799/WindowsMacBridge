@@ -117,6 +117,11 @@ final class GuardController {
         return correctionCooldownUntil > Date()
     }
 
+    func isSelectionConfirmed(currentIdentifier: String?) -> Bool {
+        !isEnvironmentSuspended && isEnabled && !isDetectionPaused && !isCorrectionCoolingDown &&
+            targetSource != nil && !sourceDiffersFromDesired(currentIdentifier)
+    }
+
     var statusText: String {
         if isEnvironmentSuspended { return "◌ 系統待機中" }
         if !isEnabled { return "○ 輸入法守護已關閉" }

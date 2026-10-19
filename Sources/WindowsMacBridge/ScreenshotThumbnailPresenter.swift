@@ -113,7 +113,7 @@ import BridgePlatform
     init(image: NSImage, target: AnyObject?, openAction: Selector?, closeAction: Selector?,
          onHover: @escaping (Bool) -> Void = { _ in }) {
         self.onHover = onHover
-        super.init(frame: NSRect(x: 0, y: 0, width: 320, height: 248))
+        super.init(frame: NSRect(x: 0, y: 0, width: 320, height: 220))
         let content = NSView(frame: bounds)
         content.autoresizingMask = [.width, .height]
         // Shared native glass/frosted material; screenshot delivery stays unchanged.
@@ -121,7 +121,7 @@ import BridgePlatform
 
         let imageButton = NSButton(image: image, target: target, action: openAction)
         imageButton.isBordered = false; imageButton.imageScaling = .scaleProportionallyUpOrDown
-        imageButton.frame = NSRect(x: 12, y: 64, width: 296, height: 172)
+        imageButton.frame = NSRect(x: 12, y: 36, width: 296, height: 172)
         imageButton.wantsLayer = true
         imageButton.layer?.cornerRadius = 12; imageButton.layer?.masksToBounds = true
         imageButton.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.08).cgColor
@@ -130,21 +130,21 @@ import BridgePlatform
 
         let symbol = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil) ?? NSImage()
         let success = NSImageView(image: symbol)
-        success.frame = NSRect(x: 16, y: 23, width: 22, height: 22)
+        success.frame = NSRect(x: 14, y: 12, width: 13, height: 13)
         success.contentTintColor = .systemGreen; success.setAccessibilityElement(false)
         content.addSubview(success)
-        let title = NSTextField(labelWithString: "截圖已複製")
-        title.font = .systemFont(ofSize: 13, weight: .semibold)
-        title.textColor = .labelColor; title.frame = NSRect(x: 46, y: 32, width: 218, height: 18)
+        let title = NSTextField(labelWithString: "已複製")
+        title.font = .systemFont(ofSize: 11, weight: .medium)
+        title.textColor = .labelColor; title.frame = NSRect(x: 33, y: 11, width: 46, height: 15)
         content.addSubview(title)
-        let hint = NSTextField(labelWithString: "可直接貼上 · 點圖放大")
-        hint.font = .systemFont(ofSize: 11); hint.textColor = .secondaryLabelColor
-        hint.frame = NSRect(x: 46, y: 15, width: 218, height: 16)
+        let hint = NSTextField(labelWithString: "可貼上 · 點圖放大")
+        hint.font = .systemFont(ofSize: 10); hint.textColor = .secondaryLabelColor
+        hint.frame = NSRect(x: 86, y: 11, width: 178, height: 15)
         content.addSubview(hint)
         let close = NSButton(image: NSImage(systemSymbolName: "xmark", accessibilityDescription: "關閉截圖縮圖") ?? NSImage(),
             target: target, action: closeAction)
         close.isBordered = false; close.contentTintColor = .secondaryLabelColor
-        close.frame = NSRect(x: 276, y: 20, width: 28, height: 28)
+        close.frame = NSRect(x: 278, y: 5, width: 26, height: 26)
         close.setAccessibilityLabel("關閉截圖縮圖"); close.toolTip = "關閉預覽，圖片仍在剪貼簿"
         content.addSubview(close)
     }

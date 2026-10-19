@@ -11,6 +11,7 @@ extension SettingsPage {
         case .profiles: "app.badge"
         case .preview: "keyboard"
         case .remoteCalibration: "desktopcomputer.and.arrow.down"
+        case .performance: "gauge.with.dots.needle.33percent"
         case .diagnostics: "waveform.path.ecg"
         }
     }
@@ -23,6 +24,7 @@ extension SettingsPage {
         case .profiles: "為不同 App 選擇適合的按鍵規則"
         case .preview: "啟用之前，先確認每個組合的輸出"
         case .remoteCalibration: "辨識其他電腦傳入這台 Mac 的按鍵"
+        case .performance: "查看目前用量；離開此頁即停止取樣"
         case .diagnostics: "查看引擎狀態與版本資訊"
         }
     }
@@ -39,6 +41,7 @@ struct GlassSettingsChrome<Content: View>: View {
     var onHelp: () -> Void = {}
     @ViewBuilder var content: () -> Content
     @NavigationState private var columnVisibility = NavigationSplitViewVisibility.all
+    @FocusState private var sidebarFocused: Bool
     @Environment(\.controlActiveState) private var controlActiveState
 
     var body: some View {
@@ -62,6 +65,9 @@ struct GlassSettingsChrome<Content: View>: View {
                 }
             }
             .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .focusable()
+            .focused($sidebarFocused)
             .navigationSplitViewColumnWidth(min: 184, ideal: 214, max: 260)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 VStack(alignment: .leading, spacing: 7) {
@@ -76,6 +82,8 @@ struct GlassSettingsChrome<Content: View>: View {
                 }
                 .padding(16)
             }
+            .bridgeNavigationGlass()
+            .padding(.horizontal, 8).padding(.bottom, 8)
         } detail: {
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -93,22 +101,37 @@ struct GlassSettingsChrome<Content: View>: View {
         }
         .navigationSplitViewStyle(.balanced)
         .navigationTitle("WindowsMacBridge")
+        // Hosting an NSWindow does not consistently install the automatic
+        // sidebar item. Keep one standard toolbar control with no glass bubble.
         .toolbar(removing: .sidebarToggle)
+        .defaultFocus($sidebarFocused, true)
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
-                } label: {
-                    Label("顯示或隱藏側邊欄", systemImage: "sidebar.left")
-                }
-                .help("顯示或隱藏側邊欄")
-                .keyboardShortcut("s", modifiers: [.command, .control])
-            }
+            sidebarToggle
             ToolbarItem(placement: .primaryAction) {
                 Button(action: onHelp) { Label("使用說明", systemImage: "questionmark.circle") }
                     .help("開啟使用說明")
             }
         }
         .frame(minWidth: 730, minHeight: 600)
+    }
+
+    @ToolbarContentBuilder private var sidebarToggle: some ToolbarContent {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            ToolbarItem(placement: .navigation) { sidebarButton }
+                .sharedBackgroundVisibility(.hidden)
+        } else { ToolbarItem(placement: .navigation) { sidebarButton } }
+        #else
+        ToolbarItem(placement: .navigation) { sidebarButton }
+        #endif
+    }
+
+    private var sidebarButton: some View {
+        Button {
+            columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+        } label: { Label("顯示或隱藏側邊欄", systemImage: "sidebar.left") }
+            .buttonStyle(.borderless)
+            .help("顯示或隱藏側邊欄")
+            .keyboardShortcut("s", modifiers: [.command, .control])
     }
 }
