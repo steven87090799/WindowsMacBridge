@@ -44,19 +44,8 @@ struct SettingsNavigation: View {
         VStack(spacing: 4) {
             ForEach(pages, id: \.self) { page in
                 Button { selection = page } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: page.symbol)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(opaque && selection == page ? Color(nsColor: .selectedControlTextColor) : page.navigationColor)
-                            .frame(width: 22).accessibilityHidden(true)
-                        Text(page.rawValue)
-                            .fontWeight(selection == page ? .semibold : .regular)
-                            .foregroundStyle(opaque && selection == page ? Color(nsColor: .selectedControlTextColor) : .primary)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 12).frame(minHeight: 40)
-                    .contentShape(Capsule())
-                    .background { if selection == page { selectionLens } }
+                    if selection == page { selectedLabel(page) }
+                    else { rowLabel(page) }
                 }
                 .buttonStyle(.plain)
                 .focusEffectDisabled()
@@ -75,16 +64,33 @@ struct SettingsNavigation: View {
         .animation(selectionAnimation, value: selection)
     }
 
-    @ViewBuilder private var selectionLens: some View {
+    private func rowLabel(_ page: SettingsPage) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: page.symbol)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(opaque && selection == page ? Color(nsColor: .selectedControlTextColor) : page.navigationColor)
+                .frame(width: 22).accessibilityHidden(true)
+            Text(page.rawValue)
+                .fontWeight(selection == page ? .semibold : .regular)
+                .foregroundStyle(opaque && selection == page ? Color(nsColor: .selectedControlTextColor) : .primary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12).frame(minHeight: 40)
+        .contentShape(Capsule())
+    }
+
+    @ViewBuilder private func selectedLabel(_ page: SettingsPage) -> some View {
         #if compiler(>=6.2)
         if #available(macOS 26.0, *), !opaque {
-            Color.clear
+            // The label must be the glass content. A separate Color.clear
+            // background lens can sample and blur the sibling label on macOS.
+            rowLabel(page)
                 .glassEffect(.regular.interactive(), in: .capsule)
                 .glassEffectID("settings-selection", in: glassNamespace)
                 .glassEffectTransition(reduceMotion ? .identity : .matchedGeometry)
-        } else { fallbackSelection }
+        } else { rowLabel(page).background { fallbackSelection } }
         #else
-        fallbackSelection
+        rowLabel(page).background { fallbackSelection }
         #endif
     }
 
