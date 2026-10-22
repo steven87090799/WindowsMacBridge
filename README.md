@@ -1,6 +1,6 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 55）開發版**，採用原生 macOS 側邊欄、工具列及系統玻璃外觀；包含 Terminal／IDE 完整 Windows 相容規則、放大的自製玻璃截圖預覽、按需啟動的獨立 OCR 程序，以及規則預覽與遠端校準介面；保留先前 HID／輸入法修復（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與本機原始碼是不同階段。
+Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 58）開發版**，設定側邊欄保留原生液態玻璃切換動畫，選取文字與圖示作為玻璃內容呈現，避免被背景玻璃模糊；包含 Terminal／IDE 完整 Windows 相容規則、放大的自製玻璃截圖預覽、按需啟動的獨立 OCR 程序，以及規則預覽與遠端校準介面；保留先前 HID／輸入法修復（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與本機原始碼是不同階段。
 
 ## 一般模式與進階模式已分開
 
