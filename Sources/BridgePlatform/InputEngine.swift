@@ -84,7 +84,8 @@ public struct EngineStatus: Equatable, Sendable {
     public init() {}
 }
 
-/// Cross-thread mailbox. Input callback only uses try(), never waits for the UI lock.
+/// Cross-thread mailbox. The input callback only uses try(), never waits for the UI lock.
+/// The run-loop maintenance tick may wait briefly so a coalesced wake cannot lose a configuration update.
 private final class EngineMailbox: @unchecked Sendable {
     let lock = NSLock()
     var configuration = EngineConfiguration()
@@ -244,7 +245,11 @@ public final class InputEngine: @unchecked Sendable {
     }
 
     private func readConfiguration() {
-        guard mailbox.lock.try() else { return }
+        // update() coalesces run-loop wakes. Skipping this read on lock contention
+        // can leave the remote-source routing/semantics stale until another
+        // unrelated wake (the observed VNC workaround was toggling Windows Mode).
+        // This runs outside the keyboard callback; the mailbox copy is bounded.
+        mailbox.lock.lock()
         let changed = revision != mailbox.revision
         let deviceChanged = changed && configuration.deviceInputs != mailbox.configuration.deviceInputs
         let deliveryChanged = changed && configuration.destinationSemantics != mailbox.configuration.destinationSemantics

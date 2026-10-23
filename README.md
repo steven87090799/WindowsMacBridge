@@ -1,6 +1,11 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。正式版本 **1.0.0（build 63）**，修正通用控制的重複 Ctrl、雙側修飾鍵與遠端來源處理，並改善診斷記憶體及鍵盤事件耗時。Ctrl+C／X／V／A 共用本機剪貼簿規則，涵蓋系統浮動視窗、Terminal、輸入法與本機 App Profile；截圖縮圖點擊後直接置中並啟用 App 內的圖片預覽視窗。設定側邊欄保留清晰文字與原生液態玻璃切換動畫；包含規則預覽與遠端校準介面（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。
+Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。正式版本 **1.0.1（build 64）**，讓 Apple 螢幕共享的原始 Ctrl 快捷鍵自動套用 Windows 規則，並修正輸入設定更新可能延遲生效的問題。Ctrl+C／X／V／A 共用本機剪貼簿規則，涵蓋系統浮動視窗、Terminal、輸入法與本機 App Profile；截圖縮圖點擊後直接置中並啟用 App 內的圖片預覽視窗。設定側邊欄保留清晰文字與原生液態玻璃切換動畫；包含規則預覽與遠端校準介面（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。
+
+## v1.0.1 正式版（build 64）
+
+- [Apple 螢幕共享／VNC 問題、修正與雙向驗證](Docs/ScreenSharingVNC-2026-10-24.md)
+- [更新與安裝說明](Docs/ReleaseNotes-1.0.1.md)／[下載 v1.0.1](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.1)
 
 ## v1.0.0 正式版（build 63）
 

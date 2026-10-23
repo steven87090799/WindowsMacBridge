@@ -40,6 +40,13 @@ public enum RemoteAdapterCatalog {
         if p.signatureValid && p.signingID == "com.apple.universalcontrol" && p.path.hasPrefix("/System/Library/") {
             return .init(confidence: .known, kind: .universalControl)
         }
+        // The receiving Mac's Screen Sharing host injects the VNC keyboard
+        // events. Its signed identity identifies the transport, not whether
+        // the client has already converted a particular shortcut to Command.
+        if p.signatureValid && p.signingID == "com.apple.screensharing.agent" &&
+            p.path.hasPrefix("/System/Library/CoreServices/RemoteManagement/ScreensharingAgent.bundle/") {
+            return .init(transport: .vnc, confidence: .known)
+        }
         // Chromium's mac input injector sets its OWN modifier flags on each CGEvent.
         // IDs and signing team were checked against the installed Google host, not Chrome.
         let googleHosts = ["com.google.chromeremotedesktop.me2me-host",
@@ -64,7 +71,7 @@ public enum RemoteAdapterCatalog {
     private static let discoveryMarkers = [
         "ChromeRemoteDesktopHost.app/", "UniversalControl.app/", "remoting_me2me_host", "AnyDesk.app/",
         "TeamViewer", "RustDesk.app/", "Jump Desktop", "Microsoft Remote Desktop", "Windows App.app/",
-        "Parsec.app/", "Splashtop", "NoMachine", "VNC"]
+        "Parsec.app/", "Splashtop", "NoMachine", "VNC", "ScreensharingAgent.bundle/"]
     /// Runs for every process path in a discovery scan; executable paths are
     /// not localized text, so a plain case-insensitive match avoids ICU per path.
     static func discoveryCandidate(_ path: String) -> Bool {

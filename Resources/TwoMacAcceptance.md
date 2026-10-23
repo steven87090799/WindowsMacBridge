@@ -1,4 +1,4 @@
-# Mac mini 與 MacBook：雙向通用控制驗收
+# Mac mini 與 MacBook：雙向通用控制與螢幕共享驗收
 
 目前沒有第二臺 Mac 的實測證據，以下由使用者操作；程式測試／CI 不替代這些格子。
 
@@ -12,3 +12,10 @@
 8. Win+Shift+S／PrintScreen、⌘⇧3／⌘⇧4 截圖後直接 Ctrl+V；取消不改剪貼簿，Pause 後舊框選不得寫入新 session。
 
 每格記錄兩臺 macOS／App 版本、方向、鍵盤、來源／目的 App、成功與失敗。一般模式 EventTap 的來源／目的 metadata 可能被 UC 隱藏；若某一格失敗，保留具體組合再評估進階模式，不把整體標成「100% 支援」。進階需另外測硬件接管與釋放，不要在第二臺安裝舊版 helper。
+
+## Apple 螢幕共享／VNC（與通用控制分開測）
+
+1. 兩台各安裝同版 Bridge 並各自核准輔助功能與輸入監控；MacBook 開啟「MacBook 鍵盤模式」，一般 Mac 保持關閉。接收端「Windows 模式總開關」保持開啟，遠端來源保留「自動」。
+2. MacBook 控制一般 Mac：在接收端 TextEdit 選取新文字，用 MacBook Fn+C、Fn+V、Fn+Z 各測一次。接收端遠端校準頁應出現 Apple ScreensharingAgent。
+3. 一般 Mac 控制 MacBook：在接收端 TextEdit 選取新文字，用一般 Mac 鍵盤 Ctrl+C、Ctrl+V、Ctrl+Z 各測一次。MacBook 的 Fn／Ctrl 交換不應改變傳入的遠端按鍵。
+4. 兩方向都重新連線再測；記錄第一下與第二下是否一致。未知來源首次按鍵可能原樣通過，不能把單向成功視為雙向驗收。若持續失敗，檢查接收端來源、權限、Secure Input 與目前 App 規則，再決定是否校準；不要以共享剪貼簿開關代替同一台 Mac 上的快捷鍵測試。
