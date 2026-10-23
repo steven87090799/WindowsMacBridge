@@ -5,7 +5,7 @@
 - MacBook 用 macOS「螢幕共享」控制這台 Mac；兩台有 WindowsMacBridge。MacBook 的 Fn／左 Ctrl 交換已在本機啟用，接收端是 1.0.0 build 63。遠端 Mac 的 TextEdit 原生 ⌘C／⌘V 成功，因此同一台 Mac 的剪貼簿可用；這不驗證遠端 Fn 快捷鍵。
 - 限定 C 鍵與修飾鍵 metadata 的臨時探針，在接收端看到 `com.apple.screensharing.agent` 送入 Control+C（來源 PID 46853、接收 Codex PID 19509）。Bridge 處理後仍是 Control+C。探針沒有讀取文字或剪貼簿，測完已停止。
 - 接收端「遠端校準」起初沒有 Apple agent。將「Windows 模式總開關」關後開，來源開始顯示「已觀察到此來源的輸入」，Fn+C 變得可用。來源設為「原始 Windows 按鍵」但未重啟時，Fn+C／V 失敗；重啟輸入模式後，第一次未成功，後續 Fn+C、Fn+V、Fn+Z 在 TextEdit 實測成功。
-- 這只驗證 MacBook → 這台 Mac 的一條 VNC 路徑。反向 Mac → MacBook 尚未實機連線驗收。
+- 以上是 1.0.0 build 63 當時的單向觀察；1.0.1 build 64 的反向驗收另記於下方。
 
 ## 程式中的問題與原因界線
 
@@ -20,6 +20,12 @@
 - 輸入 run-loop 改為必定讀取短暫鎖住的設定 mailbox，避免合併喚醒時漏掉 revision。session 恢復後，路由啟用時再掃描一次來源。
 
 ## 雙向實機驗收與限制
+
+### 1.0.1 build 64 現場結果（2026-10-24）
+
+- 這台 Mac 以 Apple「螢幕共享」控制 MacBook，使用這台 Mac 的外接鍵盤，在 MacBook 的文字編輯實測 Ctrl+C、Ctrl+V、Ctrl+Z 成功。Fn+C／Fn+V 曾失敗，原因是當時給錯測試按鍵；這台 Mac 沒有開啟 MacBook 內建鍵盤的 Fn／Ctrl 交換。
+- 這台 Mac 的外接鍵盤經通用控制送到 MacBook，文字編輯 Ctrl+C／Ctrl+V 成功。MacBook 內建鍵盤在本機文字編輯 Fn+C／Fn+V 成功；再經通用控制送到這台 Mac，文字編輯 Fn+C／Fn+V 成功。使用者說明測試文件中的額外字母 `v` 是自己按到的，不能當成首次快捷鍵失效證據。
+- 這台 Mac 已核對安裝 1.0.1 build 64；MacBook 的 Bridge 介面此前也顯示 1.0.1 build 64。這些是使用者實體鍵盤回報與這台 Mac 的文字編輯內容觀察；未重新連線測第一下、未移除 Karabiner 後複測，也未驗收所有快捷鍵／App。Karabiner 現存不妨礙上述路徑，不代表它在所有情境都沒有影響。
 
 兩台各自安裝 **相同新版**，各自核准輔助功能與輸入監控；MacBook 開啟內建鍵盤模式，一般 Mac 保持關閉。每個接收端的 Windows 模式保持開啟、遠端語意用「自動」。依 App 內 [TwoMacAcceptance.md](../Resources/TwoMacAcceptance.md) 先後做 MacBook → Mac 和 Mac → MacBook 的 TextEdit Fn／Ctrl+C、V、Z；重新連線後記錄第一下與第二下。純測試／CI、已發佈安裝包、單向成功都不能代替反向實機驗收。
 

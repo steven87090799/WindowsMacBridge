@@ -1,6 +1,6 @@
 # Mac mini 與 MacBook：雙向通用控制與螢幕共享驗收
 
-目前沒有第二臺 Mac 的實測證據，以下由使用者操作；程式測試／CI 不替代這些格子。
+2026-10-24 已有兩台 Mac 的部分實測證據，見下方「1.0.1 現場結果」。其餘步驟仍須由使用者在實體裝置操作；程式測試／CI 不替代這些格子。
 
 1. 兩台都將同版 App 拖到應用程式，使用一般模式，核准各自輔助功能。
 2. Mac mini 的外接鍵盤保持固定，MacBook 使用內建鍵盤。僅 MacBook 開啟「MacBook 鍵盤模式」，先確認 Fn+C／V 等於 Ctrl+C／V，原左 Ctrl 可作 Fn。Mac mini 不開交換。
@@ -12,6 +12,17 @@
 8. Win+Shift+S／PrintScreen、⌘⇧3／⌘⇧4 截圖後直接 Ctrl+V；取消不改剪貼簿，Pause 後舊框選不得寫入新 session。
 
 每格記錄兩臺 macOS／App 版本、方向、鍵盤、來源／目的 App、成功與失敗。一般模式 EventTap 的來源／目的 metadata 可能被 UC 隱藏；若某一格失敗，保留具體組合再評估進階模式，不把整體標成「100% 支援」。進階需另外測硬件接管與釋放，不要在第二臺安裝舊版 helper。
+
+## 1.0.1 現場結果（2026-10-24）
+
+| 路徑 | 實體鍵盤與目的端 | 結果 |
+| --- | --- | --- |
+| Mac → MacBook 螢幕共享 | Mac 外接 Ctrl+C／V／Z → MacBook 文字編輯 | 使用者回報三者成功 |
+| Mac → MacBook 通用控制 | Mac 外接 Ctrl+C／V → MacBook 文字編輯 | 使用者回報成功 |
+| MacBook 本機 | 內建 Fn+C／V → MacBook 文字編輯 | 使用者回報成功；現有 Karabiner 未阻擋這次測試 |
+| MacBook → Mac 通用控制 | MacBook 內建 Fn+C／V → Mac 文字編輯 | 使用者回報成功；Mac 的測試文件確實出現兩次新文字 |
+
+Mac 文件末尾的額外 `v` 由使用者手動輸入，不能判定為第一次 Fn+V 失效。MacBook → Mac 螢幕共享的先前實測另見 [ScreenSharingVNC-2026-10-24.md](../Docs/ScreenSharingVNC-2026-10-24.md)。尚未完成重新連線後第一下、移除 Karabiner 後、更多快捷鍵與 App 的驗收。
 
 ## Apple 螢幕共享／VNC（與通用控制分開測）
 
