@@ -5,6 +5,59 @@ import BridgeCore
 @testable import BridgePlatform
 
 struct ModifierInputTests {
+    @Test func groupNeutralDoesNotRepairAnAlreadyUntrustedPhysicalState() {
+        var state = ModifierStateMachine()
+        state.observe(.leftControl, down: true, aggregate: .control)
+        state.invalidate()
+        state.observe(.rightControl, down: false, aggregate: .shift)
+        #expect(!state.synchronized && state.aggregate.isEmpty)
+    }
+
+    @Test func independentEdgesPreserveEverySideAndIgnoreOwnOutput() {
+        for side in ModifierSide.allCases {
+            var processor = KeyboardEventProcessor()
+            processor.reconcileNeutralHardware()
+            _ = processor.processIndependentSource(.init(.flagsChanged, keyCode: 0,
+                modifiers: side.group, modifierSide: side, modifierDown: true))
+            #expect(processor.modifiers.isDown(side) && !processor.modifiers.isDown(side.peer))
+            _ = processor.processIndependentSource(.init(.flagsChanged, keyCode: 0,
+                isOwnEvent: true, modifierSide: side, modifierDown: false))
+            #expect(processor.modifiers.isDown(side))
+            _ = processor.processIndependentSource(.init(.flagsChanged, keyCode: 0,
+                modifierSide: side, modifierDown: false))
+            #expect(processor.modifiers.synchronized && processor.modifiers.aggregate.isEmpty)
+        }
+    }
+
+    @Test func aggregateOnlyPeerReleaseClearsTheGroupWhileAnotherModifierRemainsHeld() {
+        for first: ModifierSide in [.leftControl, .rightControl] {
+            var state = ModifierStateMachine()
+            state.observe(.leftShift, down: true, aggregate: .shift)
+            for side in [first, first.peer, first] {
+                state.observe(side, down: InputEngine.modifierDown(side, flags: [.maskControl, .maskShift]),
+                    aggregate: [.control, .shift])
+            }
+            state.observe(first.peer, down: false, aggregate: .shift)
+            #expect(state.synchronized)
+            #expect(state.aggregate == .shift)
+            #expect(!state.isDown(first) && !state.isDown(first.peer))
+        }
+    }
+
+    @Test func independentDestinationDoesNotInventLeftOptionBeforeRightOptionShortcut() {
+        var processor = KeyboardEventProcessor()
+        processor.configure(context: .init(processID: 1, bundleID: "editor", mode: .macOS),
+            enabled: true, layoutSupported: true)
+        processor.reconcileNeutralHardware()
+        for _ in 0..<2 {
+            _ = processor.processIndependentSource(.init(.flagsChanged, keyCode: 61, modifiers: .option,
+                modifierSide: .rightOption, modifierDown: true))
+        }
+        #expect(processor.modifiers.isDown(.rightOption))
+        #expect(!processor.modifiers.isDown(.leftOption))
+        #expect(processor.processIndependentSource(.init(.down, keyCode: 35, modifiers: .option)) == .togglePassThrough)
+    }
+
     @Test func everyNativeModifierSideUsesTheSDKDeviceBits() {
         let sides: [(ModifierSide, CGEventFlags, Int32, Int32)] = [
             (.leftControl, .maskControl, NX_DEVICELCTLKEYMASK, NX_DEVICERCTLKEYMASK),

@@ -28,9 +28,31 @@ jobs:
       - name: Build App and package complete drag-install DMG without installation
         run: |
           bash scripts/build-app.sh
-          export BRIDGE_RELEASE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)-preview.1"
+          export BRIDGE_RELEASE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
           bash scripts/package-single-app.sh
           bash scripts/package-app-dmg.sh
+      - name: Verify downloadable packages and record their exact source
+        run: |
+          (cd build/download && shasum -a 256 -c ./*.sha256)
+          bridge_check="$RUNNER_TEMP/complete-package-check"
+          ditto -x -k build/download/*-app-macos-arm64.zip "$bridge_check"
+          codesign --verify --deep --strict "$bridge_check/WindowsMacBridge.app"
+          "$bridge_check/WindowsMacBridge.app/Contents/MacOS/WindowsMacBridge" --self-check
+          python3 - "$GITHUB_SHA" "$bridge_check/WindowsMacBridge.app" <<'PY'
+          import hashlib, json, plistlib, sys
+          from pathlib import Path
+          app = Path(sys.argv[2])
+          info = plistlib.loads((app/'Contents/Info.plist').read_bytes())
+          if info.get('WMBGitRevision') != sys.argv[1] or info.get('WMBSourceState') != 'clean':
+              raise SystemExit('Package must contain the exact clean checkout revision')
+          files = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                   for p in Path('build/download').iterdir() if p.suffix in ('.zip', '.dmg')}
+          report = {'commit': sys.argv[1], 'source_state': info['WMBSourceState'],
+                    'version': info['CFBundleShortVersionString'], 'build': info['CFBundleVersion'],
+                    'architecture': 'arm64', 'minimum_macos': info['LSMinimumSystemVersion'],
+                    'signing': 'ad-hoc', 'notarized': False, 'sha256': files}
+          Path('build/download/WindowsMacBridge-build-info.json').write_text(json.dumps(report, indent=2) + '\n')
+          PY
       - name: Verify native glass layouts and UI release on macOS 27
         run: |
           bridge_app="$(cat build/APP_PATH.txt)"
@@ -38,12 +60,13 @@ jobs:
           "$bridge_app/Contents/MacOS/WindowsMacBridge" --ui-resource-check "$RUNNER_TEMP/native-glass-resources.json"
       - uses: actions/upload-artifact@v4
         with:
-          name: WindowsMacBridge-HID-installer-development
+          name: WindowsMacBridge-complete-app
           path: |
             build/download/*.zip
             build/download/*.zip.sha256
             build/download/*.dmg
             build/download/*.dmg.sha256
+            build/download/*-build-info.json
       - uses: actions/upload-artifact@v4
         with:
           name: WindowsMacBridge-native-glass-feature-layouts

@@ -5,6 +5,25 @@ import IOKit.hidsystem
 import BridgeCore
 import ApplicationServices
 
+final class NativeKeyboardObservationContext: @unchecked Sendable {
+    weak var owner: NativeMacBookKeyboardBackend?
+    init(_ owner: NativeMacBookKeyboardBackend) { self.owner = owner }
+}
+
+/// Final cleanup may be transferred to the main queue. The retained context
+/// keeps queued native callbacks safe after the backend's final release.
+private struct NativeKeyboardObservation: @unchecked Sendable {
+    let port: IONotificationPortRef
+    let context: NativeKeyboardObservationContext
+    var iterators: [io_iterator_t] = []
+    func close() {
+        context.owner = nil
+        IONotificationPortSetDispatchQueue(port, nil)
+        IONotificationPortDestroy(port)
+        for iterator in iterators { IOObjectRelease(iterator) }
+    }
+}
+
 /// Apple TN2450 service properties. The client cannot receive a keyboard event stream.
 @MainActor public final class NativeMacBookKeyboardBackend: MacBookKeyboardMappingBackend {
     public let portable: Bool
@@ -16,12 +35,17 @@ import ApplicationServices
     }
     private let client: IOHIDEventSystemClient
     private var handles: [UInt64: IOHIDServiceClient] = [:]
-    private var port: IONotificationPortRef?
-    private var iterators: [io_iterator_t] = []
+    private var observation: NativeKeyboardObservation?
+    var observationContext: NativeKeyboardObservationContext? { observation?.context }
     private var change: (@MainActor () -> Void)?
     private var queued = false
     private static let sourceKey = "HIDKeyboardModifierMappingSrc"
     private static let destinationKey = "HIDKeyboardModifierMappingDst"
+    deinit {
+        guard let observation else { return }
+        if Thread.isMainThread { observation.close() }
+        else { DispatchQueue.main.async { observation.close() } }
+    }
     public init() {
         client = IOHIDEventSystemClientCreateSimpleClient(kCFAllocatorDefault)
         let battery = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
@@ -115,7 +139,9 @@ import ApplicationServices
     public func observeChanges(_ action: @escaping @MainActor () -> Void) -> Bool {
         stopObserving()
         guard let created = IONotificationPortCreate(kIOMainPortDefault) else { return false }
-        port = created; change = action
+        let context = NativeKeyboardObservationContext(self)
+        observation = NativeKeyboardObservation(port: created, context: context)
+        change = action
         IONotificationPortSetDispatchQueue(created, .main)
         for notification in [kIOFirstMatchNotification, kIOTerminatedNotification] {
             // Kernel built-in services only; never Universal Control's virtual services.
@@ -133,11 +159,14 @@ import ApplicationServices
                 while case let service = IOIteratorNext(iterator), service != 0 { IOObjectRelease(service) }
                 guard let pointer else { return }
                 MainActor.assumeIsolated {
-                    Unmanaged<NativeMacBookKeyboardBackend>.fromOpaque(pointer).takeUnretainedValue().scheduleChange()
+                    Unmanaged<NativeKeyboardObservationContext>.fromOpaque(pointer).takeUnretainedValue().owner?.scheduleChange()
                 }
-            }, Unmanaged.passUnretained(self).toOpaque(), &iterator)
-            guard result == KERN_SUCCESS else { stopObserving(); return false }
-            iterators.append(iterator)
+            }, Unmanaged.passUnretained(context).toOpaque(), &iterator)
+            guard result == KERN_SUCCESS else {
+                if iterator != 0 { IOObjectRelease(iterator) }
+                stopObserving(); return false
+            }
+            observation?.iterators.append(iterator)
             while case let service = IOIteratorNext(iterator), service != 0 { IOObjectRelease(service) }
         }
         return true
@@ -152,10 +181,7 @@ import ApplicationServices
     }
     public func stopObserving() {
         change = nil
-        if let port { IONotificationPortSetDispatchQueue(port, nil); IONotificationPortDestroy(port) }
-        port = nil
-        for iterator in iterators { IOObjectRelease(iterator) }
-        iterators.removeAll()
+        observation?.close(); observation = nil
     }
     public func diagnosticReport() -> String {
         guard let all = services() else { return "Native Fn/Control: keyboard service inventory unavailable; no mapping started." }

@@ -29,7 +29,7 @@ if [ "$task_isolate_memory" == 0 ]; then
     "${task_test[@]}" "$@"
     exit 0
 fi
-task_memory_test='BridgePlatformTests.ScreenshotBoundedReadTests/repeatedPreparationDoesNotGrowMemoryWithCaptureCount'
+task_memory_test='BridgePlatformTests\.(ScreenshotBoundedReadTests/repeatedPreparationDoesNotGrowMemoryWithCaptureCount|InputDiagnosticsTests/repeatedTraceSnapshotsKeepMemoryBounded)'
 "${task_test[@]}" "$@" --skip "$task_memory_test"
 task_memory_args=()
 task_worker_value=0

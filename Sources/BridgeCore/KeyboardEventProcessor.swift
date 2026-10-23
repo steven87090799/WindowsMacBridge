@@ -126,19 +126,37 @@ public struct KeyboardEventProcessor: Sendable {
 
     /// Called outside the callback after a HID state probe finds every supported key released.
     public mutating func reconcileNeutralHardware() {
-        for i in presses.indices { presses[i] = nil }
+        if pressCount > 0 { for i in presses.indices { presses[i] = nil } }
         pressCount = 0
         modifiers.reset(); awaitingNeutral = false
     }
 
     public mutating func reconcileIndependentSourceFlags(_ value: Modifiers) {
         modifiers.synchronizeAggregate(value.subtracting(.fn))
+        suppressRepeats(after: value)
+        if value.isEmpty && pressCount == 0 { awaitingNeutral = false }
+    }
+
+    private mutating func suppressRepeats(after value: Modifiers) {
+        // Modifier edges vastly outnumber held translated keys. Avoid scanning
+        // 128 empty press slots on every edge and independent-source key down.
+        guard pressCount > 0 else { return }
         for i in presses.indices {
             if let rule = presses[i]?.rule, !value.isSuperset(of: rule.input.modifiers) {
                 presses[i]?.repeatSuppressed = true
             }
         }
-        if value.isEmpty && pressCount == 0 { awaitingNeutral = false }
+    }
+
+    /// A transport whose flags describe its own state, including its modifier edges.
+    public mutating func processIndependentSource(_ event: KeyboardEvent) -> EventDecision {
+        guard !event.isOwnEvent else { return .passThrough }
+        // Observe a real side before filling missing groups from aggregate flags;
+        // otherwise a first Right Option down fabricates an extra Left Option.
+        if event.phase != .flagsChanged { reconcileIndependentSourceFlags(event.modifiers) }
+        let decision = process(event)
+        if event.phase == .flagsChanged { reconcileIndependentSourceFlags(event.modifiers) }
+        return decision
     }
 
     public mutating func process(_ event: KeyboardEvent) -> EventDecision {
@@ -150,12 +168,7 @@ public struct KeyboardEventProcessor: Sendable {
             }
             // End repeats as soon as any trigger modifier is released. A later modifier
             // press must not revive the held shortcut; retain its translated key-up pair.
-            for index in presses.indices {
-                if let rule = presses[index]?.rule,
-                   !event.modifiers.isSuperset(of: rule.input.modifiers) {
-                    presses[index]?.repeatSuppressed = true
-                }
-            }
+            suppressRepeats(after: event.modifiers)
             if event.modifiers.isEmpty && activePressCount == 0 {
                 modifiers.reset(); awaitingNeutral = false
             }

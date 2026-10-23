@@ -167,6 +167,9 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
         else if !permitted { next.summary = "暫停原生交換（HID 後端或 Session 暫停）" }
         else if let issue = next.issue { next.summary = issue }
         else { next.summary = "等待本機 MacBook 內建鍵盤；外接／通用控制鍵盤保持原樣" }
+        if let issue = next.issue, !next.summary.contains(issue) {
+            next.summary += "；" + issue
+        }
         publish(next, previous: old)
     }
 

@@ -124,12 +124,8 @@ public final class InputEngine: @unchecked Sendable {
     private var needsRecreation = false
     private let marker: Int64
     private let actions: ShortcutActionDispatcher
-    private var records = [DiagnosticRecord?](repeating: nil, count: 128)
-    private var recordIndex = 0
-    private var recordSequence: UInt64 = 0
-    private var diagnosticRevision: UInt64 = 0
+    private var diagnostics = InputDiagnostics()
     private var publishedDiagnosticRevision: UInt64 = .max
-    private var diagnosticDeadline: TimeInterval = 0
     private var actionEpoch: UInt64 = 0
     private var tapAuthorizationFault = false
     private var policyGeneration: UInt64 = 0
@@ -284,15 +280,7 @@ public final class InputEngine: @unchecked Sendable {
                 processor.resumeManualPassThrough()
                 actionEpoch &+= 1
             }
-            if !configuration.diagnostics {
-                if diagnosticDeadline != 0 || !status.diagnostics.isEmpty {
-                    for i in records.indices { records[i] = nil }
-                    diagnosticRevision &+= 1
-                }
-                diagnosticDeadline = 0
-            } else if diagnosticDeadline == 0 {
-                diagnosticDeadline = ProcessInfo.processInfo.systemUptime + 300
-            }
+            diagnostics.configure(enabled: configuration.diagnostics, now: ProcessInfo.processInfo.systemUptime)
         }
         if changed { configureProcessor(preservingModifiersOnAppChange: preserveModifiers) }
     }
@@ -435,22 +423,18 @@ public final class InputEngine: @unchecked Sendable {
         status.translated = processor.translatedCount &+ remote.translatedCount
         status.manualPassThrough = processor.manualPassThrough
         status.actionStatus = actions.status()
-        if diagnosticDeadline > 0 && ProcessInfo.processInfo.systemUptime >= diagnosticDeadline {
-            for i in records.indices { records[i] = nil }
-            diagnosticDeadline = 0
-            diagnosticRevision &+= 1
-        }
+        diagnostics.expire(at: now)
         // Build diagnostics only when the ring changes; idle ticks allocate nothing here.
-        if publishedDiagnosticRevision != diagnosticRevision {
-            status.diagnostics = records.compactMap { $0 }.sorted { $0.id > $1.id }
-            publishedDiagnosticRevision = diagnosticRevision
+        if publishedDiagnosticRevision != diagnostics.revision {
+            status.diagnostics = diagnostics.snapshot()
+            publishedDiagnosticRevision = diagnostics.revision
         }
         mailbox.lock.lock(); let previous = mailbox.status; mailbox.status = status; mailbox.lock.unlock()
         if Self.requiresHostWake(previous: previous, next: status,
-                                 everyChange: configuration.diagnostics || configuration.nativeMappingAwaitingNeutral) {
+                                 everyChange: diagnostics.isActive(at: now) || configuration.nativeMappingAwaitingNeutral) {
             notifyActivity()
         }
-        scheduleRemoteExpiry()
+        scheduleExpiry()
     }
     /// Counters advance on every key edge. Waking the host for them ran a full
     /// MainActor tick (TCC reads, policy, registry, SwiftUI publish) per keystroke.
@@ -466,10 +450,16 @@ public final class InputEngine: @unchecked Sendable {
     private var hasInputAuthorization: Bool {
         status.listenAccess
     }
-    /// One-shot, re-armed only when the earliest held-remote deadline changes
-    /// (not re-allocated on every key edge while a remote key is held).
-    private func scheduleRemoteExpiry() {
-        let deadline = remote.nextExpiry
+    /// One shared one-shot timer for held remote keys and diagnostic expiry.
+    /// This also releases diagnostic storage while input and the host are idle.
+    private func scheduleExpiry() {
+        let deadline: Double?
+        switch (remote.nextExpiry, diagnostics.deadline) {
+        case let (a?, b?): deadline = min(a, b)
+        case let (a?, nil): deadline = a
+        case let (nil, b?): deadline = b
+        case (nil, nil): deadline = nil
+        }
         if deadline == expiryDeadline, deadline == nil || expiryTimer?.isValid == true { return }
         expiryTimer?.invalidate(); expiryTimer = nil; expiryDeadline = deadline
         guard let deadline else { return }
@@ -561,7 +551,7 @@ public final class InputEngine: @unchecked Sendable {
         let recipient = Int32(truncatingIfNeeded: event.getIntegerValueField(.eventTargetUnixProcessID))
         let key = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
         let flags = Self.modifiers(event.flags)
-        let trace = configuration.diagnostics && ProcessInfo.processInfo.systemUptime < diagnosticDeadline &&
+        let trace = diagnostics.deadline != nil && diagnostics.isActive(at: ProcessInfo.processInfo.systemUptime) &&
             Self.tracesShortcutInput(type: type, key: key, flags: flags,
                 isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0)
         let traceStart = trace ? DispatchTime.now().uptimeNanoseconds : 0
@@ -611,7 +601,11 @@ public final class InputEngine: @unchecked Sendable {
         let side = Self.side(key)
         // flagsChanged describes state, not a toggle. UC's virtual HID services
         // can emit the same modifier-down more than once.
-        let down = physical ? side.map { Self.modifierDown($0, flags: event.flags) } : nil
+        let independentRemoteFlags: Bool
+        if case .remote(let index) = origin {
+            independentRemoteFlags = configuration.inputRouting.producers[index].independentFlags
+        } else { independentRemoteFlags = false }
+        let down = physical || independentRemoteFlags ? side.map { Self.modifierDown($0, flags: event.flags) } : nil
         let phase: KeyPhase = type == .keyDown ? .down : type == .keyUp ? .up : .flagsChanged
         // Modifier edges and owned ups still reconcile state across missing recipients.
         // A new shortcut requires a known local recipient; only an existing native switcher
@@ -646,9 +640,9 @@ public final class InputEngine: @unchecked Sendable {
         if calibrationInbox.observe(processID: evidence.processID, key: key, phase: phase, flags: flags, repeatKey: normalized.isRepeat) {
             notifyActivity()
         }
-        if destinationPhysical { processor.reconcileIndependentSourceFlags(normalized.modifiers) }
         traceResult = "processor"
-        var routed = physical ? RoutedInputDecision(processor.process(normalized)) : remote.process(normalized, evidence: evidence, now: ProcessInfo.processInfo.systemUptime)
+        var routed = physical ? RoutedInputDecision(destinationPhysical ? processor.processIndependentSource(normalized) : processor.process(normalized)) :
+            remote.process(normalized, evidence: evidence, now: ProcessInfo.processInfo.systemUptime)
         if physical && configuration.windowsKeyModifier == .command {
             routed.decision = appSwitch.apply(routed.decision, event: normalized, state: processor.modifiers,
                                              target: (deliveryContext ?? configuration.context).processID)
@@ -705,8 +699,8 @@ public final class InputEngine: @unchecked Sendable {
                     EventRewriter.apply(to: event, keyCode: outputKey, modifiers: outputModifiers, marker: marker)
                 }
             }
-            if phase == .down && !normalized.isRepeat && configuration.diagnostics &&
-                ProcessInfo.processInfo.systemUptime < diagnosticDeadline {
+            if phase == .down && !normalized.isRepeat && diagnostics.deadline != nil &&
+                diagnostics.isActive(at: ProcessInfo.processInfo.systemUptime) {
                 appendDiagnostic(rule: ruleID, application: (deliveryContext ?? configuration.context).bundleID,
                     microseconds: Double(DispatchTime.now().uptimeNanoseconds - start) / 1000)
             }
@@ -745,11 +739,8 @@ public final class InputEngine: @unchecked Sendable {
         return true
     }
     private func appendDiagnostic(rule: String, application: String, microseconds: Double, detail: String? = nil) {
-        recordSequence &+= 1
-        records[recordIndex] = DiagnosticRecord(id: recordSequence, rule: rule,
-            application: application, microseconds: microseconds, detail: detail)
-        recordIndex = (recordIndex + 1) % records.count
-        diagnosticRevision &+= 1
+        diagnostics.append(rule: rule, application: application, microseconds: microseconds,
+            detail: detail, now: ProcessInfo.processInfo.systemUptime)
     }
 
     public static func modifiers(_ flags: CGEventFlags) -> Modifiers {

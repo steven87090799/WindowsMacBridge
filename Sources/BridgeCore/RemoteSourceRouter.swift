@@ -107,9 +107,11 @@ public struct RemoteSourceRouter: Sendable {
         var event = original
         slots[index]!.lastEventAt = now
         if event.phase == .flagsChanged, let side = event.modifierSide {
-            // Side transitions are derived from this source's history, not aggregate CG state.
+            // Trusted source-local flags describe state and can repeat. Only
+            // generic mixed-source transports need the historical edge fallback.
             let groupPresent = event.modifiers.contains(side.group)
-            let down = event.modifierDown ?? (groupPresent && !slots[index]!.processor.modifiers.isDown(side))
+            let down = event.modifierDown ?? (groupPresent &&
+                (producer.independentFlags || !slots[index]!.processor.modifiers.isDown(side)))
             event.modifierDown = down
             if !producer.independentFlags {
                 var ownFlags = slots[index]!.processor.modifiers.aggregate

@@ -2,6 +2,20 @@ import Testing
 @testable import BridgeCore
 
 struct RemoteSemanticRegressionTests {
+    @Test func duplicateIndependentRightAltEdgesPreserveTheAppSwitchReleaseSide() {
+        var r = router(semantics: .windows)
+        for _ in 0..<2 {
+            _ = r.process(.init(.flagsChanged, keyCode: 61, modifiers: .option,
+                modifierSide: .rightOption), evidence: evidence)
+        }
+        let result = r.process(.init(.down, keyCode: 48, modifiers: .option), evidence: evidence)
+        #expect(result.decision == .rewrite(keyCode: 48, modifiers: .command, ruleID: "windows.nativeAppSwitch"))
+        _ = r.process(.init(.up, keyCode: 48, modifiers: .option), evidence: evidence)
+        var released = [UInt16]()
+        r.invalidate { key, _, _ in released.append(key) }
+        #expect(released == [54])
+    }
+
     private func router(semantics: RemoteSemantics = .automatic, independent: Bool = true) -> RemoteSourceRouter {
         var r = RemoteSourceRouter(); var c = SourceTranslationConfiguration()
         c.context = .init(processID: 1, bundleID: "browser", mode: .macOS, isBrowser: true)

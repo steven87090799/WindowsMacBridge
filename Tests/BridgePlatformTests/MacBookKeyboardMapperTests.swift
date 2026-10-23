@@ -34,6 +34,35 @@ import BridgeCore
 }
 
 @MainActor struct MacBookKeyboardMapperTests {
+    @Test func releasingNativeBackendWithoutStopReleasesItsNotificationContext() {
+        for _ in 0..<20 {
+            var backend: NativeMacBookKeyboardBackend? = NativeMacBookKeyboardBackend()
+            weak var owner = backend
+            #expect(backend?.observeChanges {} == true)
+            weak var context = backend?.observationContext
+            #expect(context != nil)
+            backend = nil
+            #expect(owner == nil && context == nil)
+        }
+    }
+
+    @Test func partialMappingFailureRemainsVisibleAlongsideSuccessfulServices() {
+        let (name, defaults) = defaults()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal")
+        defer { defaults.removePersistentDomain(forName: name); try? FileManager.default.removeItem(at: url) }
+        let backend = KeyboardBackendFixture()
+        var second = backend.rows[0]
+        second.identity.registryID = 2
+        second.userMapping = nil
+        backend.rows.append(second)
+        let mapper = MacBookKeyboardMapper(backend: backend, defaults: defaults, journalURL: url)
+        mapper.configure(enabled: true)
+        #expect(mapper.status.mappedDevices == 1)
+        #expect(mapper.status.issue != nil)
+        #expect(mapper.status.summary.contains(mapper.status.issue ?? "missing issue"))
+        mapper.stop()
+    }
+
     @Test func normalQuitWaitsForKeyReleaseAndVerifiesRestoration() async {
         let (name, defaults) = defaults()
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal")

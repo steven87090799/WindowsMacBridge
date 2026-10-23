@@ -1,14 +1,15 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 62）**，修正通用控制的重複 Ctrl 事件導致複製失敗，並區分 Fn／Ctrl 映射寫入與實體驗證。Ctrl+C／X／V／A 共用本機剪貼簿規則，涵蓋系統浮動視窗、Terminal、輸入法與本機 App Profile；截圖縮圖點擊後直接置中並啟用 App 內的圖片預覽視窗。設定側邊欄保留清晰文字與原生液態玻璃切換動畫；包含規則預覽與遠端校準介面（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。
+Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。正式版本 **0.6.0（build 63）**，修正通用控制的重複 Ctrl、雙側修飾鍵與遠端來源處理，並改善診斷記憶體及鍵盤事件耗時。Ctrl+C／X／V／A 共用本機剪貼簿規則，涵蓋系統浮動視窗、Terminal、輸入法與本機 App Profile；截圖縮圖點擊後直接置中並啟用 App 內的圖片預覽視窗。設定側邊欄保留清晰文字與原生液態玻璃切換動畫；包含規則預覽與遠端校準介面（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。
 
-## Build 62 修復與 AI 交接入口
+## v0.6.0 正式版（build 63）
 
 - [本次問題、根因、修改位置、事件證據與後續注意事項](Docs/Build62-FnControl-UniversalControl-Handoff.md)
 - [完整實機診斷紀錄](Docs/FnControlDiagnosis-2026-10-23.md)／[修復前後事件節錄](Docs/UCControlEventEvidence-2026-10-23.txt)
-- [在另一台 Mac 安裝](Docs/InstallOnAnotherMac-build62.md)／[下載 v0.6.0-preview.9 完整 ZIP 或 DMG](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v0.6.0-preview.9)
+- [正式版更新與換機安裝說明](Docs/ReleaseNotes-0.6.0.md)／[下載 v0.6.0 完整 ZIP 或 DMG](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v0.6.0)
+- [build 63 的修正、資源量測與驗證範圍](Docs/Build62-Review-2026-10-23.md)
 
-524 項自動測試通過，使用者已在本次 MacBook 實測內建 Fn+C／X／V／A、左 Ctrl→Fn，以及另一台 Mac 外接鍵盤經通用控制送入的 Ctrl+C／V。其他硬體、舊系統與進階 HID 安裝仍需各自驗收；一般模式不需要另裝 Driver。
+535 項自動測試通過。build 62 的前次操作中，使用者已在本次 MacBook 實測內建 Fn+C／X／V／A、左 Ctrl→Fn，以及另一台 Mac 外接鍵盤經通用控制送入的 Ctrl+C／V。其他硬體、舊系統與進階 HID 安裝仍需各自驗收；一般模式不需要另裝 Driver。
 
 ## 一般模式與進階模式已分開
 
@@ -88,8 +89,8 @@ bash scripts/package-app-dmg.sh
 
 產出arm64 Release App與可拖入Applications的DMG，進階payload封裝於App內。Pinned SDK準備不需要安裝系統Driver；GitHub無.git ZIP仍可建置，來源會明確標記為archive，不冒用其他目錄的Git revision。`bash scripts/test.sh`是開發／Hosted CI測試入口，不執行權限授予或實際硬件驗收。
 
-完整測試會先執行一般測試，再以獨立程序執行截圖記憶體回歸，兩者都必須通過；`bash scripts/test.sh -c release` 同樣涵蓋兩階段。128 MiB 增量門檻與 60 次處理次數不變。明確指定 `--filter`／`--skip`、`--no-parallel`、測試清單或自訂報告輸出時，腳本保留該次呼叫；量測整個程序記憶體時請只選該測試或使用 `--no-parallel`。
+完整測試會先執行一般測試，再以獨立程序執行截圖與診斷快照記憶體回歸，兩者都必須通過；`bash scripts/test.sh -c release` 同樣涵蓋兩階段。128 MiB 增量門檻與 60 次處理次數不變。明確指定 `--filter`／`--skip`、`--no-parallel`、測試清單或自訂報告輸出時，腳本保留該次呼叫；量測整個程序記憶體時請只選該測試或使用 `--no-parallel`。
 
-`BridgePerformanceCheck` 是不封裝進 App 的離線工具，提供 `--routing-updates`、`--preview` 與 `--ocr-roundtrip <App executable>`，只使用合成按鍵／產生的圖片。App 的 `--render-feature-checks <new output directory>` 用合成狀態離線輸出新頁面供版面檢查，不建立輸入控制器或顯示視窗。
+`BridgePerformanceCheck` 是不封裝進 App 的離線工具，提供 `--modifier-cycles`、`--routing-updates`、`--preview` 與 `--ocr-roundtrip <App executable>`，只使用合成按鍵／產生的圖片。App 的 `--render-feature-checks <new output directory>` 用合成狀態離線輸出新頁面供版面檢查，不建立輸入控制器或顯示視窗。
 
 第三方MIT資源及官方Driver許可證保留在Resources/Licenses。未經Apple Developer／DriverKit資格，不能把官方簽章dext冒充為自制WindowsMacBridge Driver。

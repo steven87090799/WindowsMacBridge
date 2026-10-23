@@ -46,6 +46,13 @@ public struct ModifierStateMachine: Sendable {
         return value
     }
     public mutating func observe(_ side: ModifierSide, down: Bool, aggregate: Modifiers) {
+        // Aggregate-only transports cannot distinguish a peer release while the
+        // group is held. Once the group is up, retire both sides even if another
+        // modifier (e.g. Shift) keeps the whole keyboard from becoming neutral.
+        if !down && !aggregate.contains(side.group) {
+            sides &= ~((1 << side.rawValue) | (1 << side.peer.rawValue))
+            return
+        }
         if down { sides |= 1 << side.rawValue } else { sides &= ~(1 << side.rawValue) }
         let sideGroupDown = isDown(side) || isDown(side.peer)
         if sideGroupDown != aggregate.contains(side.group) { synchronized = false }
