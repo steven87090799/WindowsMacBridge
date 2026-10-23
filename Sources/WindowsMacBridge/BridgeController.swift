@@ -477,11 +477,19 @@ import IOKit.hid
     private func setSuspended(_ reason: SuspensionReason, _ suspended: Bool) {
         if suspended { suspensionReasons.insert(reason) } else { suspensionReasons.remove(reason) }
         sessionEpoch &+= 1
-        if !suspended { refreshMacBookKeyboard() }
+        if !suspended {
+            refreshMacBookKeyboard()
+        }
         if !suspended && settings.screenshotAutoCopy {
             screenshot.verifyAndRepair(reason: "Session 恢復")
         }
         publish()
+        if !suspended && sessionActive {
+            // A background Screen Sharing agent need not emit an NSWorkspace
+            // application-launch notification. Scan once on session resume,
+            // after publish() has reactivated the source registry.
+            remoteRegistry.discover()
+        }
     }
     private func configureMacBookKeyboard(configuration: EngineConfiguration) {
         let native = configuration.usesNativePhysicalMapping

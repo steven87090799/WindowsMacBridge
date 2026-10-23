@@ -2,6 +2,50 @@ import Testing
 @testable import BridgeCore
 
 struct RemoteSemanticRegressionTests {
+    @Test func signedVNCInAutomaticModeTranslatesRawControlButKeepsMacCommand() {
+        var r = RemoteSourceRouter()
+        var config = SourceTranslationConfiguration()
+        config.context = .init(processID: 1, bundleID: "com.apple.TextEdit", mode: .macOS)
+        config.enabled = true; config.layoutSupported = true
+        let source = RemoteProducer(processID: 42, identity: "apple-vnc", session: 1, revision: 1,
+                                    transport: .vnc, confidence: .known, semantics: .automatic)
+        r.update(.init(producers: [source]), configuration: config)
+        let evidence = InputOriginEvidence(processID: 42, stateID: 123)
+        _ = r.process(.init(.flagsChanged, keyCode: 59, modifiers: .control,
+                            modifierSide: .leftControl, modifierDown: true), evidence: evidence)
+        let keys: [UInt16] = [8, 9, 6]
+        for key in keys {
+            let rule = key == 8 ? "windows.copy" : key == 9 ? "windows.paste" : "windows.undo"
+            #expect(r.process(.init(.down, keyCode: key, modifiers: .control), evidence: evidence).decision ==
+                    .rewrite(keyCode: key, modifiers: .command, ruleID: rule))
+            _ = r.process(.init(.up, keyCode: key, modifiers: .control), evidence: evidence)
+        }
+        _ = r.process(.init(.flagsChanged, keyCode: 59, modifiers: [],
+                            modifierSide: .leftControl, modifierDown: false), evidence: evidence)
+        #expect(r.process(.init(.down, keyCode: 8, modifiers: .command), evidence: evidence).decision == .passThrough)
+    }
+    @Test func vncWindowsPreferenceTranslatesClipboardAndUndoAfterRouteUpdate() {
+        var r = RemoteSourceRouter()
+        var config = SourceTranslationConfiguration()
+        config.context = .init(processID: 1, bundleID: "com.apple.TextEdit", mode: .macOS)
+        config.enabled = true; config.layoutSupported = true
+        let automatic = RemoteProducer(processID: 42, identity: "apple-vnc", session: 1, revision: 1,
+                                       transport: .vnc, confidence: .likely, semantics: .automatic)
+        r.update(.init(producers: [automatic]), configuration: config)
+        let windows = RemoteProducer(processID: 42, identity: "apple-vnc", session: 1, revision: 2,
+                                     transport: .vnc, confidence: .likely, semantics: .windows)
+        r.update(.init(producers: [windows]), configuration: config)
+        let source = InputOriginEvidence(processID: 42, stateID: 123)
+        _ = r.process(.init(.flagsChanged, keyCode: 59, modifiers: .control,
+                            modifierSide: .leftControl, modifierDown: true), evidence: source)
+        let keys: [UInt16] = [8, 9, 6]
+        for key in keys {
+            #expect(r.process(.init(.down, keyCode: key, modifiers: .control), evidence: source).decision ==
+                    .rewrite(keyCode: key, modifiers: .command,
+                             ruleID: key == 8 ? "windows.copy" : key == 9 ? "windows.paste" : "windows.undo"))
+            _ = r.process(.init(.up, keyCode: key, modifiers: .control), evidence: source)
+        }
+    }
     @Test func duplicateIndependentRightAltEdgesPreserveTheAppSwitchReleaseSide() {
         var r = router(semantics: .windows)
         for _ in 0..<2 {

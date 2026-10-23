@@ -29,6 +29,18 @@ struct RemoteAdapterTests {
         host.signatureValid = true; host.teamID = "other"
         #expect(RemoteAdapterCatalog.classify(host).confidence != .known)
     }
+    @Test func appleScreenSharingHostIsDiscoveredWithoutTrustingClientKeySemantics() {
+        let path = "/System/Library/CoreServices/RemoteManagement/ScreensharingAgent.bundle/Contents/MacOS/ScreensharingAgent"
+        let host = RemoteProcessIdentity(pid: 42, birth: 1, path: path,
+                                         signingID: "com.apple.screensharing.agent", teamID: "", signatureValid: true)
+        #expect(RemoteAdapterCatalog.discoveryCandidate(path))
+        let adapter = RemoteAdapterCatalog.classify(host)
+        #expect(adapter.transport == .vnc && adapter.confidence == .known && !adapter.independentFlags)
+        var impostor = host; impostor.signatureValid = false
+        #expect(RemoteAdapterCatalog.classify(impostor).transport == .generic)
+        impostor = host; impostor.path = "/Applications/ScreensharingAgent.bundle/Contents/MacOS/ScreensharingAgent"
+        #expect(RemoteAdapterCatalog.classify(impostor).transport == .generic)
+    }
     @Test func remoteClientsAreCandidatesWithoutClaimingInjectionSemantics() {
         for (id, transport) in [("com.microsoft.rdc.macos", RemoteTransport.microsoftRemoteDesktop),
                                 ("com.p5sys.jump.mac.viewer", .jumpDesktop), ("com.anydesk.AnyDesk", .anyDesk),

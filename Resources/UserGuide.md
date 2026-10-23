@@ -1,4 +1,4 @@
-# WindowsMacBridge 0.6.0（build 55）
+# WindowsMacBridge 1.0.1（build 64）
 
 ## 安裝與使用
 
@@ -31,6 +31,8 @@
 Terminal 的 Ctrl+C 一律複製，不會因沒有選取內容而中斷命令；Ctrl+Shift+C 明確中斷。Remote／VM 使用 Windows 原始 Ctrl。來源欄表示抵達 Mac 的按鍵；已辨識來源的原始 Ctrl+C／X／V／A 共用剪貼簿規則，已是 Command 的按鍵保持原輸出。尚未辨識的事件來源不會猜測翻譯。預覽不代表已核准權限，也不模擬所有實體鍵盤／AX 焦點條件。
 
 ## 遠端來源校準
+
+Apple「螢幕共享」連接另一台 Mac 時，接收端的 Bridge 會辨識 Apple 簽署的 ScreensharingAgent。自動模式把它傳來的原始 Ctrl 快捷鍵當作 Windows 操作轉換；已是 ⌘ 的 Mac 快捷鍵保持原樣。MacBook 的「MacBook 鍵盤模式」只交換該台內建 Fn／左 Ctrl；另一台 Mac 的遠端來源設定不會同步過去。雙向使用時，兩台各自安裝、授權，MacBook 開啟內建鍵盤模式，一般 Mac 保持關閉，並各測 Ctrl／Fn+C、V、Z。首次辨識未知來源的按鍵可能原樣通過，請放開所有鍵再測第二次；連續失敗時先檢查接收端遠端校準頁是否出現 ScreensharingAgent、權限與 Windows 模式狀態。
 
 在 Windows 模式與必要權限啟用後，開啟「遠端校準」。先從遠端電腦送一個鍵到這台 Mac，確認來源列顯示「已觀察到此來源的輸入」，再按「開始校準」。保留設定視窗，切到這台 Mac 的 TextEdit 等文字 App，從指定遠端電腦按一次 Ctrl+C。App 只辨識這次 Control／Command 組合；60 秒內確認並套用結果，確認前原設定不變。
 

@@ -136,8 +136,12 @@ public struct RemoteSourceRouter: Sendable {
         case .automatic:
             // Raw Control is strong evidence. Command chords and ambiguous Option navigation
             // are already valid Mac input, so automatic mode never converts them again.
+            // Apple's signed Screen Sharing host is a known incoming producer on the
+            // receiving Mac. Give its raw Control chords the same Windows rules as
+            // Google's host without requiring a per-Mac calibration setting.
             event.allowsTranslation = ClipboardShortcutPolicy.isClipboardInput(key: event.keyCode, modifiers: event.modifiers) ||
-                producer.confidence == .known && producer.transport == .googleRemoteDesktop &&
+                producer.confidence == .known &&
+                (producer.transport == .googleRemoteDesktop || producer.transport == .vnc) &&
                 (!event.modifiers.contains(.command) && (event.modifiers.contains(.control) || event.modifiers.subtracting(.shift).isEmpty ||
                  (event.modifiers.subtracting(.shift) == .option && (event.keyCode == 48 || event.keyCode == 118 || event.keyCode == 105))))
         }
