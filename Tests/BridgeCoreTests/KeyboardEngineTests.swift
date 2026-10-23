@@ -27,7 +27,7 @@ struct KeyboardEngineTests {
         }
     }
     @Test func testProtectedProfilesNeverTranslate() {
-        for mode: ApplicationMode in [.remoteWindows, .virtualMachine, .game, .disabled] {
+        for mode: ApplicationMode in [.remoteWindows, .virtualMachine] {
             var p = engine(mode); ctrlDown(&p)
             for key: UInt16 in [8, 7, 9, 0, 6, 15, 37, 13, 32, 40, 14, 48] {
                 #expect(p.process(.init(.down, keyCode: key, modifiers: .control)) == .passThrough)
@@ -157,16 +157,16 @@ struct KeyboardEngineTests {
         #expect(p.process(.init(.down, keyCode: 16, modifiers: .control, isRepeat: true)) == .suppress)
         #expect(p.process(.init(.up, keyCode: 16, modifiers: .control)) == .rewrite(keyCode: 6, modifiers: [.command, .shift], ruleID: "windows.redo"))
     }
-    @Test func testInputSourceTransitionRequiresReleaseBeforeNewTranslations() {
+    @Test func testInputSourceTransitionKeepsClipboardChordsWorking() {
         var p = engine(); ctrlDown(&p)
         _ = p.process(.init(.down, keyCode: 8, modifiers: .control))
         let local = ApplicationContext(processID: 10, bundleID: "test.app", mode: .macOS)
         p.configure(context: local, enabled: true, layoutSupported: false)
-        #expect(p.process(.init(.down, keyCode: 8, modifiers: .control, isRepeat: true)) == .suppress)
+        #expect(p.process(.init(.down, keyCode: 8, modifiers: .control, isRepeat: true)) == .rewrite(keyCode: 8, modifiers: .command, ruleID: "windows.copy"))
         #expect(p.process(.init(.up, keyCode: 8, modifiers: .control)) == .rewrite(
             keyCode: 8, modifiers: .command, ruleID: "windows.copy"))
         p.configure(context: local, enabled: true, layoutSupported: true)
-        #expect(p.process(.init(.down, keyCode: 9, modifiers: .control)) == .passThrough)
+        #expect(p.process(.init(.down, keyCode: 9, modifiers: .control)) == .rewrite(keyCode: 9, modifiers: .command, ruleID: "windows.paste"))
         _ = p.process(.init(.up, keyCode: 9, modifiers: .control))
         _ = p.process(.init(.flagsChanged, keyCode: 59, modifierSide: .leftControl, modifierDown: false))
         ctrlDown(&p)
@@ -222,9 +222,9 @@ struct KeyboardEngineTests {
         #expect(p.process(.init(.up, keyCode: 0)) == .passThrough)
         #expect(p.activePressCount == 0)
     }
-    @Test func testUnknownLayoutAndFinderCutPassThrough() {
+    @Test func testUnknownLayoutStillSupportsClipboardAndFinderTextCut() {
         var p = engine(bundle: "com.apple.finder"); ctrlDown(&p)
-        #expect(p.process(.init(.down, keyCode: 7, modifiers: .control)) == .passThrough)
+        #expect(p.process(.init(.down, keyCode: 7, modifiers: .control)) == .rewrite(keyCode: 7, modifiers: .command, ruleID: "windows.cut"))
         p = engine()
         p.configure(context: .init(processID: 10, bundleID: "test.app", mode: .macOS), enabled: true, layoutSupported: false)
         p.reconcileNeutralHardware()

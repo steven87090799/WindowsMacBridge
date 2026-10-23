@@ -50,6 +50,7 @@ public struct EngineConfiguration: Equatable, Sendable {
         var normalized = self
         normalized.context = previous.context; normalized.generation = previous.generation
         normalized.recipients = previous.recipients
+        normalized.layoutSupported = previous.layoutSupported
         normalized.runtimePolicy = previous.runtimePolicy
         return normalized == previous
     }
@@ -106,6 +107,7 @@ public final class InputEngine: @unchecked Sendable {
     private var appSwitch = NativeAppSwitchLatch()
     private var remote = RemoteSourceRouter()
     public let producerInbox = InputProducerInbox()
+    public let recipientInbox = InputProducerInbox()
     public let calibrationInbox = RemoteCalibrationInbox()
     private var recovery = RecoveryPolicy()
     private var status = EngineStatus()
@@ -367,13 +369,11 @@ public final class InputEngine: @unchecked Sendable {
             guard releaseCount < releases.count else { return }
             releases[releaseCount] = (key, flags, pid); releaseCount += 1
         }
-        if !actions.update(context: configuration.context,
-                           enabled: sourcePolicy.enabled && configuration.layoutSupported && !processor.manualPassThrough,
+        _ = actions.update(context: configuration.context,
+                           enabled: sourcePolicy.enabled && !processor.manualPassThrough,
                            finderEnabled: configuration.finderEnabled,
                            finderPermanentDeleteEnabled: configuration.finderPermanentDeleteEnabled,
-                           epoch: actionEpoch) {
-            processor.invalidate()
-        }
+                           epoch: actionEpoch)
     }
 
     private func tick() {
@@ -558,6 +558,13 @@ public final class InputEngine: @unchecked Sendable {
                                            ownEvent: event.getIntegerValueField(.eventSourceUnixProcessID) == Int64(getpid()))
         let origin = configuration.inputRouting.classify(evidence, physicalBackend: configuration.physicalBackend)
         let recipient = Int32(truncatingIfNeeded: event.getIntegerValueField(.eventTargetUnixProcessID))
+        let key = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
+        let flags = Self.modifiers(event.flags)
+        if type == .keyDown, key == 8, recipient > 0,
+           event.getIntegerValueField(.keyboardEventAutorepeat) == 0,
+           flags == .control || flags == .command {
+            actions.observeNativeCopy()
+        }
         let localDelivery = DestinationSemanticPolicy.acceptsDelivery(
             target: recipient,
             foreground: configuration.context.processID)
@@ -578,8 +585,6 @@ public final class InputEngine: @unchecked Sendable {
         }
         defer { keyEdgeWake = true; wake() } // Coalesced work after callback, no recurring poll.
         let start = DispatchTime.now().uptimeNanoseconds
-        let key = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
-        let flags = Self.modifiers(event.flags)
         let side = Self.side(key)
         // Aggregate flags plus per-side history handles both Control keys held together.
         let down = physical ? side.map { flags.contains($0.group) && !processor.modifiers.isDown($0) } : nil
@@ -592,22 +597,28 @@ public final class InputEngine: @unchecked Sendable {
             foreground: configuration.context.processID, key: key, nativeTabHeld: nativeTabHeld) {
             return Unmanaged.passUnretained(event)
         }
-        if phase != .up, recipient > 0 {
+        if recipient > 0 {
             let resolved = DestinationSemanticPolicy.context(target: recipient,
                 foreground: configuration.context, recipients: configuration.recipients)
             // Unknown modifier recipients still reconcile physical state. A new
             // key-down cannot borrow the foreground App's rules.
             if phase == .down && resolved == nil { return Unmanaged.passUnretained(event) }
+            if resolved?.clipboardOnly == true {
+                recipientInbox.observe(recipient); notifyActivity()
+            }
             if let context = resolved,
                context != (deliveryContext ?? configuration.context) {
-                queueReleases()
+                // Reconfiguring the router below retires its old outputs and
+                // actions. Do not first invalidate its held Control history.
+                queueReleases(invalidateRemote: false)
                 deliveryContext = context
                 configureProcessor(preservingModifiersOnAppChange: true)
             }
         }
-        let normalized = KeyboardEvent(phase, keyCode: key, modifiers: flags,
+        var normalized = KeyboardEvent(phase, keyCode: key, modifiers: flags,
                                        isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
                                        modifierSide: side, modifierDown: down)
+        normalized.finderMovePending = actions.hasPendingFinderCut
         if calibrationInbox.observe(processID: evidence.processID, key: key, phase: phase, flags: flags, repeatKey: normalized.isRepeat) {
             notifyActivity()
         }
@@ -617,7 +628,21 @@ public final class InputEngine: @unchecked Sendable {
             routed.decision = appSwitch.apply(routed.decision, event: normalized, state: processor.modifiers,
                                              target: (deliveryContext ?? configuration.context).processID)
         }
-        let decision = routed.decision
+        var decision = routed.decision
+        if case .action(let action, _) = decision {
+            if localDelivery && actions.submit(action, context: configuration.context, source: routed.validity) {
+                decision = .suppress
+            } else if routed.validity?.isCurrent != false,
+                      let fallback = physical ? processor.fallbackForRejectedClipboardAction(keyCode: key) :
+                        remote.fallbackForRejectedClipboardAction(keyCode: key, evidence: evidence) {
+                actions.observeNativeCopy()
+                decision = fallback
+            } else {
+                if physical { processor.rejectAction(keyCode: key) }
+                else { remote.rejectAction(keyCode: key, evidence: evidence) }
+                decision = .passThrough
+            }
+        }
         var result: Unmanaged<CGEvent>? = Unmanaged.passUnretained(event)
         switch decision {
         case .passThrough: break
@@ -632,12 +657,7 @@ public final class InputEngine: @unchecked Sendable {
             status.manualPassThrough = processor.manualPassThrough
             configureProcessor()
             result = nil
-        case .action(let action, _):
-            // Never turn an unconfirmed selection-aware copy into a raw SIGINT
-            // when the bounded mailbox is full. Keep its repeat/up suppressed.
-            if localDelivery && (actions.submit(action, context: configuration.context, source: routed.validity) || action == .terminalCopyOrInterrupt) { result = nil }
-            else if physical { processor.rejectAction(keyCode: key) }
-            else { remote.rejectAction(keyCode: key, evidence: evidence) }
+        case .action: break // Resolved above, including the paired clipboard fallback.
         case let .rewrite(outputKey, outputModifiers, ruleID):
             if NativeSessionEmitter.requiresSessionRouting(ruleID) {
                 // Synchronous input delivery: no detached work, queue or timer. Policy
@@ -649,7 +669,13 @@ public final class InputEngine: @unchecked Sendable {
                     output.post(tap: .cgSessionEventTap); result = nil
                 }
             } else {
-                EventRewriter.apply(to: event, keyCode: outputKey, modifiers: outputModifiers, marker: marker)
+                if let output = EventRewriter.clipboardReplacement(for: event, keyCode: outputKey, modifiers: outputModifiers, marker: marker) {
+                    // Quartz owns and releases a replacement returned by the
+                    // tap. Transfer one retain; ARC keeps no per-key history.
+                    result = Unmanaged.passRetained(output)
+                } else {
+                    EventRewriter.apply(to: event, keyCode: outputKey, modifiers: outputModifiers, marker: marker)
+                }
             }
             if phase == .down && !normalized.isRepeat && configuration.diagnostics &&
                 ProcessInfo.processInfo.systemUptime < diagnosticDeadline {

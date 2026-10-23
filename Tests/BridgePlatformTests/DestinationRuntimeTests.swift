@@ -45,11 +45,31 @@ import HIDProtocol
         configuration.keyboardScope = .allKeyboards; configuration.context.mode = .terminal
         configuration.layoutSupported = false
         #expect(!configuration.usesNativePhysicalMapping)
-        for mode: ApplicationMode in [.remoteWindows, .virtualMachine, .game, .disabled] {
+        for mode: ApplicationMode in [.remoteWindows, .virtualMachine] {
             configuration.context.mode = mode
             #expect(configuration.usesNativePhysicalMapping)
         }
         configuration.context.mode = .macOS; configuration.deviceInputs = [.init(identity: "native", experience: .nativeMac)]
-        #expect(configuration.usesNativePhysicalMapping)
+        #expect(!configuration.usesNativePhysicalMapping)
+    }
+    @Test func helperKeepsModifiersOnlyWithinAnUninterruptedOwnershipEpoch() throws {
+        for transport in [false, true] {
+            var a = HIDConfiguration(); a.transportOnly = transport; a.enabled = true; a.sessionActive = true
+            a.mode = .macOS; a.processID = 17; a.bundleID = "test.a"; a.generation = 1; a.modifierEpoch = 3
+            var b = a; b.mode = .game; b.processID = 18; b.bundleID = "test.b"; b.generation = 2
+            b.layoutSupported.toggle()
+            #expect(b.preservesModifiers(from: a))
+            b.modifierEpoch = 4
+            #expect(!b.preservesModifiers(from: a) && !a.sameCapturePolicy(as: b))
+            b = a; b.mode = .remoteWindows
+            #expect(!b.preservesModifiers(from: a))
+            b = a; b.macBookFnControlSwap.toggle()
+            #expect(!b.preservesModifiers(from: a))
+            b = a; b.modifierEpoch = nil
+            #expect(!b.preservesModifiers(from: a))
+            // Older hosts omit the optional epoch and retain the conservative handoff.
+            let legacy = try JSONDecoder().decode(HIDConfiguration.self, from: JSONEncoder().encode(b))
+            #expect(legacy.modifierEpoch == nil && !legacy.preservesModifiers(from: b))
+        }
     }
 }

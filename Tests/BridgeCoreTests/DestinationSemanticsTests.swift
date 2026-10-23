@@ -111,9 +111,10 @@ struct DestinationSemanticsTests {
     @Test func unrecognizedOrMissingRecipientsCannotBorrowForegroundRules() {
         let foreground = ApplicationContext(processID: 17, bundleID: "com.apple.finder", mode: .macOS)
         #expect(DestinationSemanticPolicy.context(target: 17, foreground: foreground, recipients: [:]) == foreground)
-        for target: Int32 in [0, -1, 18] {
+        for target: Int32 in [0, -1] {
             #expect(DestinationSemanticPolicy.context(target: target, foreground: foreground, recipients: [:]) == nil)
         }
+        #expect(DestinationSemanticPolicy.context(target: 18, foreground: foreground, recipients: [:])?.clipboardOnly == true)
         let remote = ApplicationContext(processID: 18, bundleID: "com.microsoft.rdc.macos", mode: .remoteWindows)
         #expect(DestinationSemanticPolicy.context(target: 18, foreground: foreground, recipients: [18: remote]) == remote)
     }

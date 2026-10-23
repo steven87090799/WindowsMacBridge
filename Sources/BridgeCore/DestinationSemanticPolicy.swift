@@ -17,7 +17,7 @@ public enum DestinationSemanticPolicy {
     public static func acceptsKeyDown(target: Int32, foreground: Int32, key: UInt16, nativeTabHeld: Bool) -> Bool {
         // A positive annotated target proves local delivery even for a panel
         // that does not activate its owner. Its identity is resolved separately.
-        (target > 0 && foreground > 0) ||
+        target > 0 ||
             (target == 0 && foreground > 0 && key == 48 && nativeTabHeld)
     }
 
@@ -28,6 +28,12 @@ public enum DestinationSemanticPolicy {
                                recipients: [Int32: ApplicationContext]) -> ApplicationContext? {
         guard target > 0 else { return nil }
         if target == foreground.processID { return foreground }
-        return recipients[target]
+        if let known = recipients[target] { return known }
+        // WindowServer already selected a local recipient. A just-created
+        // system service need not be in NSWorkspace's launch snapshot yet.
+        // Permit only native clipboard keys until its identity is resolved.
+        var fallback = ApplicationContext(processID: target, displayName: "本機視窗", mode: .macOS)
+        fallback.clipboardOnly = true
+        return fallback
     }
 }

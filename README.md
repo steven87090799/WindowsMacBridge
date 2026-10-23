@@ -1,6 +1,6 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 59）開發版**，截圖縮圖點擊後直接置中並啟用 App 內的圖片預覽視窗，系統浮動視窗依實際按鍵接收程序套用 Windows 快捷鍵；設定側邊欄保留清晰文字與原生液態玻璃切換動畫；包含 Terminal／IDE 完整 Windows 相容規則、放大的自製玻璃截圖預覽，以及規則預覽與遠端校準介面；保留先前 HID／輸入法修復（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與本機原始碼是不同階段。
+Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 60）開發版**，Ctrl+C／X／V／A 共用本機剪貼簿規則，涵蓋系統浮動視窗、Terminal、輸入法與本機 App Profile；截圖縮圖點擊後直接置中並啟用 App 內的圖片預覽視窗。設定側邊欄保留清晰文字與原生液態玻璃切換動畫；包含規則預覽與遠端校準介面（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與本機原始碼是不同階段。
 
 ## 一般模式與進階模式已分開
 
@@ -38,8 +38,8 @@ App使用ad-hoc簽章、尚無Apple公證；更新可能需要重新核准本版
 | MacBook Fn／左Ctrl | 關，明確開關只改本機builtIn鍵盤 |
 | Windows鍵位置 | Command，可選Option |
 | 唯音守護／Carbon切換熱鍵 | 各自關；守護開啟後維持本 App 明確選定的唯音／ABC，預設唯音 |
-| Terminal／IDE | 共用完整 Windows 相容規則：複製、儲存、復原／重做、搜尋、分頁與文字導覽；Terminal 的 Ctrl+C 有選取時複製、沒有選取時中斷；Ctrl+Shift+C 明確中斷 |
-| Remote viewer／VM／Game | 遠端 Windows／VM 保留 Ctrl 給 Windows 處理，Game 保持原按鍵 |
+| Terminal／IDE | 共用完整 Windows 相容規則；Ctrl+C 一律複製，不查詢選取狀態；Terminal 的 Ctrl+Shift+C 中斷命令 |
+| Remote viewer／VM／Game | 遠端 Windows／VM 保留 Ctrl 給 Windows 處理；本機 Game／停用延伸規則的 Profile 仍提供 Ctrl+C／X／V／A，其他按鍵通過 |
 | HID／VirtualHID／root runtime | 進階選配，默認關 |
 | 快捷鍵規則預覽 | 設定 → 規則預覽；使用實際處理器計算，不啟用監聽、不輸出按鍵或更改 App 規則 |
 | 遠端來源校準 | 設定 → 遠端校準；明確開始、一次 Ctrl+C、60 秒期限、確認套用與還原 |

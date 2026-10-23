@@ -164,7 +164,7 @@ import IOKit.hid
         if !sessionActive { return "Session 暫停" }
         if status.secureInput { return "Secure Input — 原樣通過" }
         if !context.mode.allowsTranslation { return context.mode.title }
-        if !layoutSupported { return "此輸入來源尚未支援 — 原樣通過" }
+        if !layoutSupported { return "基本複製貼上：ON（此輸入來源未啟用延伸規則）" }
         if !status.tapActive { return "Event Tap 尚未啟用" }
         if status.awaitingNeutral { return "請放開所有按鍵" }
         return "Windows Mode：ON"
@@ -320,6 +320,12 @@ import IOKit.hid
     private func tick() {
         engine.maintain()
         remoteRegistry.maintain(engine.producerInbox.take())
+        for pid in engine.recipientInbox.take() {
+            if let app = NSRunningApplication(processIdentifier: pid) {
+                let value = applicationContext(app)
+                if recipientContexts[pid] != value { recipientContexts[pid] = value }
+            }
+        }
         screenshot.applyInputRouting(remoteRegistry.snapshot)
         // Reuse the existing lifecycle tick only while a mapping mutation is waiting.
         if macBookKeyboardStatus.awaitingNeutral { refreshMacBookKeyboard() }

@@ -111,13 +111,16 @@ final class DeviceCapture {
     }
     func configure(_ next: HIDConfiguration, uid: uid_t) {
         controllerUID = uid
+        let preserveModifiers = next.preservesModifiers(from: config)
         if next.restartToken != currentRestart {
             currentRestart = next.restartToken; execute(lifecycle.restart()); engine.restart(); failClosed = false; fault = ""
             neutralAborts = 0
         }
         if !config.sameCapturePolicy(as: next) {
             pendingPointing = .init(); pointingFields = 0
-            actions.removeAll(keepingCapacity: true); engine.invalidate()
+            actions.removeAll(keepingCapacity: true)
+            if preserveModifiers { engine.retirePressesPreservingModifiers() }
+            else { engine.invalidate() }
             if devices.contains(where: { $0.seized }) { sendOutput() }
         }
         if config.keyboardScope != next.keyboardScope { stopCapture() }
@@ -150,7 +153,8 @@ final class DeviceCapture {
                          winTaskViewEnabled: next.winTaskViewEnabled,
                          finderBrightnessEnterEnabled: next.finderBrightnessEnterEnabled,
                          screenshotEnabled: next.screenshotEnabled, printScreenBehavior: next.printScreenBehavior,
-                         transportOnly: next.transportOnly, actionsEnabled: false)
+                         transportOnly: next.transportOnly, actionsEnabled: false,
+                         preservingModifiersOnAppChange: preserveModifiers)
         if !next.enabled || !next.sessionActive { stopCapture() }
         else if devices.contains(where: { $0.seized }) { sendOutput() }
         tick()
@@ -313,7 +317,8 @@ final class DeviceCapture {
         status.secureInput = IsSecureEventInputEnabled()
         status.permissions = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
         // Native hand-back for clients that may own/read physical HID devices themselves.
-        // Keep terminal/IDE identity reports, but never seize a Remote/VM/Game/Disabled device.
+        // Remote/VM retain native ownership. Local profiles keep basic clipboard
+        // shortcuts while the engine passes their other controls through.
         let nativePass = HIDCapturePolicy.requiresNativePassThrough(mode: config.mode, layoutSupported: config.layoutSupported, transportOnly: config.transportOnly)
         let valid = config.enabled && session && !status.secureInput && status.permissions &&
             !failClosed && !engine.emergencyPaused && !nativePass

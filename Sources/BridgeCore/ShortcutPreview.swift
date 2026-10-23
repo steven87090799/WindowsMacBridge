@@ -7,7 +7,7 @@ public enum ShortcutPreviewSource: String, CaseIterable, Sendable {
         case .local: "本機鍵盤"
         case .remoteWindows: "遠端：原始 Windows 按鍵"
         case .remoteMac: "遠端：已轉成 Mac 按鍵"
-        case .remoteAutomatic: "遠端：未知來源自動判定"
+        case .remoteAutomatic: "遠端：自動判定"
         }
     }
 }
@@ -43,7 +43,7 @@ public struct ShortcutPreviewResult: Equatable, Sendable, Identifiable {
         case .togglePassThrough: "切換原樣通過"
         case .action(let action, _):
             switch action {
-            case .terminalCopyOrInterrupt: "有選取：複製；無選取：中斷命令"
+            case .terminalCopyOrInterrupt: "Terminal：複製"
             case .finder(let action):
                 switch action {
                 case .copy: "Finder：複製"

@@ -6,15 +6,15 @@
 
 原本 `InputEngine` 只接受 annotated target PID 等於前景 App PID 的新按鍵。原生截圖、Quick Look 等系統浮動視窗可能接收鍵盤焦點，同時保留底下 App 為 NSWorkspace 的 frontmostApplication。現在前景切換及程序啟動／結束時，主執行緒建立接收程序的 App 規則快照；輸入 callback 只依 WindowServer 的實際接收 PID 查詢快照，不呼叫 NSWorkspace／AX 或掃描程序。修飾鍵與新按鍵都選用接收程序規則，Ctrl+C／X／V／A、復原、儲存等一般 Windows 規則因而適用於系統浮動視窗。App 自己的視窗也使用一般 Windows 規則。
 
-未知或缺少接收程序時仍不借用底下 App 的規則；Finder／Terminal 等依賴選取範圍的非同步操作仍須前景所有權。遠端 Windows／虛擬機使用原始 Ctrl 組合；Secure Input、暫停、權限撤銷及來源限制仍由既有政策處理。沒有更改系統快捷鍵設定或 TCC 資料。
+Build 60 進一步讓有正值 target PID、但尚未收到程序啟動通知的視窗立即使用基本剪貼簿規則；只缺少 target PID 時保持通過，不借用底下 App 的延伸操作。Finder 檔案移動等非同步操作仍須前景所有權；Terminal 複製已改為同步按鍵轉換。遠端 Windows／虛擬機使用原始 Ctrl 組合；Secure Input、暫停、權限撤銷及來源限制仍由既有政策處理。沒有更改系統快捷鍵設定或 TCC 資料。完整審查見 [ClipboardReliability-2026-10-23](ClipboardReliability-2026-10-23.md)。
 
 ## 驗證範圍
 
 回歸涵蓋原生截圖視窗覆蓋 Finder／Terminal／遠端 App 時的規則選擇、未知接收程序、乾淨的遠端到本機視窗交接，以及不同螢幕座標、完整原圖複製與關閉釋放。預覽關閉會取消待處理的圖片解碼與複製。顯示圖片的長邊限制 4096 像素，完整原圖仍供複製使用。封裝檢查曾發現嵌入 Quick Look 會載入 Vision／CoreML，最終改成原生圖片視窗以維持 OCR 只在獨立程序按需載入。
 
-完整 Debug 測試共 498 項通過，包含獨立程序執行的截圖記憶體回歸。Info.plist lint 與 diff 空白檢查通過。
+Build 59 完整 Debug 測試共 498 項通過；Build 60 增補剪貼簿與 HID 交接回歸後共 518 項通過，包含獨立程序執行的截圖記憶體回歸。
 
-`--screenshot-preview-fixture <新目錄>` 只產生測試圖片並顯示縮圖，不啟動輸入引擎、不拍攝畫面或要求權限；60 秒縮圖期限與 180 秒執行期限僅供明確啟動的測試模式使用。實際點擊測試確認一次點擊後預覽取得焦點，Ctrl+C 將 1200×700 完整測試圖寫入剪貼簿。這不代表原生截圖編輯器中的實體 Ctrl+C、多螢幕／全螢幕與跨 Mac 已完成實機驗收。
+`--screenshot-preview-fixture <新目錄>` 只產生測試圖片並顯示縮圖，不啟動輸入引擎、不拍攝畫面或要求權限；60 秒縮圖期限與 180 秒執行期限僅供明確啟動的測試模式使用。Build 60 以最終 NSImageView 實作重新進行點擊檢查：一次點擊後「截圖預覽」成為 focused window，直接 Ctrl+C 後讀取剪貼簿中自製 PNG 的尺寸為 1200×700；Esc 可關閉。這不代表原生截圖編輯器中的實體 Ctrl+C、多螢幕／全螢幕與跨 Mac 已完成實機驗收。
 
 ## OCR 產品開關
 

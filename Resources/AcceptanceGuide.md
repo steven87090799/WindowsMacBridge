@@ -50,7 +50,7 @@ Win+Shift+S／PrintScreen 框選、Alt+PrintScreen 當前窗口、Win+PrintScree
 
 ## 7. 輸入法與App模式
 
-ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再測試複製。在 TextEdit、Terminal、IDE 分別測左右 Ctrl+C／V／A／X 與原生 Command+C／V／A／X，確認複製、貼上、全選、剪下依 App 可用功能執行；先放開 Ctrl 再放開字母不得卡住修飾鍵。Terminal 運行 `sleep 30`，先選取可丟棄文字按 Ctrl+C 應複製且命令繼續；清除選取再按 Ctrl+C 應中斷。Ctrl+Shift+C 應明確中斷。另測選取資訊不可用時僅嘗試複製、查詢中切 App／暫停／撤銷來源不得送出舊中斷。IDE 內嵌 Terminal 使用整個 App 的 Windows 規則，另記錄其命令中斷綁定。遠端 Windows／VM 的 Ctrl+C／V 保持原 Ctrl，兩種後端各自驗收。手動App規則、快速切換、Pause應同步取消舊輸入法／AX／截圖任務。守護／切換熱鍵默認關閉；守護關閉時不修正系統輸入來源。
+ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再測試複製。在 TextEdit、Terminal、IDE 與本機 Game／停用延伸規則 Profile 分別測左右 Ctrl+C／V／A／X，確認複製、貼上、全選、剪下依 App 可用功能執行；先放開 Ctrl 再放開字母不得卡住修飾鍵。按住 Ctrl 切換 App、輸入法或開啟系統截圖／Quick Look 浮動視窗後，下一次 C／V 仍須生效。Terminal 運行 `sleep 30`，有選取時 Ctrl+C 複製且命令繼續；清除選取後 Ctrl+C 仍只送複製，Ctrl+Shift+C 才中斷。Finder 剪下等待期間按 Ctrl+C，不得稍後被較舊的剪下覆寫；一般貼上不得等候其他系統 App 啟動。IDE 內嵌 Terminal 使用整個 App 的 Windows 規則，另記錄其中斷綁定。遠端 Windows／VM 的 Ctrl+C／V 保持原 Ctrl，兩種後端各自驗收。手動 App 規則、快速切換、Pause 應同步取消舊輸入法／AX／截圖任務。守護／切換熱鍵默認關閉；守護關閉時不修正系統輸入來源。
 
 守護開啟後預設維持唯音繁體。用系統選單切成 ABC，應在設定延遲後回到唯音；切換本機 App、喚醒或重新啟動後仍應回到守護目標。用本 App 的 ABC 按鈕或唯音／ABC 快捷鍵選英文，應維持 ABC，並在重新啟動後保留此明確目標；本 App 選回唯音後，系統切英文應再次被修正。舊版記錄的「保留來源」不能當作明確英文選擇。
 

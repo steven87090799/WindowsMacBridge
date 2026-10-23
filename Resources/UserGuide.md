@@ -4,7 +4,7 @@
 
 1. 點兩下 DMG，先正常結束舊版，把 WindowsMacBridge.app 拖進「應用程式」取代，再開啟。
 2. 預設「一般模式」：權限頁逐項列出輔助功能、輸入監控、螢幕錄製與選用的登入時啟動。先核准前兩項；需要截圖再核准螢幕錄製。每次只按一列，核准 WindowsMacBridge 後回來重新檢查；需要時正常結束並重開 App。綠燈必須經本版 App 的原生檢查，不以舊版同名開關作為依據。
-3. 本機 App、Terminal 與 IDE 套用完整 Windows 相容快捷鍵：Ctrl+C／V／A／X、S／Z／Y／F、T／W 與文字導覽等；Terminal 的 Ctrl+C 有選取時複製、沒有選取時中斷；Ctrl+Shift+C 明確中斷。遠端 Windows 與 VM 保留 Ctrl 給 Windows 處理；Game、停用與暫停規則仍保持原按鍵。
+3. 本機 App、Terminal 與 IDE 套用完整 Windows 相容快捷鍵：Ctrl+C／V／A／X、S／Z／Y／F、T／W 與文字導覽等。Ctrl+C 一律複製；Terminal 使用 Ctrl+Shift+C 中斷命令。Game 與停用延伸規則的本機 Profile 也保留這四個剪貼簿快捷鍵，且不依賴 ABC／注音切換。遠端 Windows 與 VM 接收原始 Ctrl，交由 Windows 執行複製貼上。總開關關閉與暫停會停止轉換。
 4. Win+Shift+S 或 PrintScreen 框選後直接貼上圖片；⌘⇧3／⌘⇧4 也直接複製。成功複製後右下角顯示較大的自製玻璃預覽約 5 秒，滑鼠移入會保留；點圖用系統快速查看放大，關閉後釋放，新截圖取代舊縮圖。首次擷取可能要求螢幕錄製授權；這不是 HID／Root 授權。
 
 一般模式不自動安裝背景元件、不連線 root XPC、不捕捉 IOHID、不啟用 Driver。App 使用 ad-hoc 簽章，更新可能需要重新核准目前版本；沒有 Apple 公證。不要為此關閉 Gatekeeper／SIP 或重設其他 App 的權限。
@@ -28,7 +28,7 @@
 
 到「規則預覽」選擇 App、預覽 Profile 與按鍵來源，先看 Ctrl+C／Ctrl+Shift+C、Finder、瀏覽器、Alt+Tab、截圖等組合的預期輸出，也可選自訂組合。「模擬總開關開啟」只影響此頁，實際功能尚未啟用時也能預覽；不會改變已儲存的 App 規則、輸出按鍵或新增監聽。
 
-Terminal 的 Ctrl+C 依選取狀態決定：有選取文字時複製，沒有選取時中斷命令；Ctrl+Shift+C 明確中斷。選取狀態無法確認時僅嘗試複製，不猜測中斷；Remote／VM 等受保護模式顯示原樣通過。來源欄表示抵達 Mac 的按鍵，已轉成 Mac 的遠端來源不重複翻譯，未知來源自動模式不猜測。預覽不代表已核准權限，也不模擬所有實體鍵盤／AX 焦點條件。
+Terminal 的 Ctrl+C 一律複製，不會因沒有選取內容而中斷命令；Ctrl+Shift+C 明確中斷。Remote／VM 使用 Windows 原始 Ctrl。來源欄表示抵達 Mac 的按鍵；已辨識來源的原始 Ctrl+C／X／V／A 共用剪貼簿規則，已是 Command 的按鍵保持原輸出。尚未辨識的事件來源不會猜測翻譯。預覽不代表已核准權限，也不模擬所有實體鍵盤／AX 焦點條件。
 
 ## 遠端來源校準
 

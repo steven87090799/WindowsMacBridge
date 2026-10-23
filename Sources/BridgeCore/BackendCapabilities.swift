@@ -44,6 +44,8 @@ public struct BackendCapabilities: Sendable {
 
 public enum HIDCapturePolicy {
     public static func requiresNativePassThrough(mode: ApplicationMode, layoutSupported: Bool, transportOnly: Bool = false) -> Bool {
-        mode == .remoteWindows || mode == .virtualMachine || mode == .game || mode == .disabled || (!transportOnly && !layoutSupported)
+        // Local profiles and IMEs still need the universal clipboard keys.
+        // Their other keys retain the raw reports in HIDTranslationEngine.
+        mode == .remoteWindows || mode == .virtualMachine
     }
 }

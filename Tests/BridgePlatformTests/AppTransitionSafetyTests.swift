@@ -41,10 +41,9 @@ struct AppTransitionSafetyTests {
             { $0.deviceScope = .builtInAndApple834 }, { $0.manualPassThrough = true },
             { $0.accessibility = false }, { $0.posting = false }, { $0.settingsRevision += 1 },
             { $0.restartToken += 1 }, { $0.hidReleasePending = true },
-            { $0.nativeRestorePending = true }, { $0.layoutIdentity = "other" },
-            { $0.layoutSupported = false }, { $0.screenshotEnabled = true },
+            { $0.nativeRestorePending = true }, { $0.screenshotEnabled = true },
             { $0.shortcutEnabled = false }, { $0.diagnosticsEnabled = true },
-            { $0.foreground.mode = .remoteWindows }, { $0.foreground.processID = 0 }
+            { $0.foreground.processID = 0 }
         ]
         for mutation in mutations {
             var coordinator = RuntimePolicyCoordinator(); var input = RuntimePolicyInput()
@@ -72,7 +71,7 @@ struct AppTransitionSafetyTests {
         #expect(!afterSecure.preservesModifiers(from: latest))
         input.foreground.mode = .remoteWindows; _ = configuration(&coordinator, input)
         input.foreground = .init(processID: 21, bundleID: "editor.d", mode: .macOS)
-        #expect(!configuration(&coordinator, input).preservesModifiers(from: afterSecure))
+        #expect(configuration(&coordinator, input).preservesModifiers(from: afterSecure))
     }
     @Test func coalescedRoundTripToTheSameAppStillPreservesPhysicalModifiers() {
         var coordinator = RuntimePolicyCoordinator(); var input = RuntimePolicyInput()
@@ -85,5 +84,18 @@ struct AppTransitionSafetyTests {
         let latest = configuration(&coordinator, input)
         #expect(latest.generation > first.generation)
         #expect(latest.preservesModifiers(from: first))
+    }
+    @Test func hidNativeOwnershipGapCannotBeHiddenByACoalescedRoundTrip() {
+        for backend: InputBackend in [.eventTap, .deviceHID] {
+            var coordinator = RuntimePolicyCoordinator(); var input = RuntimePolicyInput()
+            input.shortcutEnabled = true; input.backend = backend
+            input.foreground = .init(processID: 17, bundleID: "editor.a", mode: .macOS)
+            let first = configuration(&coordinator, input)
+            input.foreground = .init(processID: 18, bundleID: "windows.guest", mode: .remoteWindows)
+            let remote = configuration(&coordinator, input)
+            #expect(remote.preservesModifiers(from: first) == (backend == .eventTap))
+            input.foreground = first.context
+            #expect(configuration(&coordinator, input).preservesModifiers(from: first) == (backend == .eventTap))
+        }
     }
 }
