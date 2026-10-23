@@ -62,6 +62,7 @@ public struct DiagnosticRecord: Equatable, Sendable, Identifiable {
     public let rule: String
     public let application: String
     public let microseconds: Double
+    public var detail: String? = nil
 }
 
 public struct EngineStatus: Equatable, Sendable {
@@ -560,6 +561,27 @@ public final class InputEngine: @unchecked Sendable {
         let recipient = Int32(truncatingIfNeeded: event.getIntegerValueField(.eventTargetUnixProcessID))
         let key = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
         let flags = Self.modifiers(event.flags)
+        let trace = configuration.diagnostics && ProcessInfo.processInfo.systemUptime < diagnosticDeadline &&
+            Self.tracesShortcutInput(type: type, key: key, flags: flags,
+                isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0)
+        let traceStart = trace ? DispatchTime.now().uptimeNanoseconds : 0
+        let traceAwaiting = trace && processor.isAwaitingNeutral
+        let traceSynchronized = trace && processor.modifiers.synchronized
+        let traceRawFlags = trace ? event.flags.rawValue : 0
+        var traceResult = "source-filter"
+        defer {
+            if trace {
+                // Bounded, opt-in metadata only. No characters, clipboard reads,
+                // file I/O or claims of event-to-physical-device correlation.
+                let detail = "key=\(key) type=\(type.rawValue) flags=\(flags.rawValue) rawFlags=0x\(String(traceRawFlags, radix: 16)) " +
+                    "source=\(evidence.processID)/\(evidence.stateID) origin=\(origin) target=\(recipient) " +
+                    "enabled=\(configuration.enabled) neutralWait=\(traceAwaiting)->\(processor.isAwaitingNeutral) " +
+                    "synchronized=\(traceSynchronized)->\(processor.modifiers.synchronized) result=\(traceResult)"
+                appendDiagnostic(rule: "input-shortcut", application: (deliveryContext ?? configuration.context).bundleID,
+                    microseconds: Double(DispatchTime.now().uptimeNanoseconds - traceStart) / 1000, detail: detail)
+                wake()
+            }
+        }
         if type == .keyDown, key == 8, recipient > 0,
            event.getIntegerValueField(.keyboardEventAutorepeat) == 0,
            flags == .control || flags == .command {
@@ -583,11 +605,13 @@ public final class InputEngine: @unchecked Sendable {
         guard physical || { if case .remote = origin { return true }; return false }() else {
             return Unmanaged.passUnretained(event)
         }
+        traceResult = "recipient-filter"
         defer { keyEdgeWake = true; wake() } // Coalesced work after callback, no recurring poll.
         let start = DispatchTime.now().uptimeNanoseconds
         let side = Self.side(key)
-        // Aggregate flags plus per-side history handles both Control keys held together.
-        let down = physical ? side.map { flags.contains($0.group) && !processor.modifiers.isDown($0) } : nil
+        // flagsChanged describes state, not a toggle. UC's virtual HID services
+        // can emit the same modifier-down more than once.
+        let down = physical ? side.map { Self.modifierDown($0, flags: event.flags) } : nil
         let phase: KeyPhase = type == .keyDown ? .down : type == .keyUp ? .up : .flagsChanged
         // Modifier edges and owned ups still reconcile state across missing recipients.
         // A new shortcut requires a known local recipient; only an existing native switcher
@@ -623,6 +647,7 @@ public final class InputEngine: @unchecked Sendable {
             notifyActivity()
         }
         if destinationPhysical { processor.reconcileIndependentSourceFlags(normalized.modifiers) }
+        traceResult = "processor"
         var routed = physical ? RoutedInputDecision(processor.process(normalized)) : remote.process(normalized, evidence: evidence, now: ProcessInfo.processInfo.systemUptime)
         if physical && configuration.windowsKeyModifier == .command {
             routed.decision = appSwitch.apply(routed.decision, event: normalized, state: processor.modifiers,
@@ -645,20 +670,23 @@ public final class InputEngine: @unchecked Sendable {
         }
         var result: Unmanaged<CGEvent>? = Unmanaged.passUnretained(event)
         switch decision {
-        case .passThrough: break
-        case .suppress: result = nil
+        case .passThrough: traceResult = "pass"
+        case .suppress: traceResult = "suppress"; result = nil
         case .emergencyPause:
+            traceResult = "emergency-pause"
             queueReleases(); wake()
             status.emergencyPaused = true
             configureProcessor()
             result = nil
         case .togglePassThrough:
+            traceResult = "manual-pass-through"
             queueReleases(); wake()
             status.manualPassThrough = processor.manualPassThrough
             configureProcessor()
             result = nil
-        case .action: break // Resolved above, including the paired clipboard fallback.
+        case .action: traceResult = "action" // Resolved above, including the paired clipboard fallback.
         case let .rewrite(outputKey, outputModifiers, ruleID):
+            if trace { traceResult = "rewrite:\(ruleID)" }
             if NativeSessionEmitter.requiresSessionRouting(ruleID) {
                 // Synchronous input delivery: no detached work, queue or timer. Policy
                 // and source validity are checked at the point of native dispatch.
@@ -679,17 +707,49 @@ public final class InputEngine: @unchecked Sendable {
             }
             if phase == .down && !normalized.isRepeat && configuration.diagnostics &&
                 ProcessInfo.processInfo.systemUptime < diagnosticDeadline {
-                recordSequence &+= 1
-                records[recordIndex] = DiagnosticRecord(id: recordSequence, rule: ruleID,
-                    application: (deliveryContext ?? configuration.context).bundleID,
+                appendDiagnostic(rule: ruleID, application: (deliveryContext ?? configuration.context).bundleID,
                     microseconds: Double(DispatchTime.now().uptimeNanoseconds - start) / 1000)
-                recordIndex = (recordIndex + 1) % records.count
-                diagnosticRevision &+= 1
             }
         }
         let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1000
         status.maxMicroseconds = max(status.maxMicroseconds, elapsed)
         return result
+    }
+
+    /// Restrict short-term traces to modifier edges and clipboard chords, never ordinary text.
+    static func tracesShortcutInput(type: CGEventType, key: UInt16, flags: Modifiers, isRepeat: Bool) -> Bool {
+        if type == .flagsChanged { return key == 59 || key == 62 || key == 63 }
+        guard type == .keyDown, !isRepeat,
+              !flags.intersection([.control, .command, .fn]).isEmpty else { return false }
+        return key == 0 || key == 7 || key == 8 || key == 9
+    }
+    static func modifierDown(_ side: ModifierSide, flags: CGEventFlags) -> Bool {
+        guard modifiers(flags).contains(side.group) else { return false }
+        // Native side masks from IOKit's IOLLEvent.h. They distinguish a side's
+        // release while its peer remains held, without toggling duplicate downs.
+        let masks: (own: UInt64, group: UInt64)
+        switch side {
+        case .leftControl: masks = (0x1, 0x2001)
+        case .rightControl: masks = (0x2000, 0x2001)
+        case .leftShift: masks = (0x2, 0x6)
+        case .rightShift: masks = (0x4, 0x6)
+        case .leftCommand: masks = (0x8, 0x18)
+        case .rightCommand: masks = (0x10, 0x18)
+        case .leftOption: masks = (0x20, 0x60)
+        case .rightOption: masks = (0x40, 0x60)
+        }
+        if flags.rawValue & masks.group != 0 { return flags.rawValue & masks.own != 0 }
+        // Aggregate-only transports cannot identify a release while the peer
+        // stays down. Preserve the reported held group until its neutral edge;
+        // never invent a release from an identical repeated event.
+        return true
+    }
+    private func appendDiagnostic(rule: String, application: String, microseconds: Double, detail: String? = nil) {
+        recordSequence &+= 1
+        records[recordIndex] = DiagnosticRecord(id: recordSequence, rule: rule,
+            application: application, microseconds: microseconds, detail: detail)
+        recordIndex = (recordIndex + 1) % records.count
+        diagnosticRevision &+= 1
     }
 
     public static func modifiers(_ flags: CGEventFlags) -> Modifiers {

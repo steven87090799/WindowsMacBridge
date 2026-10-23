@@ -42,6 +42,10 @@ Mac mini 外接鍵盤固定不換；MacBook 只使用內建鍵盤，在 MacBook 
 
 原生映射使用 Apple 的 UserKeyMapping service properties；只修改本 App 擁有的 pair，保留其他工具。正常退出時先暫停輸入輔助，最多等待約 3 秒放鍵並確認還原；仍未還原會提供重試或取消結束，保留還原紀錄。關閉功能時也請放開所有按鍵。強制結束可能留下暫存映射，下次啟動依還原紀錄處理，重新開機清除服務暫存。喚醒與內建鍵盤重建會重新檢查。其他工具佔用 Fn／Ctrl 時顯示衝突，不覆蓋。
 
+「已寫入映射」只表示服務屬性讀回一致，仍須在文字編輯反白測試文字，使用實體 Fn+C／X／V／A 確認複製、剪下、貼上、全選，並確認原本左 Ctrl 成為 Fn。若 Fn+C 仍開啟控制中心，而電腦正在使用 Karabiner，請檢查其 Devices：即使複合規則已停用，Modify events 仍可能接管內建鍵盤，改由虛擬鍵盤送出事件，繞過內建服務的映射。對內建鍵盤關閉 Modify events，保留外接鍵盤原設定後再測。虛擬鍵盤存在本身不證明接管；程式不會自動修改 Karabiner 設定或把交換表套到共用虛擬鍵盤。
+
+`WindowsMacBridge --diagnose-backend` 可列出各鍵盤服務 Registry ID、class、內建／映射目標、服務回報的 Fn usage 與兩種映射表。此命令只讀取 metadata，不擷取實體按鍵，也不能代替上述實測。
+
 UC 與 Remote 不是相同來源契約，來源 PID／目標 App 可能缺失；不能承諾每種組合都通過。已知 Google CRD host 的 raw Ctrl 依 Mac 目的端轉成 Command；已是 Command 的事件通過。Mac 上開遠端 Windows viewer 時保持 Ctrl，不要把 viewer 的 App 規則改成 Default macOS。未知來源不猜。
 
 ## 截圖權限與取消

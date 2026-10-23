@@ -48,6 +48,8 @@ Win+Shift+S／PrintScreen 框選、Alt+PrintScreen 當前窗口、Win+PrintScree
 
 僅builtIn=true的本機Apple鍵盤交換Fn／左Ctrl；Mac mini、USB／Bluetooth、UC／virtual不交換。正常退出還原；與他人工具Fn／Ctrl衝突要顯示問題且不覆蓋其他pair。強制退出後下次啓動／登入應處理journal；重開機服務映射清除。睡眠／喚醒、服務重建、持鍵切換與restorePending都實測，不能用property setter返回true就判定成功。
 
+讀回 UserKeyMapping 一致仍只應顯示「已寫入映射；實體按鍵尚待確認」。實體內建 Fn+C／X／V／A 必須在文字編輯完成複製／剪下／貼上／全選，原本左 Ctrl+C 應有 Fn+C 的系統行為。交換開／關及正常退出前後，逐一比對內建與外接服務的映射表。Karabiner 複合規則關閉但 Devices 的 Modify events 仍開啟時，也要測試；不得把交換表寫到其共用虛擬鍵盤以規避問題。若需讓內建鍵盤放行，先備份設定，只修改該裝置，再確認原實體 Fn+C 的結果。記錄 metadata、使用者實測與推測，各自註明證據。
+
 ## 7. 輸入法與App模式
 
 ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再測試複製。在 TextEdit、Terminal、IDE 與本機 Game／停用延伸規則 Profile 分別測左右 Ctrl+C／V／A／X，確認複製、貼上、全選、剪下依 App 可用功能執行；先放開 Ctrl 再放開字母不得卡住修飾鍵。按住 Ctrl 切換 App、輸入法或開啟系統截圖／Quick Look 浮動視窗後，下一次 C／V 仍須生效。Terminal 運行 `sleep 30`，有選取時 Ctrl+C 複製且命令繼續；清除選取後 Ctrl+C 仍只送複製，Ctrl+Shift+C 才中斷。Finder 剪下等待期間按 Ctrl+C，不得稍後被較舊的剪下覆寫；一般貼上不得等候其他系統 App 啟動。IDE 內嵌 Terminal 使用整個 App 的 Windows 規則，另記錄其中斷綁定。遠端 Windows／VM 的 Ctrl+C／V 保持原 Ctrl，兩種後端各自驗收。手動 App 規則、快速切換、Pause 應同步取消舊輸入法／AX／截圖任務。守護／切換熱鍵默認關閉；守護關閉時不修正系統輸入來源。

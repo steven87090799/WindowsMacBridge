@@ -1,0 +1,48 @@
+Observed on installed build 61, during the user's reproduction:
+Other Mac's external keyboard -> Universal Control -> this MacBook -> TextEdit
+User result: both Ctrl+C attempts failed, with the macOS invalid-operation sound.
+
+Relevant records from the opt-in in-memory diagnostic UI, chronological order:
+key=59 type=12 flags=1 source=0/1 origin=physicalFallback target=69062 enabled=true neutralWait=false->false synchronized=true->true result=pass
+key=59 type=12 flags=1 source=0/1 origin=physicalFallback target=69062 enabled=true neutralWait=false->false synchronized=true->false result=pass
+key=8 type=10 flags=1 source=0/1 origin=physicalFallback target=69062 enabled=true neutralWait=false->false synchronized=false->false result=pass
+
+A subsequent C and A also showed flags=1, synchronized=false and result=pass.
+Duplicated key=59 release records with flags=0 eventually restored synchronization.
+
+type=12 is flagsChanged; type=10 is keyDown. flags=1 here is BridgeCore's
+normalized Control flag, not raw CGEventFlags. This diagnostic build did not
+record the native left/right device bits; tests must cover both their presence
+and aggregate-only flags. target=69062 was TextEdit, resolved as com.apple.TextEdit.
+
+Inference supported by the code and reproduced in regression tests:
+InputEngine inferred each modifier edge as aggregateDown && !previousSideDown.
+The duplicate down was therefore passed to ModifierStateMachine as down=false
+while aggregate Control remained true. That invalidated synchronization, causing
+KeyboardEventProcessor to reject the following clipboard shortcut.
+
+The events arrived as HID-state PID=0/state=1, not as the Universal Control PID.
+They therefore used physicalFallback and did not use the separate UC aggregate
+reconciliation branch. This observation does not establish physical device
+identity from a CGEvent; the source keyboard is identified by the user's test.
+
+After installing build 62, the user repeated the same route and confirmed that
+both copy/paste attempts succeeded. Relevant observed records:
+key=59 type=12 flags=1 rawFlags=0x40101 source=0/1 origin=physicalFallback target=69062 enabled=true neutralWait=false->false synchronized=true->true result=pass
+key=59 type=12 flags=1 rawFlags=0x40101 source=0/1 origin=physicalFallback target=69062 enabled=true neutralWait=false->false synchronized=true->true result=pass
+key=8 type=10 flags=1 rawFlags=0x40101 source=0/1 origin=physicalFallback target=69062 enabled=true neutralWait=false->false synchronized=true->true result=rewrite:windows.copy
+key=9 type=10 flags=1 rawFlags=0x40101 source=0/1 origin=physicalFallback target=69062 enabled=true neutralWait=false->false synchronized=true->true result=rewrite:windows.paste
+key=59 type=12 flags=0 rawFlags=0x100 source=0/1 origin=physicalFallback target=69062 enabled=true neutralWait=false->false synchronized=true->true result=pass
+
+The native flags include Left Control (0x1), confirming the side-bit decoding
+path in this reproduction. Duplicate modifier edges remained present; the
+software now interpreted both as held state without losing synchronization.
+
+Separate local physical validation on build 62:
+The user explicitly used this MacBook's built-in keyboard in local TextEdit,
+tested original Fn+A/X/V/C with actual paste, then original left Ctrl+C for
+the Fn/Control Center behavior, and reported all actions matched expectations.
+The diagnostic UI showed windows.selectAll, windows.cut, windows.paste and
+windows.copy, plus key=63 flags=16 rawFlags=0x800100 for the Fn state.
+Physical device attribution is from the user's controlled test, not a CGEvent
+device identifier. Short-term capture was disabled and cleared afterward.

@@ -104,7 +104,7 @@ import BridgeCore
         #expect(FileManager.default.fileExists(atPath: url.path))
         // Cancelling quit resumes the user's existing setting.
         mapper.configure(enabled: true)
-        #expect(mapper.status.activeDevices == 1 && backend.writes.count == 1)
+        #expect(mapper.status.mappedDevices == 1 && backend.writes.count == 1)
         backend.keysNeutral = true
         #expect(await mapper.restoreForTermination(maximumAttempts: 1))
     }
@@ -129,7 +129,7 @@ import BridgeCore
         mapper.configure(enabled: true)
         #expect(backend.writes.isEmpty)
         backend.keysNeutral = true; mapper.refresh()
-        #expect(mapper.status.activeDevices == 1)
+        #expect(mapper.status.mappedDevices == 1)
         backend.keysNeutral = false; mapper.configure(enabled: true, eventTapBackend: false)
         #expect(mapper.status.restorePending && backend.rows[0].userMapping == MacBookFnControlMapping.swap)
         backend.keysNeutral = true; mapper.refresh()
@@ -139,7 +139,7 @@ import BridgeCore
         let name = "WindowsMacBridge.Tests.FnControl." + UUID().uuidString
         return (name, UserDefaults(suiteName: name)!)
     }
-    @Test func nativeSwapIsVerifiedAndTurningOffRestoresOriginalOnly() {
+    @Test func propertyReadbackStillRequiresPhysicalValidationAndTurningOffRestoresOriginalOnly() {
         let (name, defaults) = defaults(); defer { defaults.removePersistentDomain(forName: name); try? FileManager.default.removeItem(at: FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal")) }
         let backend = KeyboardBackendFixture()
         let other = NativeKeyMapping(0x700000039, 0x700000029)
@@ -148,12 +148,47 @@ import BridgeCore
             builtIn: false, vendorID: 1133, transport: "USB", product: "External keyboard"), userMapping: []))
         let mapper = MacBookKeyboardMapper(backend: backend, defaults: defaults, journalURL: FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal"))
         mapper.configure(enabled: true)
-        #expect(mapper.status.activeDevices == 1 && mapper.status.issue == nil)
+        #expect(mapper.status.mappedDevices == 1 && mapper.status.issue == nil)
+        #expect(mapper.status.physicalVerificationPending)
+        #expect(mapper.status.summary.contains("實體按鍵尚待確認"))
+        #expect(!mapper.status.summary.contains("已交換"))
+        #expect(mapper.status.routingNotice == nil)
         #expect(backend.rows[0].userMapping == [other] + MacBookFnControlMapping.swap)
         #expect(backend.rows[1].userMapping == [])
         mapper.configure(enabled: false)
-        #expect(backend.rows[0].userMapping == [other] && mapper.status.activeDevices == 0)
+        #expect(backend.rows[0].userMapping == [other] && mapper.status.mappedDevices == 0)
+        #expect(!mapper.status.physicalVerificationPending)
         #expect(defaults.object(forKey: "macbook.fnControl.journal.v1") == nil)
+    }
+    @Test func virtualKeyboardPresenceWarnsAboutRoutingWithoutClaimingCaptureOrChangingItsMapping() {
+        let (name, defaults) = defaults()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal")
+        defer { defaults.removePersistentDomain(forName: name); try? FileManager.default.removeItem(at: url) }
+        let backend = KeyboardBackendFixture()
+        let external = NativeKeyMapping(0x700000039, 0x700000029)
+        backend.rows.append(MacBookKeyboardService(identity: MacBookKeyboardIdentity(registryID: 2,
+            builtIn: false, vendorID: 1452, transport: "", product: "Karabiner DriverKit VirtualHIDKeyboard", virtual: true),
+            userMapping: [external]))
+        let mapper = MacBookKeyboardMapper(backend: backend, defaults: defaults, journalURL: url)
+        mapper.configure(enabled: true)
+        #expect(mapper.status.mappedDevices == 1 && mapper.status.physicalVerificationPending)
+        #expect(mapper.status.routingNotice?.contains("這不代表它正在接管內建鍵盤") == true)
+        #expect(backend.writes.map(\.0) == [1])
+        #expect(backend.rows[1].userMapping == [external])
+        // Virtual keyboards can disappear or be present while the physical device is ignored.
+        backend.rows.removeLast(); mapper.refresh()
+        #expect(mapper.status.routingNotice == nil && mapper.status.physicalVerificationPending)
+        mapper.stop()
+        #expect(!mapper.status.physicalVerificationPending && mapper.status.routingNotice == nil)
+    }
+    @Test func reportedFnUsageUsesTheFullUsagePageAndRejectsMalformedMetadata() {
+        #expect(NativeMacBookKeyboardBackend.fnUsage(page: NSNumber(value: 0xff), usage: NSNumber(value: 3)) == MacBookFnControlMapping.fn)
+        #expect(NativeMacBookKeyboardBackend.fnUsage(page: NSNumber(value: 0xff01), usage: NSNumber(value: 3)) == MacBookFnControlMapping.vendorFn)
+        #expect(NativeMacBookKeyboardBackend.fnUsage(page: nil, usage: NSNumber(value: 3)) == nil)
+        for value: NSNumber in [NSNumber(value: true), NSNumber(value: -1), NSNumber(value: 0x10000), NSNumber(value: 3.5)] {
+            #expect(NativeMacBookKeyboardBackend.fnUsage(page: value, usage: NSNumber(value: 3)) == nil)
+            #expect(NativeMacBookKeyboardBackend.fnUsage(page: NSNumber(value: 0xff), usage: value) == nil)
+        }
     }
     @Test func universalControlAndExternalKeyboardsNeverGetChangedOnEitherMac() {
         let (name, defaults) = defaults(); defer { defaults.removePersistentDomain(forName: name); try? FileManager.default.removeItem(at: FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal")) }
@@ -163,7 +198,7 @@ import BridgeCore
             builtIn: false, vendorID: 1452, transport: "USB", product: "Magic Keyboard"), userMapping: []))
         let mapper = MacBookKeyboardMapper(backend: backend, defaults: defaults, journalURL: FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal"))
         mapper.configure(enabled: true)
-        #expect(backend.writes.isEmpty && mapper.status.activeDevices == 0)
+        #expect(backend.writes.isEmpty && mapper.status.mappedDevices == 0)
         backend.rows[0].identity.product = "Apple Internal Keyboard / Trackpad"
         backend.portable = false; mapper.refresh()
         #expect(backend.writes.isEmpty)
@@ -173,7 +208,7 @@ import BridgeCore
         let backend = KeyboardBackendFixture(); backend.lieAboutWrite = true
         let mapper = MacBookKeyboardMapper(backend: backend, defaults: defaults, journalURL: FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal"))
         mapper.configure(enabled: true)
-        #expect(mapper.status.activeDevices == 0 && mapper.status.issue != nil)
+        #expect(mapper.status.mappedDevices == 0 && mapper.status.issue != nil)
         #expect(backend.rows[0].userMapping == [])
     }
     @Test func conflictsAndUnknownPropertyFormatsFailClosed() {
@@ -196,9 +231,9 @@ import BridgeCore
         active.configure(enabled: true, sessionActive: false)
         #expect(backend.rows[0].userMapping == [])
         active.configure(enabled: true)
-        #expect(active.status.activeDevices == 1)
+        #expect(active.status.mappedDevices == 1)
         active.configure(enabled: true, eventTapBackend: false)
-        #expect(backend.rows[0].userMapping == [] && active.status.activeDevices == 0)
+        #expect(backend.rows[0].userMapping == [] && active.status.mappedDevices == 0)
         active.stop()
     }
     @Test func crashJournalRecoversOnNextLaunchAndNewBootDoesNotReuseOldOwnership() {
@@ -208,7 +243,7 @@ import BridgeCore
         previous.configure(enabled: true)
         let restarted = MacBookKeyboardMapper(backend: backend, defaults: defaults, journalURL: FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal"))
         restarted.configure(enabled: true)
-        #expect(restarted.status.activeDevices == 1 && backend.writes.count == 1)
+        #expect(restarted.status.mappedDevices == 1 && backend.writes.count == 1)
         restarted.stop()
         #expect(backend.rows[0].userMapping == [])
         previous.configure(enabled: true)
@@ -226,7 +261,7 @@ import BridgeCore
         let active = MacBookKeyboardMapper(backend: backend, defaults: defaults, journalURL: FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal"))
         active.configure(enabled: true)
         backend.rows[0].userMapping = []; backend.change?()
-        #expect(active.status.activeDevices == 1 && backend.writes.count == 2)
+        #expect(active.status.mappedDevices == 1 && backend.writes.count == 2)
         active.refresh()
         #expect(backend.writes.count == 2)
         active.stop()
@@ -239,7 +274,7 @@ import BridgeCore
         let external = NativeKeyMapping(MacBookFnControlMapping.leftControl, 0x7000000e3)
         backend.rows[0].userMapping = MacBookFnControlMapping.swap.filter { $0.source != external.source } + [external]
         mapper.refresh()
-        #expect(backend.rows[0].userMapping == [external] && mapper.status.activeDevices == 0 && mapper.status.issue != nil)
+        #expect(backend.rows[0].userMapping == [external] && mapper.status.mappedDevices == 0 && mapper.status.issue != nil)
         mapper.stop()
     }
     @Test func failedObservationAndFailedSetterNeverActivateMapping() {
@@ -248,10 +283,10 @@ import BridgeCore
         backend.acceptObservation = false
         let mapper = MacBookKeyboardMapper(backend: backend, defaults: defaults, journalURL: FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal"))
         mapper.configure(enabled: true)
-        #expect(backend.writes.isEmpty && mapper.status.activeDevices == 0 && mapper.status.issue != nil)
+        #expect(backend.writes.isEmpty && mapper.status.mappedDevices == 0 && mapper.status.issue != nil)
         backend.acceptObservation = true; backend.acceptWrite = false
         mapper.configure(enabled: true)
-        #expect(mapper.status.activeDevices == 0 && mapper.status.issue != nil)
+        #expect(mapper.status.mappedDevices == 0 && mapper.status.issue != nil)
     }
     @Test func nativePropertyDecoderRejectsMalformedOrDuplicatePairs() {
         let source = "HIDKeyboardModifierMappingSrc", destination = "HIDKeyboardModifierMappingDst"
@@ -286,7 +321,7 @@ import BridgeCore
         mapper.configure(enabled: true)
         backend.acceptWrite = false
         mapper.configure(enabled: true, eventTapBackend: false)
-        #expect(mapper.status.restorePending && mapper.status.issue != nil && mapper.status.activeDevices == 0)
+        #expect(mapper.status.restorePending && mapper.status.issue != nil && mapper.status.mappedDevices == 0)
         #expect(backend.rows[0].userMapping == MacBookFnControlMapping.swap)
         #expect(defaults.data(forKey: "macbook.fnControl.journal.v1") != nil)
         backend.acceptWrite = true; mapper.refresh()
@@ -299,10 +334,10 @@ import BridgeCore
         let mapper = MacBookKeyboardMapper(backend: backend, defaults: defaults, journalURL: FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal"))
         mapper.configure(enabled: true)
         backend.rows = []; backend.change?()
-        #expect(mapper.status.activeDevices == 0 && defaults.object(forKey: "macbook.fnControl.journal.v1") == nil)
+        #expect(mapper.status.mappedDevices == 0 && defaults.object(forKey: "macbook.fnControl.journal.v1") == nil)
         var reconnected = original; reconnected.identity.registryID = 3
         backend.rows = [reconnected]; backend.change?()
-        #expect(mapper.status.activeDevices == 1 && backend.writes.last?.0 == 3)
+        #expect(mapper.status.mappedDevices == 1 && backend.writes.last?.0 == 3)
         mapper.stop()
         #expect(backend.rows[0].userMapping == [])
     }
@@ -317,6 +352,11 @@ import BridgeCore
         // An Apple Silicon MacBook on macOS 27 publishes 129 event services with
         // one keyboard; the old 128-service bound rejected the whole inventory.
         #expect(native.services() != nil)
+        let report = native.diagnosticReport()
+        #expect(report.contains("physical Fn/Control behavior and event routing are NOT verified"))
+        for row in native.services() ?? [] {
+            #expect(report.contains("service=0x" + String(row.identity.registryID, radix: 16)))
+        }
         #expect(NativeMacBookKeyboardBackend.serviceScanLimit > 1024 &&
                 NativeMacBookKeyboardBackend.keyboardServiceLimit <= NativeMacBookKeyboardBackend.serviceScanLimit)
     }
@@ -331,7 +371,7 @@ import BridgeCore
         mapper.configure(enabled: true)
         mapper.refresh()
         #expect(backend.inventoryReads == 0 && backend.observationAttempts == 0 && backend.writes.isEmpty)
-        #expect(mapper.status.activeDevices == 0 && mapper.status.issue == nil)
+        #expect(mapper.status.mappedDevices == 0 && mapper.status.issue == nil)
     }
     @Test func manualRecheckRetriesFailedNotificationsWithoutPolling() {
         let (name, defaults) = defaults(); defer { defaults.removePersistentDomain(forName: name); try? FileManager.default.removeItem(at: FileManager.default.temporaryDirectory.appendingPathComponent(name + ".journal")) }
@@ -341,7 +381,7 @@ import BridgeCore
         #expect(backend.observationAttempts == 1 && backend.writes.isEmpty)
         backend.acceptObservation = true
         mapper.refresh()
-        #expect(backend.observationAttempts == 2 && mapper.status.activeDevices == 1)
+        #expect(backend.observationAttempts == 2 && mapper.status.mappedDevices == 1)
         mapper.refresh()
         #expect(backend.observationAttempts == 2 && backend.writes.count == 1)
         mapper.stop()
