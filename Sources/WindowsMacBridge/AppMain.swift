@@ -228,6 +228,7 @@ import InputSourceCore
         if CommandLine.arguments.dropFirst().first == ScreenshotTextBudget.workerArgument { exit(64) }
         if FeatureResourceCheck.handle(Array(CommandLine.arguments.dropFirst())) { return }
         if FeatureVisualCheck.handle(Array(CommandLine.arguments.dropFirst())) { return }
+        if FeatureVisualCheck.handlePreview(Array(CommandLine.arguments.dropFirst())) { return }
         if FeatureUIResourceCheck.handle(Array(CommandLine.arguments.dropFirst())) { return }
         if CommandLine.arguments.contains("--self-check") {
             do {

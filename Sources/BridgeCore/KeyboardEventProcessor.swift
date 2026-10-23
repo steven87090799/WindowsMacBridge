@@ -70,7 +70,8 @@ public struct KeyboardEventProcessor: Sendable {
             self.screenshotEnabled != screenshotEnabled || self.printScreen != printScreen
         let continuousContext = preservingModifiersOnAppChange && enabled && layoutSupported &&
             modifiers.synchronized && !awaitingNeutral && context.processID > 0 && newContext.processID > 0 &&
-            [.macOS, .terminal, .ide].contains(context.mode) && [.macOS, .terminal, .ide].contains(newContext.mode)
+            (([.macOS, .terminal, .ide].contains(context.mode) && [.macOS, .terminal, .ide].contains(newContext.mode)) ||
+             (pressCount == 0 && modifiers.aggregate.isEmpty))
         if changedPolicy || (changedContext && !continuousContext) {
             awaitingNeutral = true
         }

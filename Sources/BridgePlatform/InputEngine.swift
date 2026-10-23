@@ -5,6 +5,7 @@ import BridgeCore
 
 public struct EngineConfiguration: Equatable, Sendable {
     public var context = ApplicationContext()
+    public var recipients: [Int32: ApplicationContext] = [:]
     public var enabled = false
     public var sessionActive = true
     public var nativeMappingAwaitingNeutral = false
@@ -48,6 +49,7 @@ public struct EngineConfiguration: Equatable, Sendable {
               usesNativePhysicalMapping == previous.usesNativePhysicalMapping else { return false }
         var normalized = self
         normalized.context = previous.context; normalized.generation = previous.generation
+        normalized.recipients = previous.recipients
         normalized.runtimePolicy = previous.runtimePolicy
         return normalized == previous
     }
@@ -100,6 +102,7 @@ public final class InputEngine: @unchecked Sendable {
     private var configuration = EngineConfiguration()
     private var revision: UInt64 = .max
     private var processor = KeyboardEventProcessor()
+    private var deliveryContext: ApplicationContext?
     private var appSwitch = NativeAppSwitchLatch()
     private var remote = RemoteSourceRouter()
     public let producerInbox = InputProducerInbox()
@@ -247,7 +250,10 @@ public final class InputEngine: @unchecked Sendable {
         let deviceChanged = changed && configuration.deviceInputs != mailbox.configuration.deviceInputs
         let deliveryChanged = changed && configuration.destinationSemantics != mailbox.configuration.destinationSemantics
         let preserveModifiers = changed && mailbox.configuration.preservesModifiers(from: configuration)
-        if changed { configuration = mailbox.configuration; revision = mailbox.revision }
+        if changed {
+            if configuration.context != mailbox.configuration.context { deliveryContext = nil }
+            configuration = mailbox.configuration; revision = mailbox.revision
+        }
         mailbox.lock.unlock()
         if changed {
             if configuration.restartToken != lastRestart || configuration.sessionActive != lastSessionActive {
@@ -328,7 +334,8 @@ public final class InputEngine: @unchecked Sendable {
         let active = configuration.enabled && configuration.sessionActive &&
             status.accessibility && status.postAccess && hasInputAuthorization && !status.secureInput &&
             status.fault == nil && !status.emergencyPaused && scopeSupported
-        processor.configure(context: configuration.context,
+        let recipientContext = deliveryContext ?? configuration.context
+        processor.configure(context: recipientContext,
                             enabled: active && (configuration.physicalBackend == .eventTap || configuration.destinationSemantics), layoutSupported: configuration.layoutSupported,
                             controlsEnabled: active && configuration.physicalBackend == .eventTap, finderEnabled: configuration.finderEnabled,
                             finderPermanentDeleteEnabled: configuration.finderPermanentDeleteEnabled,
@@ -343,7 +350,7 @@ public final class InputEngine: @unchecked Sendable {
                             printScreen: configuration.printScreenBehavior,
                             preservingModifiersOnAppChange: preservingModifiersOnAppChange)
         var sourcePolicy = SourceTranslationConfiguration()
-        sourcePolicy.context = configuration.context
+        sourcePolicy.context = recipientContext
         sourcePolicy.enabled = configuration.enabled && configuration.sessionActive && status.accessibility && status.postAccess && hasInputAuthorization &&
             !status.secureInput && status.fault == nil && !status.emergencyPaused && !processor.manualPassThrough
         sourcePolicy.layoutSupported = configuration.layoutSupported
@@ -578,12 +585,25 @@ public final class InputEngine: @unchecked Sendable {
         let down = physical ? side.map { flags.contains($0.group) && !processor.modifiers.isDown($0) } : nil
         let phase: KeyPhase = type == .keyDown ? .down : type == .keyUp ? .up : .flagsChanged
         // Modifier edges and owned ups still reconcile state across missing recipients.
-        // A new shortcut requires local delivery; only an existing native switcher
+        // A new shortcut requires a known local recipient; only an existing native switcher
         // can accept another Tab while WindowServer has temporarily no App recipient.
-        let nativeTabHeld = physical ? appSwitch.isActive(for: configuration.context.processID) : remote.hasNativeAppSwitchSession(evidence)
+        let nativeTabHeld = physical ? appSwitch.isActive(for: (deliveryContext ?? configuration.context).processID) : remote.hasNativeAppSwitchSession(evidence)
         if phase == .down && !DestinationSemanticPolicy.acceptsKeyDown(target: recipient,
             foreground: configuration.context.processID, key: key, nativeTabHeld: nativeTabHeld) {
             return Unmanaged.passUnretained(event)
+        }
+        if phase != .up, recipient > 0 {
+            let resolved = DestinationSemanticPolicy.context(target: recipient,
+                foreground: configuration.context, recipients: configuration.recipients)
+            // Unknown modifier recipients still reconcile physical state. A new
+            // key-down cannot borrow the foreground App's rules.
+            if phase == .down && resolved == nil { return Unmanaged.passUnretained(event) }
+            if let context = resolved,
+               context != (deliveryContext ?? configuration.context) {
+                queueReleases()
+                deliveryContext = context
+                configureProcessor(preservingModifiersOnAppChange: true)
+            }
         }
         let normalized = KeyboardEvent(phase, keyCode: key, modifiers: flags,
                                        isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
@@ -595,7 +615,7 @@ public final class InputEngine: @unchecked Sendable {
         var routed = physical ? RoutedInputDecision(processor.process(normalized)) : remote.process(normalized, evidence: evidence, now: ProcessInfo.processInfo.systemUptime)
         if physical && configuration.windowsKeyModifier == .command {
             routed.decision = appSwitch.apply(routed.decision, event: normalized, state: processor.modifiers,
-                                             target: configuration.context.processID)
+                                             target: (deliveryContext ?? configuration.context).processID)
         }
         let decision = routed.decision
         var result: Unmanaged<CGEvent>? = Unmanaged.passUnretained(event)
@@ -635,7 +655,7 @@ public final class InputEngine: @unchecked Sendable {
                 ProcessInfo.processInfo.systemUptime < diagnosticDeadline {
                 recordSequence &+= 1
                 records[recordIndex] = DiagnosticRecord(id: recordSequence, rule: ruleID,
-                    application: configuration.context.bundleID,
+                    application: (deliveryContext ?? configuration.context).bundleID,
                     microseconds: Double(DispatchTime.now().uptimeNanoseconds - start) / 1000)
                 recordIndex = (recordIndex + 1) % records.count
                 diagnosticRevision &+= 1

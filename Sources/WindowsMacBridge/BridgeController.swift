@@ -98,6 +98,8 @@ import IOKit.hid
     private let engine = InputEngine()
     private let remoteRegistry = RemoteSourceRegistry()
     private var lastEngineConfiguration: EngineConfiguration?
+    private var recipientContexts: [Int32: ApplicationContext] = [:]
+    private var recipientOverrides: [String: ApplicationMode] = [:]
     private lazy var calibration = RemoteCalibrationCoordinator(inbox: engine.calibrationInbox)
     /// Active HID client plus any client still retiring its capture lease.
     private let hidSlot = HIDBackendSlot()
@@ -213,6 +215,7 @@ import IOKit.hid
             }
         }
         observe(center, NSWorkspace.didTerminateApplicationNotification) { $0.refreshApplication() }
+        observe(center, NSWorkspace.didLaunchApplicationNotification) { $0.refreshRecipientContexts(); $0.publish() }
         observe(center, NSWorkspace.willSleepNotification) { $0.setSuspended(.systemSleep, true) }
         observe(center, NSWorkspace.didWakeNotification) { $0.setSuspended(.systemSleep, false); $0.refreshMacBookKeyboard(); $0.refreshApplication() }
         observe(center, NSWorkspace.screensDidSleepNotification) { $0.setSuspended(.screensSleep, true) }
@@ -368,15 +371,24 @@ import IOKit.hid
     }
     private func currentApplicationContext() -> ApplicationContext {
         guard let app = NSWorkspace.shared.frontmostApplication else { return ApplicationContext() }
+        return applicationContext(app)
+    }
+    private func applicationContext(_ app: NSRunningApplication) -> ApplicationContext {
         let bundle = app.bundleIdentifier ?? ""
         let path = app.executableURL?.path ?? ""
-        var mode = registry?.mode(for: bundle, executablePath: path, overrides: settings.overrides) ?? .disabled
-        if app.processIdentifier == ProcessInfo.processInfo.processIdentifier { mode = .disabled }
+        let mode = registry?.mode(for: bundle, executablePath: path, overrides: settings.overrides) ?? .disabled
         return ApplicationContext(processID: app.processIdentifier, bundleID: bundle,
                                   displayName: app.localizedName ?? "Unknown", mode: mode,
                                   executablePath: path, isBrowser: registry?.isBrowser(bundle) ?? false)
     }
+    private func refreshRecipientContexts() {
+        recipientContexts = Dictionary(uniqueKeysWithValues: NSWorkspace.shared.runningApplications.map {
+            ($0.processIdentifier, applicationContext($0))
+        })
+        recipientOverrides = settings.overrides
+    }
     private func refreshApplication() {
+        refreshRecipientContexts()
         context = currentApplicationContext()
         if context.processID == ProcessInfo.processInfo.processIdentifier { refreshPermissions() }
         refreshMacBookKeyboard()
@@ -530,6 +542,7 @@ import IOKit.hid
             if transitionRequested { transitionRequested = false; publish() }
         }
         synchronizeHIDMode()
+        if recipientOverrides != settings.overrides { refreshRecipientContexts() }
         if lastAppliedSettings != settings.physicalPolicySettings { settingsRevision &+= 1; lastAppliedSettings = settings.physicalPolicySettings }
         var input = RuntimePolicyInput()
         input.backend = settings.effectiveInputBackend; input.deviceScope = settings.effectiveKeyboardScope
@@ -560,10 +573,12 @@ import IOKit.hid
             guard var config = lastEngineConfiguration else { return }
             let deviceChanged = config.deviceInputs != settings.effectiveDeviceInputs
             let routingChanged = config.inputRouting != remoteRegistry.snapshot
+            let recipientsChanged = config.recipients != recipientContexts
             // restorePending can mask an awaitingNeutral flip in the policy input.
             // The engine needs the exact flag: it decides whether key edges wake us.
             let neutralChanged = config.nativeMappingAwaitingNeutral != macBookKeyboardStatus.awaitingNeutral
-            guard deviceChanged || routingChanged || neutralChanged else { return }
+            guard deviceChanged || routingChanged || neutralChanged || recipientsChanged else { return }
+            config.recipients = recipientContexts
             config.inputRouting = remoteRegistry.snapshot; config.deviceInputs = settings.effectiveDeviceInputs
             config.nativeMappingAwaitingNeutral = macBookKeyboardStatus.awaitingNeutral
             lastEngineConfiguration = config
@@ -577,6 +592,7 @@ import IOKit.hid
         }
         var config = EngineConfiguration()
         config.context = context
+        config.recipients = recipientContexts
         config.enabled = snapshot.permitsInput
         // Without this the tap is destroyed and Secure Input ending inside the same
         // App was never observed: translation stayed off until the next App switch.
