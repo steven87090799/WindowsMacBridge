@@ -5,6 +5,25 @@ import IOKit.hidsystem
 import BridgeCore
 import ApplicationServices
 
+final class NativeKeyboardObservationContext: @unchecked Sendable {
+    weak var owner: NativeMacBookKeyboardBackend?
+    init(_ owner: NativeMacBookKeyboardBackend) { self.owner = owner }
+}
+
+/// Final cleanup may be transferred to the main queue. The retained context
+/// keeps queued native callbacks safe after the backend's final release.
+private struct NativeKeyboardObservation: @unchecked Sendable {
+    let port: IONotificationPortRef
+    let context: NativeKeyboardObservationContext
+    var iterators: [io_iterator_t] = []
+    func close() {
+        context.owner = nil
+        IONotificationPortSetDispatchQueue(port, nil)
+        IONotificationPortDestroy(port)
+        for iterator in iterators { IOObjectRelease(iterator) }
+    }
+}
+
 /// Apple TN2450 service properties. The client cannot receive a keyboard event stream.
 @MainActor public final class NativeMacBookKeyboardBackend: MacBookKeyboardMappingBackend {
     public let portable: Bool
@@ -16,12 +35,17 @@ import ApplicationServices
     }
     private let client: IOHIDEventSystemClient
     private var handles: [UInt64: IOHIDServiceClient] = [:]
-    private var port: IONotificationPortRef?
-    private var iterators: [io_iterator_t] = []
+    private var observation: NativeKeyboardObservation?
+    var observationContext: NativeKeyboardObservationContext? { observation?.context }
     private var change: (@MainActor () -> Void)?
     private var queued = false
     private static let sourceKey = "HIDKeyboardModifierMappingSrc"
     private static let destinationKey = "HIDKeyboardModifierMappingDst"
+    deinit {
+        guard let observation else { return }
+        if Thread.isMainThread { observation.close() }
+        else { DispatchQueue.main.async { observation.close() } }
+    }
     public init() {
         client = IOHIDEventSystemClientCreateSimpleClient(kCFAllocatorDefault)
         let battery = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
@@ -65,6 +89,27 @@ import ApplicationServices
                 modifierMapping: Self.decode(property(kIOHIDKeyboardModifierMappingPairsKey)))
         }
     }
+    private static func registryMetadata(_ id: UInt64) -> (className: String, fnUsage: UInt64?) {
+        guard let matching = IORegistryEntryIDMatching(id) else { return ("", nil) }
+        let entry = IOServiceGetMatchingService(kIOMainPortDefault, matching)
+        guard entry != 0 else { return ("", nil) }
+        defer { IOObjectRelease(entry) }
+        func property(_ key: String) -> Any? {
+            IORegistryEntryCreateCFProperty(entry, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue()
+        }
+        return (property(kIOClassKey) as? String ?? "",
+            fnUsage(page: property("FnModifierUsagePage"), usage: property("FnModifierUsage")))
+    }
+    static func fnUsage(page: Any?, usage: Any?) -> UInt64? {
+        func component(_ value: Any?) -> UInt64? {
+            guard let n = value as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(),
+                  !["f", "d"].contains(String(cString: n.objCType)),
+                  n.int64Value > 0, n.uint64Value <= 0xffff else { return nil }
+            return n.uint64Value
+        }
+        guard let page = component(page), let usage = component(usage) else { return nil }
+        return page << 32 | usage
+    }
     // TN2450 specifies UserKeyMapping with HIDKeyboardModifierMappingSrc/Dst.
     // The system ModifierMappingPairs table is read only for conflict detection.
     public func write(_ mapping: [NativeKeyMapping], serviceID: UInt64) -> Bool {
@@ -94,7 +139,9 @@ import ApplicationServices
     public func observeChanges(_ action: @escaping @MainActor () -> Void) -> Bool {
         stopObserving()
         guard let created = IONotificationPortCreate(kIOMainPortDefault) else { return false }
-        port = created; change = action
+        let context = NativeKeyboardObservationContext(self)
+        observation = NativeKeyboardObservation(port: created, context: context)
+        change = action
         IONotificationPortSetDispatchQueue(created, .main)
         for notification in [kIOFirstMatchNotification, kIOTerminatedNotification] {
             // Kernel built-in services only; never Universal Control's virtual services.
@@ -112,11 +159,14 @@ import ApplicationServices
                 while case let service = IOIteratorNext(iterator), service != 0 { IOObjectRelease(service) }
                 guard let pointer else { return }
                 MainActor.assumeIsolated {
-                    Unmanaged<NativeMacBookKeyboardBackend>.fromOpaque(pointer).takeUnretainedValue().scheduleChange()
+                    Unmanaged<NativeKeyboardObservationContext>.fromOpaque(pointer).takeUnretainedValue().owner?.scheduleChange()
                 }
-            }, Unmanaged.passUnretained(self).toOpaque(), &iterator)
-            guard result == KERN_SUCCESS else { stopObserving(); return false }
-            iterators.append(iterator)
+            }, Unmanaged.passUnretained(context).toOpaque(), &iterator)
+            guard result == KERN_SUCCESS else {
+                if iterator != 0 { IOObjectRelease(iterator) }
+                stopObserving(); return false
+            }
+            observation?.iterators.append(iterator)
             while case let service = IOIteratorNext(iterator), service != 0 { IOObjectRelease(service) }
         }
         return true
@@ -131,15 +181,30 @@ import ApplicationServices
     }
     public func stopObserving() {
         change = nil
-        if let port { IONotificationPortSetDispatchQueue(port, nil); IONotificationPortDestroy(port) }
-        port = nil
-        for iterator in iterators { IOObjectRelease(iterator) }
-        iterators.removeAll()
+        observation?.close(); observation = nil
     }
     public func diagnosticReport() -> String {
         guard let all = services() else { return "Native Fn/Control: keyboard service inventory unavailable; no mapping started." }
         let candidates = all.filter { $0.identity.isLocalMacBookKeyboard(portable: portable) }
-        return "Native Fn/Control: portable=\(portable), local physical candidates=\(candidates.count), keyboard services=\(all.count).\n" +
+        func hex(_ value: UInt64) -> String { "0x" + String(value, radix: 16) }
+        func pairs(_ value: [NativeKeyMapping]?) -> String {
+            guard let value else { return "malformed/unsupported" }
+            return "[" + value.map { "\(hex($0.source))->\(hex($0.destination))" }.joined(separator: ", ") + "]"
+        }
+        let rows = all.map { row in
+            let id = row.identity
+            let target = id.isLocalMacBookKeyboard(portable: portable)
+            // Diagnostic-only metadata reads; normal focus/configuration changes
+            // do not add IORegistry queries or physical event observation.
+            let metadata = Self.registryMetadata(id.registryID)
+            return "service=\(hex(id.registryID)) class=\(metadata.className) product=\(String(id.product.prefix(128))) " +
+                "transport=\(String(id.transport.prefix(64))) builtIn=\(id.builtIn) mappingTarget=\(target) " +
+                "reportedFnUsage=\(metadata.fnUsage.map(hex) ?? "unavailable")\n" +
+                "  UserKeyMapping=\(pairs(row.userMapping)); ModifierMappingPairs=\(pairs(row.modifierMapping))"
+        }
+        return (["Native Fn/Control: portable=\(portable), local physical candidates=\(candidates.count), keyboard services=\(all.count)."] + rows + [
+            "Property readback only: physical Fn/Control behavior and event routing are NOT verified.",
             "Virtual/Universal Control/external services are excluded; no mapping or input capture started."
+        ]).joined(separator: "\n")
     }
 }

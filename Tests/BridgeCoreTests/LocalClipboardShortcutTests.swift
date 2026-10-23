@@ -20,14 +20,12 @@ struct LocalClipboardShortcutTests {
                     var p = processor(mode)
                     _ = p.process(.init(.flagsChanged, keyCode: right ? 62 : 59, modifiers: .control,
                         modifierSide: right ? .rightControl : .leftControl, modifierDown: true))
-                    let conditionalCopy = mode == .terminal && key == 8
-                    let output: EventDecision = conditionalCopy ? .action(.terminalCopyOrInterrupt, ruleID: "terminal.copyOrInterrupt") :
-                        .rewrite(keyCode: key, modifiers: .command, ruleID: "windows.\(name)")
+                    let output: EventDecision = .rewrite(keyCode: key, modifiers: .command, ruleID: "windows.\(name)")
                     #expect(p.process(.init(.down, keyCode: key, modifiers: .control)) == output)
-                    #expect(p.process(.init(.down, keyCode: key, modifiers: .control, isRepeat: true)) == (conditionalCopy ? .suppress : output))
+                    #expect(p.process(.init(.down, keyCode: key, modifiers: .control, isRepeat: true)) == output)
                     _ = p.process(.init(.flagsChanged, keyCode: right ? 62 : 59,
                         modifierSide: right ? .rightControl : .leftControl, modifierDown: false))
-                    #expect(p.process(.init(.up, keyCode: key)) == (conditionalCopy ? .suppress : .rewrite(keyCode: key, modifiers: [], ruleID: "windows.\(name)")))
+                    #expect(p.process(.init(.up, keyCode: key)) == .rewrite(keyCode: key, modifiers: [], ruleID: "windows.\(name)"))
                     #expect(p.activePressCount == 0)
                 }
             }
@@ -42,7 +40,7 @@ struct LocalClipboardShortcutTests {
                     modifierSide: .leftCommand, modifierDown: true))
                 #expect(p.process(.init(.down, keyCode: key, modifiers: .command)) == .passThrough)
                 #expect(p.process(.init(.up, keyCode: key, modifiers: .command)) == .passThrough)
-                if [.remoteWindows, .virtualMachine, .game, .disabled].contains(mode) {
+                if [.remoteWindows, .virtualMachine].contains(mode) {
                     p = processor(mode)
                     _ = p.process(.init(.flagsChanged, keyCode: 59, modifiers: .control,
                         modifierSide: .leftControl, modifierDown: true))
@@ -78,13 +76,12 @@ struct LocalClipboardShortcutTests {
                         finderEnabled: false, transportOnly: transportOnly)
                     _ = e.observe(device: 1, page: 7, usage: 0xe0, down: true)
                     let action = e.observe(device: 1, page: 7, usage: usage, down: true)
-                    let conditionalCopy = mode == .terminal && key == 8 && !transportOnly
-                    #expect(action == (conditionalCopy ? .terminalCopyOrInterrupt : nil))
+                    #expect(action == nil)
                     var out = HIDOutput()
                     let rendered = e.render(into: &out)
                     #expect(rendered)
-                    #expect(out.modifiers == (conditionalCopy ? 0 : (transportOnly ? 1 : 8)))
-                    #expect(out.keys.prefix(out.keyCount).contains(usage) == !conditionalCopy)
+                    #expect(out.modifiers == (transportOnly ? 1 : 8))
+                    #expect(out.keys.prefix(out.keyCount).contains(usage))
                     _ = e.observe(device: 1, page: 7, usage: usage, down: false)
                     let released = e.render(into: &out)
                     #expect(released && out.keyCount == 0 && out.modifiers == 1)
@@ -100,7 +97,7 @@ struct LocalClipboardShortcutTests {
     }
 
     @Test func deviceHIDPreservesWindowsGuestClipboardAndPairsTerminalInterrupt() {
-        for mode: ApplicationMode in [.remoteWindows, .virtualMachine, .game, .disabled] {
+        for mode: ApplicationMode in [.remoteWindows, .virtualMachine] {
             for (_, usage, _) in chords {
                 var e = HIDTranslationEngine(); _ = e.register(1)
                 e.configure(context: .init(processID: 17, mode: mode), layoutSupported: true, finderEnabled: false)

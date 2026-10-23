@@ -44,6 +44,9 @@ public struct HIDConfiguration: Codable, Sendable {
     public var mode: ApplicationMode = .disabled
     public var isBrowser = false
     public var generation: UInt64 = 0
+    /// Optional for compatibility with an older host. Only an uninterrupted
+    /// host ownership epoch permits keeping held modifiers across App changes.
+    public var modifierEpoch: UInt64?
     // Action epoch can change without invalidating another keyboard's physical holds.
     public var actionGeneration: UInt64 = 0
     public var restartToken: UInt64 = 0
@@ -52,6 +55,7 @@ public struct HIDConfiguration: Codable, Sendable {
     /// In raw transport mode, source focus/layout cannot describe the receiving Mac.
     /// Pause/session/physical mapping still form a capture epoch and require release.
     public func sameCapturePolicy(as next: HIDConfiguration) -> Bool {
+        if modifierEpoch != next.modifierEpoch { return false }
         guard transportOnly && next.transportOnly else {
             return transportOnly == next.transportOnly && generation == next.generation
         }
@@ -62,6 +66,17 @@ public struct HIDConfiguration: Codable, Sendable {
             mode.allowsTranslation == next.mode.allowsTranslation &&
             HIDCapturePolicy.requiresNativePassThrough(mode: mode, layoutSupported: layoutSupported, transportOnly: true) ==
             HIDCapturePolicy.requiresNativePassThrough(mode: next.mode, layoutSupported: next.layoutSupported, transportOnly: true)
+    }
+    public func preservesModifiers(from previous: HIDConfiguration) -> Bool {
+        guard let modifierEpoch, modifierEpoch == previous.modifierEpoch,
+              enabled, previous.enabled, sessionActive, previous.sessionActive,
+              !HIDCapturePolicy.requiresNativePassThrough(mode: mode, layoutSupported: layoutSupported),
+              !HIDCapturePolicy.requiresNativePassThrough(mode: previous.mode, layoutSupported: previous.layoutSupported),
+              transportOnly == previous.transportOnly, keyboardScope == previous.keyboardScope,
+              windowsKeyModifier == previous.windowsKeyModifier,
+              macBookFnControlSwap == previous.macBookFnControlSwap,
+              deviceInputs == previous.deviceInputs, restartToken == previous.restartToken else { return false }
+        return true
     }
     public var valid: Bool {
         version == HIDService.protocolVersion && bundleID.utf8.count <= 256 && processID >= 0 &&

@@ -188,6 +188,9 @@ struct SettingsView: View {
                         get: { controller.settings.macBookFnControlSwap }, set: { controller.setMacBookFnControlSwap($0) }))
                     if controller.settings.macBookFnControlSwap {
                         Text(controller.macBookKeyboardStatus.summary).font(.caption).foregroundStyle(.secondary)
+                        if let notice = controller.macBookKeyboardStatus.routingNotice {
+                            Text(notice).font(.caption).foregroundStyle(.orange)
+                        }
                         explanation("只交換這臺 MacBook 的內建鍵盤；外接鍵盤不變。關閉或正常退出後還原，切換時請放開所有按鍵。")
                     }
                     Toggle("Finder 檔案操作加強", isOn: Binding(get: { controller.settings.finderEnabled }, set: { controller.setFinderEnabled($0) }))
@@ -212,9 +215,11 @@ struct SettingsView: View {
                     Button("實機驗收步驟") { controller.openAcceptanceGuide() }
                 }
             }
-            ScreenshotTextCaptureSection(status: controller.screenshotStatus, canCapture: controller.canCaptureScreenshotText,
-                featuresEnabled: controller.settings.enabled && controller.settings.screenshotAutoCopy,
-                onCapture: controller.captureScreenshotText, onCancel: controller.cancelScreenshot)
+            if ProductFeatures.screenshotTextRecognition {
+                ScreenshotTextCaptureSection(status: controller.screenshotStatus, canCapture: controller.canCaptureScreenshotText,
+                    featuresEnabled: controller.settings.enabled && controller.settings.screenshotAutoCopy,
+                    onCapture: controller.captureScreenshotText, onCancel: controller.cancelScreenshot)
+            }
             Section {
                 DisclosureGroup("進階選項") {
                     Toggle("解鎖進階後端模式（實驗性）", isOn: Binding(get: { controller.settings.isAdvancedModeEnabled }, set: { controller.setAdvancedModeEnabled($0) }))
@@ -437,6 +442,9 @@ struct SettingsView: View {
                 explanation("macOS 的密碼或安全輸入環境啟用時，程式尊重安全邊界並停止翻譯；離開後等待按鍵放開再恢復。")
                 LabeledContent("鍵盤範圍", value: controller.settings.keyboardScope.title)
                 LabeledContent("Fn／Ctrl 交換", value: controller.macBookKeyboardStatus.summary)
+                if let notice = controller.macBookKeyboardStatus.routingNotice {
+                    Text(notice).font(.caption).foregroundStyle(.orange)
+                }
                 if let issue = controller.status.backendIssue { Text(issue).foregroundStyle(.orange) }
                 if let rule = controller.hidStatus.lastRule { LabeledContent("HID 最近命中規則", value: rule) }
                 if !controller.status.actionStatus.isEmpty { Text(controller.status.actionStatus) }
@@ -451,13 +459,16 @@ struct SettingsView: View {
             }
             Section("短期規則診斷") {
                 Toggle("啟用 5 分鐘診斷", isOn: Binding(get: { controller.diagnosticsEnabled }, set: { controller.setDiagnostics($0) }))
-                explanation("預設關閉。開啟後最多 128 筆規則 ID、App 與處理時間只存於記憶體，5 分鐘後自動關閉；關閉時清除。普通打字不會逐鍵記錄。HID 模式只提供計數與最近命中規則。")
+                explanation("預設關閉。開啟後最多 128 筆規則 ID、App、處理時間，以及 Ctrl／Fn 修飾鍵與 C／X／V／A 快捷鍵的來源 PID、收件 PID、flags 和放鍵等待狀態，只存於記憶體。5 分鐘後自動關閉；關閉時清除。不讀取輸入文字或剪貼簿內容。HID 模式只提供計數與最近命中規則。")
                 ForEach(controller.status.diagnostics) { record in
-                    HStack {
-                        Text(record.rule)
-                        Text(record.application).foregroundStyle(.secondary)
-                        Spacer()
-                        Text(String(format: "%.2f µs", record.microseconds)).monospacedDigit()
+                    VStack(alignment: .leading) {
+                        HStack {
+                            Text(record.rule)
+                            Text(record.application).foregroundStyle(.secondary)
+                            Spacer()
+                            Text(String(format: "%.2f µs", record.microseconds)).monospacedDigit()
+                        }
+                        if let detail = record.detail { Text(detail).font(.caption.monospaced()).textSelection(.enabled) }
                     }
                 }
                 explanation("所有鍵盤處理留在本機。不讀取或保存輸入文字、密碼、剪貼簿內容，也不上傳事件；Finder 只讀取剪貼簿版本與類型。")

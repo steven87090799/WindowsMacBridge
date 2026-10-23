@@ -93,7 +93,7 @@ private struct PreviewTextRecognizer: ScreenshotTextRecognizing {
         let board = NSPasteboard(name: .init("PreviewOCR-\(UUID().uuidString)")); defer { board.releaseGlobally() }
         let driver = PreviewCaptureDriver()
         let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true },
-            captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: PreviewTextRecognizer())
+            captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: PreviewTextRecognizer(), textRecognitionEnabled: true)
         defer { manager.stop() }
         _ = configure(manager); var count = 0
         manager.onPreviewReady = { _ in count += 1; return false }

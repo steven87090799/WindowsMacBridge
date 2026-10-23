@@ -2,13 +2,13 @@ import Testing
 import BridgeCore
 
 struct HIDTranslationTests {
-    @Test func remoteVMGameAndUnknownLayoutHandBackPhysicalDevices() {
-        for mode: ApplicationMode in [.remoteWindows,.virtualMachine,.game,.disabled] {
+    @Test func onlyWindowsGuestsNeedNativePhysicalOwnership() {
+        for mode: ApplicationMode in [.remoteWindows,.virtualMachine] {
             #expect(HIDCapturePolicy.requiresNativePassThrough(mode: mode, layoutSupported: true))
         }
-        for mode: ApplicationMode in [.macOS,.terminal,.ide] {
+        for mode: ApplicationMode in [.macOS,.terminal,.ide,.game,.disabled] {
             #expect(!HIDCapturePolicy.requiresNativePassThrough(mode: mode, layoutSupported: true))
-            #expect(HIDCapturePolicy.requiresNativePassThrough(mode: mode, layoutSupported: false))
+            #expect(!HIDCapturePolicy.requiresNativePassThrough(mode: mode, layoutSupported: false))
         }
     }
     @Test func everyGeneralAndBrowserRuleProducesItsCompiledHIDOutput() {

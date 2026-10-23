@@ -38,8 +38,8 @@ public struct RemoteSourceRouter: Sendable {
         guard self.snapshot != snapshot || self.configuration != configuration else { return }
         var normalized = configuration
         normalized.context = self.configuration.context; normalized.generation = self.configuration.generation
-        let continuous = preservingModifiersOnAppChange && normalized == self.configuration &&
-            configuration.generation != self.configuration.generation
+        normalized.layoutSupported = self.configuration.layoutSupported
+        let continuous = preservingModifiersOnAppChange && normalized == self.configuration
         for i in slots.indices {
             guard var stream = slots[i] else { continue }
             let replacement = snapshot.producers.first { $0.processID == stream.producer.processID }
@@ -70,7 +70,9 @@ public struct RemoteSourceRouter: Sendable {
     }
     private func configure(_ processor: inout KeyboardEventProcessor, producer: RemoteProducer, config: SourceTranslationConfiguration,
                            preservingModifiers: Bool = false) {
-        processor.configure(context: config.context, enabled: config.enabled && producer.semantics != .macOS && producer.semantics != .alreadyTranslated,
+        var context = config.context
+        if producer.semantics == .macOS || producer.semantics == .alreadyTranslated { context.clipboardOnly = true }
+        processor.configure(context: context, enabled: config.enabled,
                             layoutSupported: config.layoutSupported, controlsEnabled: false,
                             finderEnabled: config.finderEnabled, finderPermanentDeleteEnabled: config.finderPermanentDeleteEnabled,
                             textNavigationEnabled: config.textNavigationEnabled, altF4Enabled: config.altF4Enabled,
@@ -105,9 +107,11 @@ public struct RemoteSourceRouter: Sendable {
         var event = original
         slots[index]!.lastEventAt = now
         if event.phase == .flagsChanged, let side = event.modifierSide {
-            // Side transitions are derived from this source's history, not aggregate CG state.
+            // Trusted source-local flags describe state and can repeat. Only
+            // generic mixed-source transports need the historical edge fallback.
             let groupPresent = event.modifiers.contains(side.group)
-            let down = event.modifierDown ?? (groupPresent && !slots[index]!.processor.modifiers.isDown(side))
+            let down = event.modifierDown ?? (groupPresent &&
+                (producer.independentFlags || !slots[index]!.processor.modifiers.isDown(side)))
             event.modifierDown = down
             if !producer.independentFlags {
                 var ownFlags = slots[index]!.processor.modifiers.aggregate
@@ -127,11 +131,13 @@ public struct RemoteSourceRouter: Sendable {
         }
         switch producer.semantics {
         case .windows: event.allowsTranslation = true
-        case .macOS, .alreadyTranslated: event.allowsTranslation = false
+        case .macOS, .alreadyTranslated:
+            event.allowsTranslation = ClipboardShortcutPolicy.isClipboardInput(key: event.keyCode, modifiers: event.modifiers)
         case .automatic:
             // Raw Control is strong evidence. Command chords and ambiguous Option navigation
             // are already valid Mac input, so automatic mode never converts them again.
-            event.allowsTranslation = producer.confidence == .known && producer.transport == .googleRemoteDesktop &&
+            event.allowsTranslation = ClipboardShortcutPolicy.isClipboardInput(key: event.keyCode, modifiers: event.modifiers) ||
+                producer.confidence == .known && producer.transport == .googleRemoteDesktop &&
                 (!event.modifiers.contains(.command) && (event.modifiers.contains(.control) || event.modifiers.subtracting(.shift).isEmpty ||
                  (event.modifiers.subtracting(.shift) == .option && (event.keyCode == 48 || event.keyCode == 118 || event.keyCode == 105))))
         }
@@ -164,5 +170,9 @@ public struct RemoteSourceRouter: Sendable {
     public mutating func rejectAction(keyCode: UInt16, evidence: InputOriginEvidence) {
         guard let index = slots.firstIndex(where: { $0?.producer.processID == evidence.processID && $0?.stateID == evidence.stateID }) else { return }
         slots[index]!.processor.rejectAction(keyCode: keyCode)
+    }
+    public mutating func fallbackForRejectedClipboardAction(keyCode: UInt16, evidence: InputOriginEvidence) -> EventDecision? {
+        guard let index = slots.firstIndex(where: { $0?.producer.processID == evidence.processID && $0?.stateID == evidence.stateID }) else { return nil }
+        return slots[index]!.processor.fallbackForRejectedClipboardAction(keyCode: keyCode)
     }
 }

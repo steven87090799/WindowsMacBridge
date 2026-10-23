@@ -24,8 +24,8 @@ public struct SystemApplicationActivation: Sendable {
 }
 
 /// A bounded mailbox separates the keyboard callback from AppKit, AX and pasteboard work.
-/// No clipboard payload or AX text/value attribute is read. Terminal copy only
-/// inspects selection range metadata after an explicit Ctrl+C.
+/// No clipboard payload or AX text/value attribute is read. Basic copy/paste
+/// rewrites bypass this mailbox; only Finder's file-move intent needs it.
 public final class ShortcutActionDispatcher: @unchecked Sendable {
     private struct Request: Sendable {
         let action: ShortcutAction
@@ -34,6 +34,7 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
         let localGeneration: UInt64
         let deadline: Double
         let source: SourceWorkToken?
+        let cutTicket: UInt64
     }
     private let lock = NSLock()
     private var pending = [Request?](repeating: nil, count: 16)
@@ -41,6 +42,9 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     private var writeIndex = 0
     private var count = 0
     private var scheduled = false
+    private var clipboardPending = [Request?](repeating: nil, count: 16)
+    private var clipboardReadIndex = 0, clipboardWriteIndex = 0, clipboardCount = 0
+    private var clipboardScheduled = false
     private var generation: UInt64 = 0
     private var localGeneration: UInt64 = 0
     private var context = ApplicationContext()
@@ -55,7 +59,14 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     private let systemOpener: (any SystemApplicationOpening)?
     private let terminalSelection: (@Sendable (Int32) async -> TerminalSelectionState)?
     private let terminalKeyEmitter: (@MainActor @Sendable (UInt16, Modifiers, ApplicationContext) -> Bool)?
+    private let keyEmitter: (@MainActor @Sendable (UInt16, Modifiers, ApplicationContext) -> Bool)?
+    private let finderPasteboard: @MainActor @Sendable () -> NSPasteboard
+    private let finderFocus: (@Sendable (Int32) async -> FinderFocus)?
     @MainActor private var cut = FinderCutState()
+    @MainActor private var armedCutTicket: UInt64 = 0
+    private let clipboardIntent = FinderClipboardIntent()
+    public var hasPendingFinderCut: Bool { clipboardIntent.pending != 0 }
+    public func observeNativeCopy() { clipboardIntent.observeCopy() }
     private var rejected: UInt64 = 0
     @MainActor public var onScreenshot: (@MainActor @Sendable (ScreenshotKind, SourceWorkToken?) -> Void)?
 
@@ -63,9 +74,13 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
                 clock: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime },
                 systemOpener: (any SystemApplicationOpening)? = nil,
                 terminalSelection: (@Sendable (Int32) async -> TerminalSelectionState)? = nil,
-                terminalKeyEmitter: (@MainActor @Sendable (UInt16, Modifiers, ApplicationContext) -> Bool)? = nil) {
+                terminalKeyEmitter: (@MainActor @Sendable (UInt16, Modifiers, ApplicationContext) -> Bool)? = nil,
+                keyEmitter: (@MainActor @Sendable (UInt16, Modifiers, ApplicationContext) -> Bool)? = nil,
+                finderPasteboard: @escaping @MainActor @Sendable () -> NSPasteboard = { .general },
+                finderFocus: (@Sendable (Int32) async -> FinderFocus)? = nil) {
         self.marker = marker; self.authorization = authorization; self.clock = clock; self.systemOpener = systemOpener
         self.terminalSelection = terminalSelection; self.terminalKeyEmitter = terminalKeyEmitter
+        self.keyEmitter = keyEmitter; self.finderPasteboard = finderPasteboard; self.finderFocus = finderFocus
     }
 
     /// Per-device preferences invalidate local work without revoking a remote source.
@@ -78,6 +93,7 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
         lock.lock()
         generation &+= 1
         if disable { enabled = false }
+        clipboardIntent.observeCopy()
         lock.unlock()
     }
 
@@ -103,28 +119,46 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
         return message
     }
     public var rejectedCount: UInt64 { lock.lock(); defer { lock.unlock() }; return rejected }
-    var hasPendingWork: Bool { lock.lock(); defer { lock.unlock() }; return scheduled }
+    var hasPendingWork: Bool { lock.lock(); defer { lock.unlock() }; return scheduled || clipboardScheduled }
     /// try-lock only on the callback; on contention or overflow the request is dropped.
     @discardableResult public func submit(_ action: ShortcutAction, context expected: ApplicationContext, source: SourceWorkToken? = nil) -> Bool {
         guard lock.try() else { return false }
-        guard enabled, context == expected, count < pending.count else { rejected &+= 1; lock.unlock(); return false }
+        let clipboard: Bool
+        switch action { case .finder(.copy), .finder(.cut), .finder(.paste): clipboard = true; default: clipboard = false }
+        guard enabled, context == expected, (clipboard ? clipboardCount < clipboardPending.count : count < pending.count) else { rejected &+= 1; lock.unlock(); return false }
         if case .finder = action, !finderEnabled { lock.unlock(); return false }
         let lifetime: Double
         switch action {
         case .window, .system: lifetime = 10 // Native App startup can exceed a keyboard action's 0.6s lifetime.
         default: lifetime = 0.6
         }
-        pending[writeIndex] = Request(action: action, context: context, generation: generation,
+        if action == .finder(.copy) { clipboardIntent.observeCopy() }
+        let ticket = action == .finder(.cut) ? clipboardIntent.beginCut() : clipboardIntent.pending
+        let request = Request(action: action, context: context, generation: generation,
                                      localGeneration: localGeneration,
-                                     deadline: clock() + lifetime, source: source)
-        writeIndex = (writeIndex + 1) % pending.count; count += 1
-        let start = !scheduled; scheduled = true
+                                     deadline: clock() + lifetime, source: source, cutTicket: ticket)
+        let start: Bool
+        if clipboard {
+            clipboardPending[clipboardWriteIndex] = request
+            clipboardWriteIndex = (clipboardWriteIndex + 1) % clipboardPending.count; clipboardCount += 1
+            start = !clipboardScheduled; clipboardScheduled = true
+        } else {
+            pending[writeIndex] = request
+            writeIndex = (writeIndex + 1) % pending.count; count += 1
+            start = !scheduled; scheduled = true
+        }
         lock.unlock()
-        if start { Task { @MainActor [self] in await drain() } }
+        if start { Task { @MainActor [self] in await drain(clipboard: clipboard) } }
         return true
     }
-    private func pop() -> Request? {
+    private func pop(clipboard: Bool) -> Request? {
         lock.lock(); defer { lock.unlock() }
+        if clipboard {
+            guard clipboardCount > 0 else { clipboardScheduled = false; return nil }
+            let request = clipboardPending[clipboardReadIndex]; clipboardPending[clipboardReadIndex] = nil
+            clipboardReadIndex = (clipboardReadIndex + 1) % clipboardPending.count; clipboardCount -= 1
+            return request
+        }
         guard count > 0 else { scheduled = false; return nil }
         let request = pending[readIndex]; pending[readIndex] = nil
         readIndex = (readIndex + 1) % pending.count; count -= 1
@@ -148,9 +182,16 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
             !IsSecureEventInputEnabled() &&
             NSWorkspace.shared.frontmostApplication?.processIdentifier == request.context.processID
     }
-    @MainActor private func drain() async {
-        while let request = pop() {
-            guard allowed(request) else { continue }
+    @MainActor private func drain(clipboard: Bool) async {
+        while let request = pop(clipboard: clipboard) {
+            guard allowed(request) else {
+                if request.action == .finder(.cut) { clipboardIntent.finish(request.cutTicket) }
+                if request.action == .finder(.paste), allowed(request, ignoreDeadline: true) {
+                    clipboardIntent.finish(request.cutTicket)
+                    _ = emit(9, .command, request: request, ignoreDeadline: true)
+                }
+                continue
+            }
             switch request.action {
             case .terminalCopyOrInterrupt: await performTerminalCopy(request)
             case .system(let action):
@@ -175,47 +216,59 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
 
     @MainActor private func performTerminalCopy(_ request: Request) async {
         guard request.context.mode == .terminal else { return }
-        let state: TerminalSelectionState
-        if let terminalSelection { state = await terminalSelection(request.context.processID) }
-        else {
-            state = await Task.detached(priority: .userInitiated) {
-                TerminalSelectionReader.read(pid: request.context.processID)
-            }.value
-        }
+        // Compatibility with an older HID helper action. Current rules rewrite
+        // Ctrl+C synchronously, without any selection query or queue.
         guard allowed(request) else { return }
-        // Only positive evidence of an empty selection may interrupt a command.
-        let flags: Modifiers = state == .empty ? .control : .command
-        let sent = terminalKeyEmitter?(8, flags, request.context) ?? emit(8, flags, request: request)
-        if sent && state == .unknown { report("無法確認 Terminal 的文字選取，僅嘗試複製；Ctrl+Shift+C 可明確中斷命令。") }
+        _ = terminalKeyEmitter?(8, .command, request.context) ?? emit(8, .command, request: request)
     }
 
     @MainActor private func performFinder(_ action: FinderAction, request: Request) async {
         guard request.context.bundleID == "com.apple.finder" else { return }
         let pid = request.context.processID
-        let focus = await Task.detached(priority: .userInitiated) { FinderFocusReader.read(pid: pid) }.value
-        guard allowed(request) else { return }
-        let pasteboard = NSPasteboard.general
+        let pasteboard = finderPasteboard()
         let now = ProcessInfo.processInfo.systemUptime
         cut.synchronize(epoch: request.generation)
+        if !clipboardIntent.isCurrent(armedCutTicket) { cut.cancel() }
+        if action == .copy {
+            cut.cancel(); armedCutTicket = 0
+            _ = emit(8, .command, request: request); return
+        }
+        if action == .paste && (request.cutTicket != armedCutTicket ||
+            !cut.validate(changeCount: pasteboard.changeCount, finderPID: pid, now: now)) {
+            clipboardIntent.finish(request.cutTicket)
+            _ = emit(9, .command, request: request); return
+        }
+        let focus: FinderFocus
+        if let finderFocus { focus = await finderFocus(pid) }
+        else { focus = await Task.detached(priority: .userInitiated) { FinderFocusReader.read(pid: pid) }.value }
+        guard allowed(request), action != .cut || clipboardIntent.isCurrent(request.cutTicket) else {
+            if action == .cut { clipboardIntent.finish(request.cutTicket) }
+            return
+        }
         cut.observe(action)
         switch action {
         case .copy, .cut:
             cut.cancel()
+            armedCutTicket = 0
+            defer { if armedCutTicket != request.cutTicket { clipboardIntent.finish(request.cutTicket) } }
             let before = pasteboard.changeCount
             // Text cut stays text cut; unknown focus never arms a file move.
             let key: UInt16 = action == .cut && focus != .files ? 7 : 8
             guard emit(key, .command, request: request) else { return }
-            guard action == .cut && focus == .files else { return }
+            guard action == .cut && focus == .files && clipboardIntent.isCurrent(request.cutTicket) else {
+                clipboardIntent.finish(request.cutTicket); return
+            }
             // Copy acknowledgement is bounded and metadata-only. Do not guess on multiple changes.
             for _ in 0..<20 {
                 try? await Task.sleep(for: .milliseconds(20))
-                guard allowed(request) else { cut.cancel(); return }
+                guard allowed(request), clipboardIntent.isCurrent(request.cutTicket) else { cut.cancel(); return }
                 let changed = pasteboard.changeCount
                 if changed != before {
                     guard changed == before + 1, pasteboard.types?.contains(.fileURL) == true else {
                         report("Finder 剪下未建立：剪貼簿來源無法確認。"); return
                     }
                     cut.arm(changeCount: changed, finderPID: pid, now: ProcessInfo.processInfo.systemUptime)
+                    armedCutTicket = request.cutTicket
                     report("Finder 檔案已複製，等待移動貼上（5 分鐘內有效）。")
                     return
                 }
@@ -226,8 +279,10 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
             // A destination folder may have no selection. The armed file clipboard and
             // Finder PID are the move authority; text editing always gets ordinary paste.
             let move = FinderActionPolicy.allowsMove(focus: focus) && pasteboard.types?.contains(.fileURL) == true &&
+                clipboardIntent.isCurrent(request.cutTicket) &&
                 cut.consume(changeCount: count, finderPID: pid, now: now)
             cut.cancel()
+            clipboardIntent.finish(request.cutTicket); armedCutTicket = 0
             guard pasteboard.changeCount == count else { report("剪貼簿已改變，取消本次貼上。"); return }
             if emit(9, move ? [.command, .option] : .command, request: request) {
                 report(move ? "已送出 Finder 移動請求；由 Finder 處理確認與結果。" : "已送出 Finder 貼上請求。")
@@ -279,7 +334,9 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     /// Complete key pairs, private source, marker and target PID. No global held modifiers.
     @MainActor private func emit(_ key: UInt16, _ modifiers: Modifiers, request: Request,
                                  ignoreDeadline: Bool = false) -> Bool {
-        guard allowed(request, ignoreDeadline: ignoreDeadline), let source = CGEventSource(stateID: .privateState),
+        guard allowed(request, ignoreDeadline: ignoreDeadline) else { return false }
+        if let keyEmitter { return keyEmitter(key, modifiers, request.context) }
+        guard let source = CGEventSource(stateID: .privateState),
               let down = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false) else { return false }
         for event in [down, up] {

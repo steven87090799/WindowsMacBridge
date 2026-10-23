@@ -1,0 +1,313 @@
+{
+  "date": "2026-10-23",
+  "timezone": "Asia/Taipei",
+  "branch": "codex/fix-macbook-fn-control",
+  "base_revision": "66fed940e2b75dfbe6bd7a24c7ed5453aaef7c3f",
+  "source_state": "modified",
+  "tests": {
+    "passed": 535,
+    "failure_markers": 0
+  },
+  "diagnostic_memory": {
+    "snapshots": 50000,
+    "before_bytes": 4555280,
+    "after_bytes": 4555280,
+    "retained_records": 128,
+    "slots_after_expiry": 0
+  },
+  "synthetic_core_leaks": {
+    "allocations": 0,
+    "bytes": 0,
+    "tool": "leaks -quiet --atExit"
+  },
+  "installed_app": {
+    "build": 60,
+    "revision": "fca84086ca08bc9b6f657581844b8909cfb85d1c",
+    "physical_footprint_MiB_approx": 68.0,
+    "framework_leak_report_bytes": 20016
+  },
+  "framework_only_reproducer": {
+    "includes_project_code": false,
+    "matching_NSXPC_root_cycles": 3,
+    "leak_report_bytes": 26320
+  },
+  "modifier_before": {
+    "kind": "synthetic-modifier-cycles",
+    "measurements": [
+      {
+        "cpu_seconds": 0.213502,
+        "events_per_operation": 5,
+        "footprint_after_bytes": 2343440,
+        "footprint_before_bytes": 2097680,
+        "independent_flags": false,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.9917,
+        "p95_batch_mean_microseconds": 1.4042,
+        "p99_batch_mean_microseconds": 1.7291,
+        "translated_chords": 200100,
+        "wall_seconds": 0.2135850833146833
+      },
+      {
+        "cpu_seconds": 0.201937,
+        "events_per_operation": 5,
+        "footprint_after_bytes": 2409000,
+        "footprint_before_bytes": 2409000,
+        "independent_flags": false,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.9917,
+        "p95_batch_mean_microseconds": 1.0583,
+        "p99_batch_mean_microseconds": 1.375,
+        "translated_chords": 200100,
+        "wall_seconds": 0.2021889166207984
+      },
+      {
+        "cpu_seconds": 0.20705000000000007,
+        "events_per_operation": 5,
+        "footprint_after_bytes": 2409000,
+        "footprint_before_bytes": 2409000,
+        "independent_flags": false,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.9958,
+        "p95_batch_mean_microseconds": 1.2875,
+        "p99_batch_mean_microseconds": 1.9375,
+        "translated_chords": 200100,
+        "wall_seconds": 0.21048833336681128
+      },
+      {
+        "cpu_seconds": 0.536077,
+        "events_per_operation": 5,
+        "footprint_after_bytes": 2409000,
+        "footprint_before_bytes": 2409000,
+        "independent_flags": true,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 2.6458,
+        "p95_batch_mean_microseconds": 3.0209,
+        "p99_batch_mean_microseconds": 3.6083,
+        "translated_chords": 200100,
+        "wall_seconds": 0.5374401666340418
+      },
+      {
+        "cpu_seconds": 0.5370889999999999,
+        "events_per_operation": 5,
+        "footprint_after_bytes": 2409000,
+        "footprint_before_bytes": 2409000,
+        "independent_flags": true,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 2.6459,
+        "p95_batch_mean_microseconds": 3.0666,
+        "p99_batch_mean_microseconds": 3.6208,
+        "translated_chords": 200100,
+        "wall_seconds": 0.5388207500218414
+      },
+      {
+        "cpu_seconds": 0.5265419999999998,
+        "events_per_operation": 5,
+        "footprint_after_bytes": 2409000,
+        "footprint_before_bytes": 2409000,
+        "independent_flags": true,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 2.5833,
+        "p95_batch_mean_microseconds": 2.9875,
+        "p99_batch_mean_microseconds": 3.4959,
+        "translated_chords": 200100,
+        "wall_seconds": 0.5267763333395123
+      }
+    ]
+  },
+  "modifier_after": {
+    "kind": "synthetic-modifier-cycles",
+    "measurements": [
+      {
+        "cpu_seconds": 0.016078000000000002,
+        "events_per_operation": 5,
+        "footprint_after_bytes": 2392592,
+        "footprint_before_bytes": 2146832,
+        "independent_flags": false,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.075,
+        "p95_batch_mean_microseconds": 0.0833,
+        "p99_batch_mean_microseconds": 0.1042,
+        "translated_chords": 200100,
+        "wall_seconds": 0.01613704167539254
+      },
+      {
+        "cpu_seconds": 0.0161,
+        "events_per_operation": 5,
+        "footprint_after_bytes": 2474536,
+        "footprint_before_bytes": 2474536,
+        "independent_flags": false,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.075,
+        "p95_batch_mean_microseconds": 0.0833,
+        "p99_batch_mean_microseconds": 0.1042,
+        "translated_chords": 200100,
+        "wall_seconds": 0.016197916644159704
+      },
+      {
+        "cpu_seconds": 0.014168,
+        "events_per_operation": 5,
+        "footprint_after_bytes": 2474536,
+        "footprint_before_bytes": 2474536,
+        "independent_flags": false,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0667,
+        "p95_batch_mean_microseconds": 0.0792,
+        "p99_batch_mean_microseconds": 0.0917,
+        "translated_chords": 200100,
+        "wall_seconds": 0.014232916641049087
+      },
+      {
+        "cpu_seconds": 0.092751,
+        "events_per_operation": 5,
+        "footprint_after_bytes": 2474536,
+        "footprint_before_bytes": 2474536,
+        "independent_flags": true,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.45,
+        "p95_batch_mean_microseconds": 0.4709,
+        "p99_batch_mean_microseconds": 0.6333,
+        "translated_chords": 200100,
+        "wall_seconds": 0.09337712498381734
+      },
+      {
+        "cpu_seconds": 0.091563,
+        "events_per_operation": 5,
+        "footprint_after_bytes": 2474536,
+        "footprint_before_bytes": 2474536,
+        "independent_flags": true,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.4459,
+        "p95_batch_mean_microseconds": 0.475,
+        "p99_batch_mean_microseconds": 0.7334,
+        "translated_chords": 200100,
+        "wall_seconds": 0.09185641666408628
+      },
+      {
+        "cpu_seconds": 0.08953900000000004,
+        "events_per_operation": 5,
+        "footprint_after_bytes": 2474536,
+        "footprint_before_bytes": 2474536,
+        "independent_flags": true,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.4375,
+        "p95_batch_mean_microseconds": 0.4542,
+        "p99_batch_mean_microseconds": 0.6375,
+        "translated_chords": 200100,
+        "wall_seconds": 0.08954912499757484
+      }
+    ]
+  },
+  "routing_after": {
+    "kind": "synthetic-routing-update",
+    "measurements": [
+      {
+        "cpu_seconds": 0.003896,
+        "footprint_after_bytes": 2310672,
+        "footprint_before_bytes": 2064912,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0167,
+        "p95_batch_mean_microseconds": 0.0209,
+        "p99_batch_mean_microseconds": 0.025,
+        "primed_events": 0,
+        "sources": 0,
+        "wall_seconds": 0.003895249974448234
+      },
+      {
+        "cpu_seconds": 0.003942999999999999,
+        "footprint_after_bytes": 2376232,
+        "footprint_before_bytes": 2376232,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0167,
+        "p95_batch_mean_microseconds": 0.0209,
+        "p99_batch_mean_microseconds": 0.025,
+        "primed_events": 0,
+        "sources": 0,
+        "wall_seconds": 0.003954708343371749
+      },
+      {
+        "cpu_seconds": 0.003859999999999999,
+        "footprint_after_bytes": 2392616,
+        "footprint_before_bytes": 2392616,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0167,
+        "p95_batch_mean_microseconds": 0.0209,
+        "p99_batch_mean_microseconds": 0.025,
+        "primed_events": 0,
+        "sources": 0,
+        "wall_seconds": 0.0038587916642427444
+      },
+      {
+        "cpu_seconds": 0.00392,
+        "footprint_after_bytes": 2458152,
+        "footprint_before_bytes": 2458152,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0167,
+        "p95_batch_mean_microseconds": 0.0209,
+        "p99_batch_mean_microseconds": 0.025,
+        "primed_events": 4,
+        "sources": 1,
+        "wall_seconds": 0.003935666696634144
+      },
+      {
+        "cpu_seconds": 0.0039929999999999966,
+        "footprint_after_bytes": 2474536,
+        "footprint_before_bytes": 2474536,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0167,
+        "p95_batch_mean_microseconds": 0.025,
+        "p99_batch_mean_microseconds": 0.025,
+        "primed_events": 4,
+        "sources": 1,
+        "wall_seconds": 0.003993583319243044
+      },
+      {
+        "cpu_seconds": 0.003824000000000001,
+        "footprint_after_bytes": 2474536,
+        "footprint_before_bytes": 2474536,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0167,
+        "p95_batch_mean_microseconds": 0.0209,
+        "p99_batch_mean_microseconds": 0.025,
+        "primed_events": 4,
+        "sources": 1,
+        "wall_seconds": 0.0038233749801293015
+      },
+      {
+        "cpu_seconds": 0.0036399999999999974,
+        "footprint_after_bytes": 2605608,
+        "footprint_before_bytes": 2605608,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0167,
+        "p95_batch_mean_microseconds": 0.0167,
+        "p99_batch_mean_microseconds": 0.0209,
+        "primed_events": 64,
+        "sources": 16,
+        "wall_seconds": 0.003639250004198402
+      },
+      {
+        "cpu_seconds": 0.0037520000000000053,
+        "footprint_after_bytes": 2605608,
+        "footprint_before_bytes": 2605608,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0167,
+        "p95_batch_mean_microseconds": 0.0209,
+        "p99_batch_mean_microseconds": 0.025,
+        "primed_events": 64,
+        "sources": 16,
+        "wall_seconds": 0.003751916636247188
+      },
+      {
+        "cpu_seconds": 0.003834999999999998,
+        "footprint_after_bytes": 2621992,
+        "footprint_before_bytes": 2605608,
+        "operations": 200000,
+        "p50_batch_mean_microseconds": 0.0167,
+        "p95_batch_mean_microseconds": 0.0209,
+        "p99_batch_mean_microseconds": 0.025,
+        "primed_events": 64,
+        "sources": 16,
+        "wall_seconds": 0.0038546249852515757
+      }
+    ]
+  }
+}

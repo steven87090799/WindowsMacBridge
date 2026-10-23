@@ -1,6 +1,7 @@
 """Check canonical test orchestration with fake tools in a private directory."""
 import json
 import os
+import re
 from pathlib import Path
 import shlex
 import shutil
@@ -9,7 +10,10 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-MEMORY_TEST = 'BridgePlatformTests.ScreenshotBoundedReadTests/repeatedPreparationDoesNotGrowMemoryWithCaptureCount'
+MEMORY_TESTS = (
+    'BridgePlatformTests.ScreenshotBoundedReadTests/repeatedPreparationDoesNotGrowMemoryWithCaptureCount',
+    'BridgePlatformTests.InputDiagnosticsTests/repeatedTraceSnapshotsKeepMemoryBounded',
+)
 
 
 class TestRunnerTests(unittest.TestCase):
@@ -46,8 +50,12 @@ sys.exit(97 if count + 1 == int(os.environ['WMB_FAIL_CALL']) else 0)
         result, calls = self.run_runner()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[0][-2:], ['--skip', MEMORY_TEST])
-        self.assertEqual(calls[1][-3:], ['--no-parallel', '--filter', MEMORY_TEST])
+        self.assertEqual(calls[0][-2], '--skip')
+        memory_pattern = calls[0][-1]
+        self.assertEqual(calls[1][-3:], ['--no-parallel', '--filter', memory_pattern])
+        for name in MEMORY_TESTS:
+            self.assertIsNotNone(re.fullmatch(memory_pattern, name))
+        self.assertIsNone(re.search(memory_pattern, 'BridgePlatformTests.InputDiagnosticsTests/disabledAndEmptySessionsAllocateNoRecordStorage'))
         self.assertIn('--skip-build', calls[1])
         self.assertNotIn('--skip', calls[1])
 

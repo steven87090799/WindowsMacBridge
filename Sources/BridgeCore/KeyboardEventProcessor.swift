@@ -54,12 +54,12 @@ public struct KeyboardEventProcessor: Sendable {
                                    preservingModifiersOnAppChange: Bool = false) {
         let changedContext = context.processID != newContext.processID ||
             context.bundleID != newContext.bundleID || context.mode != newContext.mode ||
-            context.isBrowser != newContext.isBrowser
+            context.isBrowser != newContext.isBrowser || context.clipboardOnly != newContext.clipboardOnly
         if changedContext {
             // Once a focus transaction ends, returning to the same PID must not revive it.
             for i in presses.indices where presses[i]?.rule != nil { presses[i]?.suppress = true }
         }
-        let changedPolicy = self.enabled != enabled || self.layoutSupported != layoutSupported ||
+        let changedPolicy = self.enabled != enabled ||
             self.controlsEnabled != controlsEnabled ||
             self.finderEnabled != finderEnabled ||
             self.finderPermanentDeleteEnabled != finderPermanentDeleteEnabled ||
@@ -68,9 +68,8 @@ public struct KeyboardEventProcessor: Sendable {
             self.winRunEnabled != winRunEnabled || self.winSettingsEnabled != winSettingsEnabled ||
             self.winTaskViewEnabled != winTaskViewEnabled || self.nativeAppSwitchEnabled != nativeAppSwitchEnabled ||
             self.screenshotEnabled != screenshotEnabled || self.printScreen != printScreen
-        let continuousContext = preservingModifiersOnAppChange && enabled && layoutSupported &&
-            modifiers.synchronized && !awaitingNeutral && context.processID > 0 && newContext.processID > 0 &&
-            [.macOS, .terminal, .ide].contains(context.mode) && [.macOS, .terminal, .ide].contains(newContext.mode)
+        let continuousContext = preservingModifiersOnAppChange && enabled &&
+            modifiers.synchronized && !awaitingNeutral && context.processID > 0 && newContext.processID > 0
         if changedPolicy || (changedContext && !continuousContext) {
             awaitingNeutral = true
         }
@@ -91,6 +90,20 @@ public struct KeyboardEventProcessor: Sendable {
         guard keyCode < 128, presses[Int(keyCode)]?.rule?.action != nil else { return }
         presses[Int(keyCode)]?.rule = nil
         presses[Int(keyCode)]?.suppress = false
+    }
+    /// A busy Finder action lane must not turn paste into an unhandled Ctrl+V.
+    /// Keep the fallback down/repeat/up in the same native Command key pair.
+    public mutating func fallbackForRejectedClipboardAction(keyCode: UInt16) -> EventDecision? {
+        guard keyCode < 128, let press = presses[Int(keyCode)], let action = press.rule?.action else { return nil }
+        switch action {
+        case .finder(.copy), .finder(.cut), .finder(.paste), .terminalCopyOrInterrupt: break
+        default: return nil
+        }
+        guard let rule = RuleEngine.clipboard.match(keyCode: keyCode, modifiers: .control) else { return nil }
+        presses[Int(keyCode)]?.rule = rule
+        presses[Int(keyCode)]?.suppress = false
+        presses[Int(keyCode)]?.outputModifiers = .command
+        return .rewrite(keyCode: rule.output.keyCode, modifiers: .command, ruleID: rule.id)
     }
     /// Called on the input thread before policy changes. Retain tombstones so physical
     /// repeat/up cannot generate a second release or resurrect the old shortcut.
@@ -113,19 +126,37 @@ public struct KeyboardEventProcessor: Sendable {
 
     /// Called outside the callback after a HID state probe finds every supported key released.
     public mutating func reconcileNeutralHardware() {
-        for i in presses.indices { presses[i] = nil }
+        if pressCount > 0 { for i in presses.indices { presses[i] = nil } }
         pressCount = 0
         modifiers.reset(); awaitingNeutral = false
     }
 
     public mutating func reconcileIndependentSourceFlags(_ value: Modifiers) {
         modifiers.synchronizeAggregate(value.subtracting(.fn))
+        suppressRepeats(after: value)
+        if value.isEmpty && pressCount == 0 { awaitingNeutral = false }
+    }
+
+    private mutating func suppressRepeats(after value: Modifiers) {
+        // Modifier edges vastly outnumber held translated keys. Avoid scanning
+        // 128 empty press slots on every edge and independent-source key down.
+        guard pressCount > 0 else { return }
         for i in presses.indices {
             if let rule = presses[i]?.rule, !value.isSuperset(of: rule.input.modifiers) {
                 presses[i]?.repeatSuppressed = true
             }
         }
-        if value.isEmpty && pressCount == 0 { awaitingNeutral = false }
+    }
+
+    /// A transport whose flags describe its own state, including its modifier edges.
+    public mutating func processIndependentSource(_ event: KeyboardEvent) -> EventDecision {
+        guard !event.isOwnEvent else { return .passThrough }
+        // Observe a real side before filling missing groups from aggregate flags;
+        // otherwise a first Right Option down fabricates an extra Left Option.
+        if event.phase != .flagsChanged { reconcileIndependentSourceFlags(event.modifiers) }
+        let decision = process(event)
+        if event.phase == .flagsChanged { reconcileIndependentSourceFlags(event.modifiers) }
+        return decision
     }
 
     public mutating func process(_ event: KeyboardEvent) -> EventDecision {
@@ -137,12 +168,7 @@ public struct KeyboardEventProcessor: Sendable {
             }
             // End repeats as soon as any trigger modifier is released. A later modifier
             // press must not revive the held shortcut; retain its translated key-up pair.
-            for index in presses.indices {
-                if let rule = presses[index]?.rule,
-                   !event.modifiers.isSuperset(of: rule.input.modifiers) {
-                    presses[index]?.repeatSuppressed = true
-                }
-            }
+            suppressRepeats(after: event.modifiers)
             if event.modifiers.isEmpty && activePressCount == 0 {
                 modifiers.reset(); awaitingNeutral = false
             }
@@ -168,7 +194,8 @@ public struct KeyboardEventProcessor: Sendable {
                     presses[index]?.repeatSuppressed = true
                     return .suppress
                 }
-                if press.repeatSuppressed || !enabled || !layoutSupported || manualPassThrough { return .suppress }
+                let clipboard = ClipboardShortcutPolicy.isClipboardInput(key: event.keyCode, modifiers: rule.input.modifiers)
+                if press.repeatSuppressed || !enabled || (!layoutSupported && !clipboard) || manualPassThrough { return .suppress }
             }
             return rewrite(event, rule: rule)
         }
@@ -200,8 +227,10 @@ public struct KeyboardEventProcessor: Sendable {
         }
         if event.modifiers.isEmpty && activePressCount == 0 { awaitingNeutral = false }
 
-        let rule = event.allowsTranslation && enabled && layoutSupported && !manualPassThrough && !awaitingNeutral && modifiers.synchronized
-            ? match(event) : nil
+        let canTranslate = event.allowsTranslation && enabled && !manualPassThrough && !awaitingNeutral && modifiers.synchronized
+        let clipboard = canTranslate ? ClipboardShortcutPolicy.match(key: event.keyCode, modifiers: event.modifiers,
+            context: context, finderEnabled: finderEnabled, finderMovePending: event.finderMovePending) : nil
+        let rule = clipboard ?? (canTranslate && layoutSupported && !context.clipboardOnly ? match(event) : nil)
         presses[index] = Press(rule: rule, contextPID: context.processID,
                                contextBundle: context.bundleID, contextMode: context.mode, suppress: false)
         pressCount += 1

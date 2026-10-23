@@ -5,6 +5,7 @@ import BridgeCore
 
 public struct EngineConfiguration: Equatable, Sendable {
     public var context = ApplicationContext()
+    public var recipients: [Int32: ApplicationContext] = [:]
     public var enabled = false
     public var sessionActive = true
     public var nativeMappingAwaitingNeutral = false
@@ -48,6 +49,8 @@ public struct EngineConfiguration: Equatable, Sendable {
               usesNativePhysicalMapping == previous.usesNativePhysicalMapping else { return false }
         var normalized = self
         normalized.context = previous.context; normalized.generation = previous.generation
+        normalized.recipients = previous.recipients
+        normalized.layoutSupported = previous.layoutSupported
         normalized.runtimePolicy = previous.runtimePolicy
         return normalized == previous
     }
@@ -59,6 +62,7 @@ public struct DiagnosticRecord: Equatable, Sendable, Identifiable {
     public let rule: String
     public let application: String
     public let microseconds: Double
+    public var detail: String? = nil
 }
 
 public struct EngineStatus: Equatable, Sendable {
@@ -100,9 +104,11 @@ public final class InputEngine: @unchecked Sendable {
     private var configuration = EngineConfiguration()
     private var revision: UInt64 = .max
     private var processor = KeyboardEventProcessor()
+    private var deliveryContext: ApplicationContext?
     private var appSwitch = NativeAppSwitchLatch()
     private var remote = RemoteSourceRouter()
     public let producerInbox = InputProducerInbox()
+    public let recipientInbox = InputProducerInbox()
     public let calibrationInbox = RemoteCalibrationInbox()
     private var recovery = RecoveryPolicy()
     private var status = EngineStatus()
@@ -118,12 +124,8 @@ public final class InputEngine: @unchecked Sendable {
     private var needsRecreation = false
     private let marker: Int64
     private let actions: ShortcutActionDispatcher
-    private var records = [DiagnosticRecord?](repeating: nil, count: 128)
-    private var recordIndex = 0
-    private var recordSequence: UInt64 = 0
-    private var diagnosticRevision: UInt64 = 0
+    private var diagnostics = InputDiagnostics()
     private var publishedDiagnosticRevision: UInt64 = .max
-    private var diagnosticDeadline: TimeInterval = 0
     private var actionEpoch: UInt64 = 0
     private var tapAuthorizationFault = false
     private var policyGeneration: UInt64 = 0
@@ -247,7 +249,10 @@ public final class InputEngine: @unchecked Sendable {
         let deviceChanged = changed && configuration.deviceInputs != mailbox.configuration.deviceInputs
         let deliveryChanged = changed && configuration.destinationSemantics != mailbox.configuration.destinationSemantics
         let preserveModifiers = changed && mailbox.configuration.preservesModifiers(from: configuration)
-        if changed { configuration = mailbox.configuration; revision = mailbox.revision }
+        if changed {
+            if configuration.context != mailbox.configuration.context { deliveryContext = nil }
+            configuration = mailbox.configuration; revision = mailbox.revision
+        }
         mailbox.lock.unlock()
         if changed {
             if configuration.restartToken != lastRestart || configuration.sessionActive != lastSessionActive {
@@ -275,15 +280,7 @@ public final class InputEngine: @unchecked Sendable {
                 processor.resumeManualPassThrough()
                 actionEpoch &+= 1
             }
-            if !configuration.diagnostics {
-                if diagnosticDeadline != 0 || !status.diagnostics.isEmpty {
-                    for i in records.indices { records[i] = nil }
-                    diagnosticRevision &+= 1
-                }
-                diagnosticDeadline = 0
-            } else if diagnosticDeadline == 0 {
-                diagnosticDeadline = ProcessInfo.processInfo.systemUptime + 300
-            }
+            diagnostics.configure(enabled: configuration.diagnostics, now: ProcessInfo.processInfo.systemUptime)
         }
         if changed { configureProcessor(preservingModifiersOnAppChange: preserveModifiers) }
     }
@@ -328,7 +325,8 @@ public final class InputEngine: @unchecked Sendable {
         let active = configuration.enabled && configuration.sessionActive &&
             status.accessibility && status.postAccess && hasInputAuthorization && !status.secureInput &&
             status.fault == nil && !status.emergencyPaused && scopeSupported
-        processor.configure(context: configuration.context,
+        let recipientContext = deliveryContext ?? configuration.context
+        processor.configure(context: recipientContext,
                             enabled: active && (configuration.physicalBackend == .eventTap || configuration.destinationSemantics), layoutSupported: configuration.layoutSupported,
                             controlsEnabled: active && configuration.physicalBackend == .eventTap, finderEnabled: configuration.finderEnabled,
                             finderPermanentDeleteEnabled: configuration.finderPermanentDeleteEnabled,
@@ -343,7 +341,7 @@ public final class InputEngine: @unchecked Sendable {
                             printScreen: configuration.printScreenBehavior,
                             preservingModifiersOnAppChange: preservingModifiersOnAppChange)
         var sourcePolicy = SourceTranslationConfiguration()
-        sourcePolicy.context = configuration.context
+        sourcePolicy.context = recipientContext
         sourcePolicy.enabled = configuration.enabled && configuration.sessionActive && status.accessibility && status.postAccess && hasInputAuthorization &&
             !status.secureInput && status.fault == nil && !status.emergencyPaused && !processor.manualPassThrough
         sourcePolicy.layoutSupported = configuration.layoutSupported
@@ -360,13 +358,11 @@ public final class InputEngine: @unchecked Sendable {
             guard releaseCount < releases.count else { return }
             releases[releaseCount] = (key, flags, pid); releaseCount += 1
         }
-        if !actions.update(context: configuration.context,
-                           enabled: sourcePolicy.enabled && configuration.layoutSupported && !processor.manualPassThrough,
+        _ = actions.update(context: configuration.context,
+                           enabled: sourcePolicy.enabled && !processor.manualPassThrough,
                            finderEnabled: configuration.finderEnabled,
                            finderPermanentDeleteEnabled: configuration.finderPermanentDeleteEnabled,
-                           epoch: actionEpoch) {
-            processor.invalidate()
-        }
+                           epoch: actionEpoch)
     }
 
     private func tick() {
@@ -427,22 +423,18 @@ public final class InputEngine: @unchecked Sendable {
         status.translated = processor.translatedCount &+ remote.translatedCount
         status.manualPassThrough = processor.manualPassThrough
         status.actionStatus = actions.status()
-        if diagnosticDeadline > 0 && ProcessInfo.processInfo.systemUptime >= diagnosticDeadline {
-            for i in records.indices { records[i] = nil }
-            diagnosticDeadline = 0
-            diagnosticRevision &+= 1
-        }
+        diagnostics.expire(at: now)
         // Build diagnostics only when the ring changes; idle ticks allocate nothing here.
-        if publishedDiagnosticRevision != diagnosticRevision {
-            status.diagnostics = records.compactMap { $0 }.sorted { $0.id > $1.id }
-            publishedDiagnosticRevision = diagnosticRevision
+        if publishedDiagnosticRevision != diagnostics.revision {
+            status.diagnostics = diagnostics.snapshot()
+            publishedDiagnosticRevision = diagnostics.revision
         }
         mailbox.lock.lock(); let previous = mailbox.status; mailbox.status = status; mailbox.lock.unlock()
         if Self.requiresHostWake(previous: previous, next: status,
-                                 everyChange: configuration.diagnostics || configuration.nativeMappingAwaitingNeutral) {
+                                 everyChange: diagnostics.isActive(at: now) || configuration.nativeMappingAwaitingNeutral) {
             notifyActivity()
         }
-        scheduleRemoteExpiry()
+        scheduleExpiry()
     }
     /// Counters advance on every key edge. Waking the host for them ran a full
     /// MainActor tick (TCC reads, policy, registry, SwiftUI publish) per keystroke.
@@ -458,10 +450,16 @@ public final class InputEngine: @unchecked Sendable {
     private var hasInputAuthorization: Bool {
         status.listenAccess
     }
-    /// One-shot, re-armed only when the earliest held-remote deadline changes
-    /// (not re-allocated on every key edge while a remote key is held).
-    private func scheduleRemoteExpiry() {
-        let deadline = remote.nextExpiry
+    /// One shared one-shot timer for held remote keys and diagnostic expiry.
+    /// This also releases diagnostic storage while input and the host are idle.
+    private func scheduleExpiry() {
+        let deadline: Double?
+        switch (remote.nextExpiry, diagnostics.deadline) {
+        case let (a?, b?): deadline = min(a, b)
+        case let (a?, nil): deadline = a
+        case let (nil, b?): deadline = b
+        case (nil, nil): deadline = nil
+        }
         if deadline == expiryDeadline, deadline == nil || expiryTimer?.isValid == true { return }
         expiryTimer?.invalidate(); expiryTimer = nil; expiryDeadline = deadline
         guard let deadline else { return }
@@ -551,6 +549,34 @@ public final class InputEngine: @unchecked Sendable {
                                            ownEvent: event.getIntegerValueField(.eventSourceUnixProcessID) == Int64(getpid()))
         let origin = configuration.inputRouting.classify(evidence, physicalBackend: configuration.physicalBackend)
         let recipient = Int32(truncatingIfNeeded: event.getIntegerValueField(.eventTargetUnixProcessID))
+        let key = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
+        let flags = Self.modifiers(event.flags)
+        let trace = diagnostics.deadline != nil && diagnostics.isActive(at: ProcessInfo.processInfo.systemUptime) &&
+            Self.tracesShortcutInput(type: type, key: key, flags: flags,
+                isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0)
+        let traceStart = trace ? DispatchTime.now().uptimeNanoseconds : 0
+        let traceAwaiting = trace && processor.isAwaitingNeutral
+        let traceSynchronized = trace && processor.modifiers.synchronized
+        let traceRawFlags = trace ? event.flags.rawValue : 0
+        var traceResult = "source-filter"
+        defer {
+            if trace {
+                // Bounded, opt-in metadata only. No characters, clipboard reads,
+                // file I/O or claims of event-to-physical-device correlation.
+                let detail = "key=\(key) type=\(type.rawValue) flags=\(flags.rawValue) rawFlags=0x\(String(traceRawFlags, radix: 16)) " +
+                    "source=\(evidence.processID)/\(evidence.stateID) origin=\(origin) target=\(recipient) " +
+                    "enabled=\(configuration.enabled) neutralWait=\(traceAwaiting)->\(processor.isAwaitingNeutral) " +
+                    "synchronized=\(traceSynchronized)->\(processor.modifiers.synchronized) result=\(traceResult)"
+                appendDiagnostic(rule: "input-shortcut", application: (deliveryContext ?? configuration.context).bundleID,
+                    microseconds: Double(DispatchTime.now().uptimeNanoseconds - traceStart) / 1000, detail: detail)
+                wake()
+            }
+        }
+        if type == .keyDown, key == 8, recipient > 0,
+           event.getIntegerValueField(.keyboardEventAutorepeat) == 0,
+           flags == .control || flags == .command {
+            actions.observeNativeCopy()
+        }
         let localDelivery = DestinationSemanticPolicy.acceptsDelivery(
             target: recipient,
             foreground: configuration.context.processID)
@@ -569,56 +595,92 @@ public final class InputEngine: @unchecked Sendable {
         guard physical || { if case .remote = origin { return true }; return false }() else {
             return Unmanaged.passUnretained(event)
         }
+        traceResult = "recipient-filter"
         defer { keyEdgeWake = true; wake() } // Coalesced work after callback, no recurring poll.
         let start = DispatchTime.now().uptimeNanoseconds
-        let key = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
-        let flags = Self.modifiers(event.flags)
         let side = Self.side(key)
-        // Aggregate flags plus per-side history handles both Control keys held together.
-        let down = physical ? side.map { flags.contains($0.group) && !processor.modifiers.isDown($0) } : nil
+        // flagsChanged describes state, not a toggle. UC's virtual HID services
+        // can emit the same modifier-down more than once.
+        let independentRemoteFlags: Bool
+        if case .remote(let index) = origin {
+            independentRemoteFlags = configuration.inputRouting.producers[index].independentFlags
+        } else { independentRemoteFlags = false }
+        let down = physical || independentRemoteFlags ? side.map { Self.modifierDown($0, flags: event.flags) } : nil
         let phase: KeyPhase = type == .keyDown ? .down : type == .keyUp ? .up : .flagsChanged
         // Modifier edges and owned ups still reconcile state across missing recipients.
-        // A new shortcut requires local delivery; only an existing native switcher
+        // A new shortcut requires a known local recipient; only an existing native switcher
         // can accept another Tab while WindowServer has temporarily no App recipient.
-        let nativeTabHeld = physical ? appSwitch.isActive(for: configuration.context.processID) : remote.hasNativeAppSwitchSession(evidence)
+        let nativeTabHeld = physical ? appSwitch.isActive(for: (deliveryContext ?? configuration.context).processID) : remote.hasNativeAppSwitchSession(evidence)
         if phase == .down && !DestinationSemanticPolicy.acceptsKeyDown(target: recipient,
             foreground: configuration.context.processID, key: key, nativeTabHeld: nativeTabHeld) {
             return Unmanaged.passUnretained(event)
         }
-        let normalized = KeyboardEvent(phase, keyCode: key, modifiers: flags,
+        if recipient > 0 {
+            let resolved = DestinationSemanticPolicy.context(target: recipient,
+                foreground: configuration.context, recipients: configuration.recipients)
+            // Unknown modifier recipients still reconcile physical state. A new
+            // key-down cannot borrow the foreground App's rules.
+            if phase == .down && resolved == nil { return Unmanaged.passUnretained(event) }
+            if resolved?.clipboardOnly == true {
+                recipientInbox.observe(recipient); notifyActivity()
+            }
+            if let context = resolved,
+               context != (deliveryContext ?? configuration.context) {
+                // Reconfiguring the router below retires its old outputs and
+                // actions. Do not first invalidate its held Control history.
+                queueReleases(invalidateRemote: false)
+                deliveryContext = context
+                configureProcessor(preservingModifiersOnAppChange: true)
+            }
+        }
+        var normalized = KeyboardEvent(phase, keyCode: key, modifiers: flags,
                                        isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
                                        modifierSide: side, modifierDown: down)
+        normalized.finderMovePending = actions.hasPendingFinderCut
         if calibrationInbox.observe(processID: evidence.processID, key: key, phase: phase, flags: flags, repeatKey: normalized.isRepeat) {
             notifyActivity()
         }
-        if destinationPhysical { processor.reconcileIndependentSourceFlags(normalized.modifiers) }
-        var routed = physical ? RoutedInputDecision(processor.process(normalized)) : remote.process(normalized, evidence: evidence, now: ProcessInfo.processInfo.systemUptime)
+        traceResult = "processor"
+        var routed = physical ? RoutedInputDecision(destinationPhysical ? processor.processIndependentSource(normalized) : processor.process(normalized)) :
+            remote.process(normalized, evidence: evidence, now: ProcessInfo.processInfo.systemUptime)
         if physical && configuration.windowsKeyModifier == .command {
             routed.decision = appSwitch.apply(routed.decision, event: normalized, state: processor.modifiers,
-                                             target: configuration.context.processID)
+                                             target: (deliveryContext ?? configuration.context).processID)
         }
-        let decision = routed.decision
+        var decision = routed.decision
+        if case .action(let action, _) = decision {
+            if localDelivery && actions.submit(action, context: configuration.context, source: routed.validity) {
+                decision = .suppress
+            } else if routed.validity?.isCurrent != false,
+                      let fallback = physical ? processor.fallbackForRejectedClipboardAction(keyCode: key) :
+                        remote.fallbackForRejectedClipboardAction(keyCode: key, evidence: evidence) {
+                actions.observeNativeCopy()
+                decision = fallback
+            } else {
+                if physical { processor.rejectAction(keyCode: key) }
+                else { remote.rejectAction(keyCode: key, evidence: evidence) }
+                decision = .passThrough
+            }
+        }
         var result: Unmanaged<CGEvent>? = Unmanaged.passUnretained(event)
         switch decision {
-        case .passThrough: break
-        case .suppress: result = nil
+        case .passThrough: traceResult = "pass"
+        case .suppress: traceResult = "suppress"; result = nil
         case .emergencyPause:
+            traceResult = "emergency-pause"
             queueReleases(); wake()
             status.emergencyPaused = true
             configureProcessor()
             result = nil
         case .togglePassThrough:
+            traceResult = "manual-pass-through"
             queueReleases(); wake()
             status.manualPassThrough = processor.manualPassThrough
             configureProcessor()
             result = nil
-        case .action(let action, _):
-            // Never turn an unconfirmed selection-aware copy into a raw SIGINT
-            // when the bounded mailbox is full. Keep its repeat/up suppressed.
-            if localDelivery && (actions.submit(action, context: configuration.context, source: routed.validity) || action == .terminalCopyOrInterrupt) { result = nil }
-            else if physical { processor.rejectAction(keyCode: key) }
-            else { remote.rejectAction(keyCode: key, evidence: evidence) }
+        case .action: traceResult = "action" // Resolved above, including the paired clipboard fallback.
         case let .rewrite(outputKey, outputModifiers, ruleID):
+            if trace { traceResult = "rewrite:\(ruleID)" }
             if NativeSessionEmitter.requiresSessionRouting(ruleID) {
                 // Synchronous input delivery: no detached work, queue or timer. Policy
                 // and source validity are checked at the point of native dispatch.
@@ -629,21 +691,56 @@ public final class InputEngine: @unchecked Sendable {
                     output.post(tap: .cgSessionEventTap); result = nil
                 }
             } else {
-                EventRewriter.apply(to: event, keyCode: outputKey, modifiers: outputModifiers, marker: marker)
+                if let output = EventRewriter.clipboardReplacement(for: event, keyCode: outputKey, modifiers: outputModifiers, marker: marker) {
+                    // Quartz owns and releases a replacement returned by the
+                    // tap. Transfer one retain; ARC keeps no per-key history.
+                    result = Unmanaged.passRetained(output)
+                } else {
+                    EventRewriter.apply(to: event, keyCode: outputKey, modifiers: outputModifiers, marker: marker)
+                }
             }
-            if phase == .down && !normalized.isRepeat && configuration.diagnostics &&
-                ProcessInfo.processInfo.systemUptime < diagnosticDeadline {
-                recordSequence &+= 1
-                records[recordIndex] = DiagnosticRecord(id: recordSequence, rule: ruleID,
-                    application: configuration.context.bundleID,
+            if phase == .down && !normalized.isRepeat && diagnostics.deadline != nil &&
+                diagnostics.isActive(at: ProcessInfo.processInfo.systemUptime) {
+                appendDiagnostic(rule: ruleID, application: (deliveryContext ?? configuration.context).bundleID,
                     microseconds: Double(DispatchTime.now().uptimeNanoseconds - start) / 1000)
-                recordIndex = (recordIndex + 1) % records.count
-                diagnosticRevision &+= 1
             }
         }
         let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1000
         status.maxMicroseconds = max(status.maxMicroseconds, elapsed)
         return result
+    }
+
+    /// Restrict short-term traces to modifier edges and clipboard chords, never ordinary text.
+    static func tracesShortcutInput(type: CGEventType, key: UInt16, flags: Modifiers, isRepeat: Bool) -> Bool {
+        if type == .flagsChanged { return key == 59 || key == 62 || key == 63 }
+        guard type == .keyDown, !isRepeat,
+              !flags.intersection([.control, .command, .fn]).isEmpty else { return false }
+        return key == 0 || key == 7 || key == 8 || key == 9
+    }
+    static func modifierDown(_ side: ModifierSide, flags: CGEventFlags) -> Bool {
+        guard modifiers(flags).contains(side.group) else { return false }
+        // Native side masks from IOKit's IOLLEvent.h. They distinguish a side's
+        // release while its peer remains held, without toggling duplicate downs.
+        let masks: (own: UInt64, group: UInt64)
+        switch side {
+        case .leftControl: masks = (0x1, 0x2001)
+        case .rightControl: masks = (0x2000, 0x2001)
+        case .leftShift: masks = (0x2, 0x6)
+        case .rightShift: masks = (0x4, 0x6)
+        case .leftCommand: masks = (0x8, 0x18)
+        case .rightCommand: masks = (0x10, 0x18)
+        case .leftOption: masks = (0x20, 0x60)
+        case .rightOption: masks = (0x40, 0x60)
+        }
+        if flags.rawValue & masks.group != 0 { return flags.rawValue & masks.own != 0 }
+        // Aggregate-only transports cannot identify a release while the peer
+        // stays down. Preserve the reported held group until its neutral edge;
+        // never invent a release from an identical repeated event.
+        return true
+    }
+    private func appendDiagnostic(rule: String, application: String, microseconds: Double, detail: String? = nil) {
+        diagnostics.append(rule: rule, application: application, microseconds: microseconds,
+            detail: detail, now: ProcessInfo.processInfo.systemUptime)
     }
 
     public static func modifiers(_ flags: CGEventFlags) -> Modifiers {

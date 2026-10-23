@@ -11,9 +11,7 @@ public enum WindowsCompatibilityRules {
         ShortcutRule(id: "windows.cut", input: .init(keyCode: 7, modifiers: [.control]), output: .init(keyCode: 7, modifiers: [.command])), // #15
         ShortcutRule(id: "windows.selectAll", input: .init(keyCode: 0, modifiers: [.control]), output: .init(keyCode: 0, modifiers: [.command])), // #16
     ]
-    public static let terminalClipboard = clipboard.filter { $0.id != "windows.copy" } + [
-        ShortcutRule(id: "terminal.copyOrInterrupt", input: .init(keyCode: 8, modifiers: .control),
-                     output: .init(keyCode: 8, modifiers: .control), action: .terminalCopyOrInterrupt),
+    public static let terminalClipboard = clipboard + [
         ShortcutRule(id: "terminal.interrupt", input: .init(keyCode: 8, modifiers: [.control, .shift]),
                      output: .init(keyCode: 8, modifiers: [.control]))
     ]
@@ -71,7 +69,7 @@ public enum WindowsCompatibilityRules {
                             output: rule.output, action: rule.action)
     }
     public static let finder: [ShortcutRule] = [
-        ShortcutRule(id: "karabiner.61", input: .init(keyCode: 8, modifiers: [.control]), output: .init(keyCode: 8, modifiers: [.command]), action: .finder(.copy)), // #61
+        ShortcutRule(id: "karabiner.61", input: .init(keyCode: 8, modifiers: [.control]), output: .init(keyCode: 8, modifiers: [.command])), // #61
         ShortcutRule(id: "karabiner.62", input: .init(keyCode: 7, modifiers: [.control]), output: .init(keyCode: 8, modifiers: [.command]), action: .finder(.cut)), // #62
         ShortcutRule(id: "karabiner.64", input: .init(keyCode: 9, modifiers: [.control]), output: .init(keyCode: 9, modifiers: [.command]), action: .finder(.paste)), // #64
         ShortcutRule(id: "karabiner.65", input: .init(keyCode: 0, modifiers: [.control]), output: .init(keyCode: 0, modifiers: [.command])), // #65

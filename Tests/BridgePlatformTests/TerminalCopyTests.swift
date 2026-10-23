@@ -31,7 +31,7 @@ private final class TerminalCopyClock: @unchecked Sendable {
     }
 
     @Test(arguments: TerminalSelectionState.allCases)
-    func selectionChoosesCopyOrInterruptWithoutReadingText(state: TerminalSelectionState) async throws {
+    func legacyTerminalActionAlwaysCopiesWithoutInspectingSelection(state: TerminalSelectionState) async throws {
         var output: [Modifiers] = []
         let dispatcher = ShortcutActionDispatcher(marker: 1, authorization: { _ in true }, clock: { 0 },
             terminalSelection: { _ in state }, terminalKeyEmitter: { key, flags, target in
@@ -40,8 +40,8 @@ private final class TerminalCopyClock: @unchecked Sendable {
         dispatcher.update(context: context, enabled: true)
         #expect(dispatcher.submit(.terminalCopyOrInterrupt, context: context))
         try await wait(dispatcher)
-        #expect(output == [state == .empty ? .control : .command])
-        #expect(dispatcher.status().isEmpty == (state != .unknown))
+        #expect(output == [.command])
+        #expect(dispatcher.status().isEmpty)
     }
 
     @Test(arguments: ["pause", "local", "permission", "context", "deadline", "source"])
@@ -54,11 +54,6 @@ private final class TerminalCopyClock: @unchecked Sendable {
         let origin = SourceWorkGate()
         let source: SourceWorkToken? = change == "source" ? .init(origin: origin, frame: .init()) : nil
         #expect(dispatcher.submit(.terminalCopyOrInterrupt, context: context, source: source))
-        for _ in 0..<100 {
-            if await reader.ready { break }
-            try await Task.sleep(for: .milliseconds(2))
-        }
-        #expect(await reader.ready)
         switch change {
         case "pause": dispatcher.cancelPending(disable: true)
         case "local": dispatcher.cancelLocalPending()
@@ -67,7 +62,7 @@ private final class TerminalCopyClock: @unchecked Sendable {
         case "deadline": clock.expire()
         default: origin.invalidate()
         }
-        await reader.finish(); try await wait(dispatcher)
+        try await wait(dispatcher)
         #expect(output.isEmpty && dispatcher.status().isEmpty)
     }
 

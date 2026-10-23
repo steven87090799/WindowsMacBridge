@@ -23,7 +23,10 @@ public struct MacBookKeyboardService: Sendable {
 }
 
 public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
-    public var activeDevices = 0
+    /// Services whose mapping properties match. This does not prove that input traverses them.
+    public var mappedDevices = 0
+    public var physicalVerificationPending = false
+    public var routingNotice: String?
     public var summary = "已關閉"
     public var issue: String?
     public var restorePending = false
@@ -122,7 +125,7 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
                 next.issue = "系統修飾鍵已有 Fn／Ctrl 映射；請先還原該鍵盤，避免重複交換。"; continue
             }
             if journal.originals[key] != nil && MacBookFnControlMapping.containsSwap(current) {
-                next.activeDevices += 1; continue
+                next.mappedDevices += 1; continue
             }
             if MacBookFnControlMapping.hasUserConflict(current) {
                 restore(serviceID: id, current: current, next: &next)
@@ -140,7 +143,7 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
             }
             let desired = MacBookFnControlMapping.applying(to: current)
             if backend.write(desired, serviceID: id), verified(id: id, mapping: desired) {
-                next.activeDevices += 1
+                next.mappedDevices += 1
             } else {
                 // A successful property setter alone is not proof the system accepted it.
                 if let actual = backend.services()?.first(where: { $0.identity.registryID == id })?.userMapping {
@@ -151,17 +154,31 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
         }
         _ = saveJournal()
         next.restorePending = !shouldApply && !journal.originals.isEmpty
-        if next.activeDevices > 0 { next.summary = "已交換 Fn ↔ 左 Ctrl（\(next.activeDevices) 個內建鍵盤）" }
+        if next.mappedDevices > 0 {
+            // A seized physical device may be re-emitted by a virtual keyboard.
+            // Readback on the physical service says nothing about that event route.
+            next.physicalVerificationPending = true
+            next.summary = "已寫入 Fn ↔ 左 Ctrl 映射（\(next.mappedDevices) 個內建鍵盤）；實體按鍵尚待確認"
+            if services.contains(where: { $0.identity.product.localizedCaseInsensitiveContains("karabiner") }) {
+                next.routingNotice = "偵測到 Karabiner 虛擬鍵盤；這不代表它正在接管內建鍵盤。若 Fn+C 仍開啟控制中心，請在 Karabiner 的 Devices 對內建鍵盤關閉 Modify events，再以實體 Fn+C 測試。"
+            }
+        }
         else if !enabled { next.summary = next.issue == nil ? "已關閉；已還原本程式的交換" : "還原待處理" }
         else if !permitted { next.summary = "暫停原生交換（HID 後端或 Session 暫停）" }
         else if let issue = next.issue { next.summary = issue }
         else { next.summary = "等待本機 MacBook 內建鍵盤；外接／通用控制鍵盤保持原樣" }
+        if let issue = next.issue, !next.summary.contains(issue) {
+            next.summary += "；" + issue
+        }
         publish(next, previous: old)
     }
 
     private func publish(_ next: MacBookKeyboardMappingStatus, previous: MacBookKeyboardMappingStatus) {
         status = next
-        if previous != next { onChange?(next); onDiagnostic?(next.summary) }
+        if previous != next {
+            onChange?(next)
+            onDiagnostic?([next.summary, next.routingNotice].compactMap { $0 }.joined(separator: "\n"))
+        }
     }
 
     public func stop() {
@@ -189,6 +206,7 @@ public struct MacBookKeyboardMappingStatus: Equatable, Sendable {
         }
         return false
     }
+    /// Property verification only. Never promote this to physical key verification.
     private func verified(id: UInt64, mapping: [NativeKeyMapping]) -> Bool {
         guard let actual = backend.services()?.first(where: { $0.identity.registryID == id })?.userMapping else { return false }
         return Set(actual.map { "\($0.source):\($0.destination)" }) == Set(mapping.map { "\($0.source):\($0.destination)" })

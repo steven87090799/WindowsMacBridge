@@ -202,6 +202,7 @@ private final class HIDConnectionLifetime: @unchecked Sendable {
         configuration.diagnostics = engine.diagnostics
         configuration.bundleID = engine.context.bundleID; configuration.mode = engine.context.mode
         configuration.isBrowser = engine.context.isBrowser; configuration.generation = engine.generation
+        configuration.modifierEpoch = engine.runtimePolicy?.modifierEpoch
         configuration.actionGeneration = actionEpoch
         configuration.restartToken = engine.restartToken
         if configuration.transportOnly && previous.sameCapturePolicy(as: configuration) {

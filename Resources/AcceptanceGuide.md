@@ -6,7 +6,7 @@
 
 以滑鼠及鍵盤切換每個側邊欄項目，確認內容、目前選取及 VoiceOver 標籤一致。測工具列收合／展開及 ⌃⌘S、拖曳分隔線、730×600 最小視窗、表單捲動、關閉後重新開啟。規則預覽的自選修飾鍵在窄視窗可分行，長表格結果可用提示或收合側邊欄閱讀。確認診斷只在進階模式顯示。
 
-分別測亮／暗色、提高對比及減少透明度；截圖縮圖顯示期間切換後兩項時，文字與關閉按鈕仍應清楚。macOS 26 以上用系統 Liquid Glass，macOS 14／15 保留原生材質。離線產生圖只能驗證自有版面，不能取代實際視窗背景折射、滑鼠／鍵盤導覽及輔助使用驗收。既有快捷鍵、截圖自動複製與文字擷取按以下項目另測。
+分別測亮／暗色、提高對比及減少透明度；截圖縮圖顯示期間切換後兩項時，文字與關閉按鈕仍應清楚。macOS 26 以上用系統 Liquid Glass，macOS 14／15 保留原生材質。離線產生圖只能驗證自有版面，不能取代實際視窗背景折射、滑鼠／鍵盤導覽及輔助使用驗收。既有快捷鍵與截圖自動複製按以下項目另測。
 
 ## 最短開始
 
@@ -48,9 +48,11 @@ Win+Shift+S／PrintScreen 框選、Alt+PrintScreen 當前窗口、Win+PrintScree
 
 僅builtIn=true的本機Apple鍵盤交換Fn／左Ctrl；Mac mini、USB／Bluetooth、UC／virtual不交換。正常退出還原；與他人工具Fn／Ctrl衝突要顯示問題且不覆蓋其他pair。強制退出後下次啓動／登入應處理journal；重開機服務映射清除。睡眠／喚醒、服務重建、持鍵切換與restorePending都實測，不能用property setter返回true就判定成功。
 
+讀回 UserKeyMapping 一致仍只應顯示「已寫入映射；實體按鍵尚待確認」。實體內建 Fn+C／X／V／A 必須在文字編輯完成複製／剪下／貼上／全選，原本左 Ctrl+C 應有 Fn+C 的系統行為。交換開／關及正常退出前後，逐一比對內建與外接服務的映射表。Karabiner 複合規則關閉但 Devices 的 Modify events 仍開啟時，也要測試；不得把交換表寫到其共用虛擬鍵盤以規避問題。若需讓內建鍵盤放行，先備份設定，只修改該裝置，再確認原實體 Fn+C 的結果。記錄 metadata、使用者實測與推測，各自註明證據。
+
 ## 7. 輸入法與App模式
 
-ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再測試複製。在 TextEdit、Terminal、IDE 分別測左右 Ctrl+C／V／A／X 與原生 Command+C／V／A／X，確認複製、貼上、全選、剪下依 App 可用功能執行；先放開 Ctrl 再放開字母不得卡住修飾鍵。Terminal 運行 `sleep 30`，先選取可丟棄文字按 Ctrl+C 應複製且命令繼續；清除選取再按 Ctrl+C 應中斷。Ctrl+Shift+C 應明確中斷。另測選取資訊不可用時僅嘗試複製、查詢中切 App／暫停／撤銷來源不得送出舊中斷。IDE 內嵌 Terminal 使用整個 App 的 Windows 規則，另記錄其命令中斷綁定。遠端 Windows／VM 的 Ctrl+C／V 保持原 Ctrl，兩種後端各自驗收。手動App規則、快速切換、Pause應同步取消舊輸入法／AX／截圖任務。守護／切換熱鍵默認關閉；守護關閉時不修正系統輸入來源。
+ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再測試複製。在 TextEdit、Terminal、IDE 與本機 Game／停用延伸規則 Profile 分別測左右 Ctrl+C／V／A／X，確認複製、貼上、全選、剪下依 App 可用功能執行；先放開 Ctrl 再放開字母不得卡住修飾鍵。按住 Ctrl 切換 App、輸入法或開啟系統截圖／Quick Look 浮動視窗後，下一次 C／V 仍須生效。Terminal 運行 `sleep 30`，有選取時 Ctrl+C 複製且命令繼續；清除選取後 Ctrl+C 仍只送複製，Ctrl+Shift+C 才中斷。Finder 剪下等待期間按 Ctrl+C，不得稍後被較舊的剪下覆寫；一般貼上不得等候其他系統 App 啟動。IDE 內嵌 Terminal 使用整個 App 的 Windows 規則，另記錄其中斷綁定。遠端 Windows／VM 的 Ctrl+C／V 保持原 Ctrl，兩種後端各自驗收。手動 App 規則、快速切換、Pause 應同步取消舊輸入法／AX／截圖任務。守護／切換熱鍵默認關閉；守護關閉時不修正系統輸入來源。
 
 守護開啟後預設維持唯音繁體。用系統選單切成 ABC，應在設定延遲後回到唯音；切換本機 App、喚醒或重新啟動後仍應回到守護目標。用本 App 的 ABC 按鈕或唯音／ABC 快捷鍵選英文，應維持 ABC，並在重新啟動後保留此明確目標；本 App 選回唯音後，系統切英文應再次被修正。舊版記錄的「保留來源」不能當作明確英文選擇。
 
@@ -62,10 +64,10 @@ ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再�
 
 分別從Git clone和無.git ZIP做Release arm64 build，核對Info版本／commit、資源allowlist、簽章與DMG App→Applications拖入；登入開關只改本App。停止／移除進階runtime保留共享Driver。沒有自制 MRU 或窗口遍歷切換器；AltTab 只使用 macOS native path。截圖縮圖只在成功截圖後短暫建立，未使用時沒有視窗與固定輪詢。
 
-## 9. 規則預覽、遠端校準與文字擷取
+## 9. 規則預覽與遠端校準
 
 總開關關閉時先開規則預覽，選 Terminal、IDE、Finder、瀏覽器、Remote／VM 與不同 Windows 鍵位置。核對 Ctrl+C／Ctrl+Shift+C、Ctrl+V、Alt+Tab、Shift+Delete 與截圖輸出，確認沒有實際按鍵輸出、沒有儲存模擬 Profile；最小 730×600 與放大視窗、鍵盤與 VoiceOver 操作都須可用。
 
 從指定遠端來源送入按鍵後開始校準，切到本機 TextEdit 測一次 Ctrl+C。確認前設定不變；套用後重測並還原校準前手動設定。另一來源、一般打字、repeat、60 秒逾時、關閉校準頁、來源退出／重啟、Pause／Secure Input／權限撤銷不得套用結果。正常本機 App 切換應保持校準。分別記錄實際來源軟體與目標，不以 metadata 或 fixture 取代連線驗收。
 
-用可丟棄的繁中／英文圖片框選文字，貼到測試文件，檢查數字、標點、換行、小字與多欄結果；一般截圖仍只複製圖片。沒有文字、取消、逾時、暫停、切換 Session 或撤銷螢幕錄製時原剪貼簿保持。辨識期間再次要求截圖不能啟動第二個工作；結束後再試。量測主 App 與單次 OCR worker 各自的 RSS／footprint，記錄冷／暖啟動與工作結束後記憶體，不要求辨識時 CPU 為零；確認不留命名 OCR 圖檔或文字日誌。
+目前 OCR 已停用，設定頁與選單不應出現文字擷取入口，安裝包不應包含 OCR worker。一般截圖只複製圖片；測試點擊縮圖後預覽直接置中並取得焦點、Ctrl+C 複製完整圖片，以及關閉／新截圖時的清理。

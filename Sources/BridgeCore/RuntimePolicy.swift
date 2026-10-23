@@ -70,15 +70,17 @@ public struct RuntimePolicySnapshot: Equatable, Sendable {
     public func preservesModifiers(from previous: Self) -> Bool {
         guard generation != previous.generation, modifierEpoch == previous.modifierEpoch,
               permitsShortcuts, previous.permitsShortcuts,
-              input.layoutSupported, !input.nativeRestorePending,
-              input.foreground.processID > 0, previous.input.foreground.processID > 0,
-              Self.hasContinuousKeyboardOwnership(input.foreground.mode),
-              Self.hasContinuousKeyboardOwnership(previous.input.foreground.mode) else { return false }
+              !input.nativeRestorePending,
+              input.foreground.processID > 0, previous.input.foreground.processID > 0 else { return false }
+        if input.backend == .deviceHID,
+           HIDCapturePolicy.requiresNativePassThrough(mode: input.foreground.mode, layoutSupported: input.layoutSupported) ||
+           HIDCapturePolicy.requiresNativePassThrough(mode: previous.input.foreground.mode, layoutSupported: previous.input.layoutSupported) {
+            return false
+        }
         var normalized = input; normalized.foreground = previous.input.foreground
+        normalized.layoutIdentity = previous.input.layoutIdentity
+        normalized.layoutSupported = previous.input.layoutSupported
         return normalized == previous.input
-    }
-    private static func hasContinuousKeyboardOwnership(_ mode: ApplicationMode) -> Bool {
-        mode == .macOS || mode == .terminal || mode == .ide
     }
 }
 public struct RuntimePolicyCoordinator: Sendable {

@@ -7,6 +7,29 @@ import InputSourceSupport
 /// Explicit, offscreen developer check with generated values only. Does not
 /// create a BridgeController, start input, request permissions or show windows.
 @MainActor enum FeatureVisualCheck {
+    /// Visible click/focus check, using generated pixels and no input engine,
+    /// capture, permissions or clipboard writes. Invoked only by this argument.
+    static func handlePreview(_ arguments: [String]) -> Bool {
+        guard arguments.first == "--screenshot-preview-fixture" else { return false }
+        guard arguments.count == 2 else { exit(64) }
+        do {
+            let output = URL(fileURLWithPath: arguments[1], isDirectory: true)
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+            NSApplication.shared.setActivationPolicy(.accessory)
+            let image = generatedScreenshot(size: NSSize(width: 1200, height: 700))
+            guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
+                  let png = bitmap.representation(using: .png, properties: [:]),
+                  let thumbnail = ScreenshotPreviewPreparation.thumbnail(png: png) else { exit(1) }
+            let source = output.appendingPathComponent("generated-preview.png")
+            try png.write(to: source, options: .withoutOverwriting)
+            let presenter = ScreenshotThumbnailPresenter(expirationDelay: 60)
+            guard presenter.present(.init(thumbnailPNG: thumbnail, sourceURL: source, ownsSourceFile: false)) else { exit(1) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 180) { NSApp.stop(nil) }
+            withExtendedLifetime(presenter) { NSApp.run() }
+            presenter.dismiss()
+        } catch { print("Screenshot preview fixture failed: \(error)"); exit(1) }
+        return true
+    }
     static func handle(_ arguments: [String]) -> Bool {
         guard arguments.first == "--render-feature-checks" else { return false }
         guard arguments.count == 2 else { exit(64) }

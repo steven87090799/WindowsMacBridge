@@ -46,6 +46,13 @@ public struct ModifierStateMachine: Sendable {
         return value
     }
     public mutating func observe(_ side: ModifierSide, down: Bool, aggregate: Modifiers) {
+        // Aggregate-only transports cannot distinguish a peer release while the
+        // group is held. Once the group is up, retire both sides even if another
+        // modifier (e.g. Shift) keeps the whole keyboard from becoming neutral.
+        if !down && !aggregate.contains(side.group) {
+            sides &= ~((1 << side.rawValue) | (1 << side.peer.rawValue))
+            return
+        }
         if down { sides |= 1 << side.rawValue } else { sides &= ~(1 << side.rawValue) }
         let sideGroupDown = isDown(side) || isDown(side.peer)
         if sideGroupDown != aggregate.contains(side.group) { synchronized = false }
@@ -75,9 +82,9 @@ public enum ApplicationMode: String, CaseIterable, Codable, Sendable {
         case .terminal: "Terminal — Windows 操作"
         case .remoteWindows: "Remote Session — Pass-through"
         case .virtualMachine: "Virtual Machine — Pass-through"
-        case .game: "Game — Pass-through"
+        case .game: "Game — 基本複製貼上"
         case .ide: "IDE — Windows 操作"
-        case .disabled: "Disabled — Pass-through"
+        case .disabled: "停用延伸規則 — 基本複製貼上"
         }
     }
 }
@@ -89,6 +96,7 @@ public struct ApplicationContext: Equatable, Sendable {
     public var mode: ApplicationMode
     public var executablePath: String
     public var isBrowser: Bool
+    public var clipboardOnly: Bool = false
     public init(processID: Int32 = 0, bundleID: String = "", displayName: String = "Unknown",
                 mode: ApplicationMode = .disabled, executablePath: String = "", isBrowser: Bool = false) {
         self.processID = processID; self.bundleID = bundleID
@@ -107,6 +115,9 @@ public struct KeyboardEvent: Sendable {
     public var modifierSide: ModifierSide?
     public var modifierDown: Bool?
     public var allowsTranslation = true
+    /// The native adapter supplies the actual Finder cut-intent state. Offline
+    /// rule previews retain the conditional move branch by default.
+    public var finderMovePending = true
     public init(_ phase: KeyPhase, keyCode: UInt16, modifiers: Modifiers = [],
                 isRepeat: Bool = false, isOwnEvent: Bool = false,
                 modifierSide: ModifierSide? = nil, modifierDown: Bool? = nil) {

@@ -12,6 +12,11 @@ import BridgePlatform
     @MainActor static func main() async throws {
         let args = Array(CommandLine.arguments.dropFirst())
         switch args.first {
+        case "--modifier-cycles":
+            let measurements = [false, true].flatMap { independent in
+                (0..<3).map { _ in modifierCycles(independent: independent) }
+            }
+            try printJSON(["kind":"synthetic-modifier-cycles", "measurements":measurements])
         case "--routing-updates":
             let measurements = [0, 1, 16].map { sources in
                 (0..<3).map { _ in routingUpdates(sources: sources) }
@@ -57,9 +62,31 @@ import BridgePlatform
             try fixture().write(to: URL(fileURLWithPath: args[1]), options: .withoutOverwriting)
             try printJSON(["fixture":"generated SCREEN TEXT 123", "path":args[1]])
         default:
-            print("Usage: BridgePerformanceCheck --routing-updates | --preview | --ocr-roundtrip <App-executable> | --write-fixture <new-file>")
+            print("Usage: BridgePerformanceCheck --modifier-cycles | --routing-updates | --preview | --ocr-roundtrip <App-executable> | --write-fixture <new-file>")
             exit(64)
         }
+    }
+    private static func modifierCycles(independent: Bool) -> [String: Any] {
+        var processor = KeyboardEventProcessor()
+        processor.configure(context: .init(processID: 10, bundleID: "synthetic.local", mode: .macOS),
+            enabled: true, layoutSupported: true)
+        processor.reconcileNeutralHardware()
+        let down = KeyboardEvent(.flagsChanged, keyCode: 59, modifiers: .control,
+            modifierSide: .leftControl, modifierDown: true)
+        let events = [down, down, KeyboardEvent(.down, keyCode: 8, modifiers: .control),
+            KeyboardEvent(.up, keyCode: 8, modifiers: .control),
+            KeyboardEvent(.flagsChanged, keyCode: 59, modifierSide: .leftControl, modifierDown: false)]
+        var result = measure(iterations: 20_000) {
+            for event in events {
+                if independent { _ = processor.processIndependentSource(event) }
+                else { _ = processor.process(event) }
+            }
+        }
+        precondition(processor.activePressCount == 0 && processor.modifiers.aggregate.isEmpty && processor.modifiers.synchronized)
+        result["independent_flags"] = independent
+        result["events_per_operation"] = events.count
+        result["translated_chords"] = processor.translatedCount
+        return result
     }
     private static func routingUpdates(sources: Int) -> [String: Any] {
         let producers = (0..<sources).map { i in

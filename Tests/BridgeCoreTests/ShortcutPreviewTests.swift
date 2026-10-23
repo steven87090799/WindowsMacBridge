@@ -12,11 +12,6 @@ struct ShortcutPreviewTests {
             let value = configuration(mode)
             for (input, output): (UInt16, UInt16) in [(8,8),(9,9),(0,0),(7,7)] {
                 let result = ShortcutPreview.evaluate(.init(keyCode: input, modifiers: .control), configuration: value)
-                if mode == .terminal && input == 8 {
-                    #expect(result.decision == .action(.terminalCopyOrInterrupt, ruleID: "terminal.copyOrInterrupt"))
-                    #expect(result.output.contains("有選取") && result.output.contains("中斷命令"))
-                    continue
-                }
                 #expect(result.decision == .rewrite(keyCode: output, modifiers: .command,
                     ruleID: [8:"windows.copy",9:"windows.paste",0:"windows.selectAll",7:"windows.cut"][input]!))
             }
@@ -27,7 +22,7 @@ struct ShortcutPreviewTests {
             .rewrite(keyCode: 1, modifiers: .command, ruleID: "windows.save"))
     }
     @Test func protectedAppsAndDisabledPreviewNeverTranslate() {
-        for mode: ApplicationMode in [.remoteWindows,.virtualMachine,.game,.disabled] {
+        for mode: ApplicationMode in [.remoteWindows,.virtualMachine] {
             for chord in ShortcutPreview.samples(windowsKey: .command) {
                 #expect(ShortcutPreview.evaluate(chord, configuration: configuration(mode)).decision == .passThrough)
             }
@@ -56,14 +51,16 @@ struct ShortcutPreviewTests {
         #expect(ShortcutPreview.evaluate(.init(keyCode: 17, modifiers: .control), configuration: browser).decision ==
             .rewrite(keyCode: 17, modifiers: .command, ruleID: "karabiner.42"))
     }
-    @Test func remotePreviewDoesNotDoubleTranslateOrGuessUnknownSources() {
+    @Test func remotePreviewSharesBasicClipboardAndDoesNotDoubleTranslateCommand() {
         var value = configuration()
         let chord = Shortcut(keyCode: 8, modifiers: .control)
         value.source = .remoteWindows
         #expect(ShortcutPreview.evaluate(chord, configuration: value).decision == .rewrite(keyCode: 8, modifiers: .command, ruleID: "windows.copy"))
         for source: ShortcutPreviewSource in [.remoteMac,.remoteAutomatic] {
             value.source = source
-            #expect(ShortcutPreview.evaluate(chord, configuration: value).decision == .passThrough)
+            #expect(ShortcutPreview.evaluate(chord, configuration: value).decision == .rewrite(keyCode: 8, modifiers: .command, ruleID: "windows.copy"))
+            #expect(ShortcutPreview.evaluate(.init(keyCode: 8, modifiers: .command), configuration: value).decision == .passThrough)
+            #expect(ShortcutPreview.evaluate(.init(keyCode: 1, modifiers: .control), configuration: value).decision == .passThrough)
         }
     }
     @Test func allGeneralRulesMatchTheirActualCompiledOutput() {

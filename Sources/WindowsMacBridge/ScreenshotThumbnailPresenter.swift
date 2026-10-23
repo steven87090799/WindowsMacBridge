@@ -1,17 +1,19 @@
 import AppKit
-import Darwin
 import BridgePlatform
 
 /// No window, model, observer or repeating timer exists before an image arrives.
-/// One small thumbnail and at most one user-requested system Quick Look process.
+/// One small thumbnail and at most one user-requested native image window.
 @MainActor final class ScreenshotThumbnailPresenter: NSObject {
     private var panel: NSPanel?
     private var preview: ScreenshotPreview?
     private var expiration: DispatchWorkItem?
-    private var quickLook: Process?
-    private var openedURL: URL?
-    private var pendingOpen = false
-    private var terminatingQuickLook = false
+    private var viewer: ScreenshotPreviewWindow?
+    private let expirationDelay: TimeInterval
+
+    init(expirationDelay: TimeInterval = 5) {
+        self.expirationDelay = expirationDelay
+        super.init()
+    }
 
     func present(_ value: ScreenshotPreview) -> Bool {
         dismiss()
@@ -47,60 +49,36 @@ import BridgePlatform
         let expectedURL = preview?.sourceURL
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, self.preview?.sourceURL == expectedURL, self.openedURL != expectedURL else { return }
+                guard let self, self.preview?.sourceURL == expectedURL, self.viewer == nil else { return }
                 self.dismiss()
             }
         }
         expiration = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + expirationDelay, execute: work)
     }
 
     @objc private func closePreview() { dismiss() }
     func dismiss() {
-        expiration?.cancel(); expiration = nil; pendingOpen = false
+        expiration?.cancel(); expiration = nil
         panel?.contentView = nil; panel?.close(); panel = nil
-        if let value = preview, value.ownsSourceFile, value.sourceURL != openedURL {
+        let previousViewer = viewer; viewer = nil
+        previousViewer?.onClose = nil; previousViewer?.close()
+        if let value = preview, value.ownsSourceFile {
             try? FileManager.default.removeItem(at: value.sourceURL)
         }
         preview = nil
-        if let child = quickLook, child.isRunning, !terminatingQuickLook {
-            terminatingQuickLook = true
-            child.terminate()
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) { [weak child] in
-                if let child, child.isRunning { _ = kill(child.processIdentifier, SIGKILL) }
-            }
-        }
     }
 
     @objc private func openPreview() {
-        guard let value = preview else { return }
-        // A previous preview is still retiring: wait for its exit, never spawn
-        // another viewer while that owned process is alive.
-        if quickLook != nil { pendingOpen = true; expiration?.cancel(); expiration = nil; return }
-        let child = Process()
-        child.executableURL = URL(fileURLWithPath: "/usr/bin/qlmanage")
-        child.arguments = ["-p", value.sourceURL.path]
-        child.standardInput = FileHandle.nullDevice
-        child.standardOutput = FileHandle.nullDevice; child.standardError = FileHandle.nullDevice
-        let sourceURL = value.sourceURL, ownsFile = value.ownsSourceFile
-        child.terminationHandler = { [weak self] finished in
-            if ownsFile { try? FileManager.default.removeItem(at: sourceURL) }
-            Task { @MainActor [weak self] in
-                guard let self, self.quickLook === finished else { return }
-                self.quickLook = nil; self.openedURL = nil; self.terminatingQuickLook = false
-                if self.preview?.sourceURL == sourceURL { self.dismiss() }
-                if self.pendingOpen { self.pendingOpen = false; self.openPreview() }
-            }
-        }
-        quickLook = child; openedURL = sourceURL; terminatingQuickLook = false
-        do {
-            try child.run()
-            expiration?.cancel(); expiration = nil
-            panel?.contentView = nil; panel?.close(); panel = nil
-        } catch {
-            child.terminationHandler = nil; quickLook = nil; openedURL = nil; terminatingQuickLook = false
-            scheduleExpiration()
-        }
+        guard let value = preview, let image = NSImage(data: value.thumbnailPNG) else { return }
+        let screen = panel?.screen ?? NSScreen.main
+        let frame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
+        let opened = ScreenshotPreviewWindow(sourceURL: value.sourceURL, imageSize: image.size, visibleFrame: frame, thumbnail: image)
+        opened.onClose = { [weak self] in self?.viewer = nil; self?.dismiss() }
+        viewer = opened
+        expiration?.cancel(); expiration = nil
+        panel?.contentView = nil; panel?.close(); panel = nil
+        opened.show()
     }
 }
 
@@ -125,7 +103,7 @@ import BridgePlatform
         imageButton.wantsLayer = true
         imageButton.layer?.cornerRadius = 12; imageButton.layer?.masksToBounds = true
         imageButton.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.08).cgColor
-        imageButton.setAccessibilityLabel("開啟截圖快速查看")
+        imageButton.setAccessibilityLabel("開啟截圖預覽")
         imageButton.toolTip = "點擊放大查看截圖"; content.addSubview(imageButton)
 
         let symbol = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil) ?? NSImage()

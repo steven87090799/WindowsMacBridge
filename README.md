@@ -1,6 +1,15 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。原始碼版本 **0.6.0（build 58）開發版**，設定側邊欄保留原生液態玻璃切換動畫，選取文字與圖示作為玻璃內容呈現，避免被背景玻璃模糊；包含 Terminal／IDE 完整 Windows 相容規則、放大的自製玻璃截圖預覽、按需啟動的獨立 OCR 程序，以及規則預覽與遠端校準介面；保留先前 HID／輸入法修復（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。[Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 的已發佈資產與本機原始碼是不同階段。
+Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。正式版本 **1.0.0（build 63）**，修正通用控制的重複 Ctrl、雙側修飾鍵與遠端來源處理，並改善診斷記憶體及鍵盤事件耗時。Ctrl+C／X／V／A 共用本機剪貼簿規則，涵蓋系統浮動視窗、Terminal、輸入法與本機 App Profile；截圖縮圖點擊後直接置中並啟用 App 內的圖片預覽視窗。設定側邊欄保留清晰文字與原生液態玻璃切換動畫；包含規則預覽與遠端校準介面（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。
+
+## v1.0.0 正式版（build 63）
+
+- [本次問題、根因、修改位置、事件證據與後續注意事項](Docs/Build62-FnControl-UniversalControl-Handoff.md)
+- [完整實機診斷紀錄](Docs/FnControlDiagnosis-2026-10-23.md)／[修復前後事件節錄](Docs/UCControlEventEvidence-2026-10-23.txt)
+- [正式版更新與換機安裝說明](Docs/ReleaseNotes-1.0.0.md)／[下載 v1.0.0 完整 ZIP 或 DMG](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.0)
+- [build 63 的修正、資源量測與驗證範圍](Docs/Build62-Review-2026-10-23.md)
+
+535 項自動測試通過。build 62 的前次操作中，使用者已在本次 MacBook 實測內建 Fn+C／X／V／A、左 Ctrl→Fn，以及另一台 Mac 外接鍵盤經通用控制送入的 Ctrl+C／V。其他硬體、舊系統與進階 HID 安裝仍需各自驗收；一般模式不需要另裝 Driver。
 
 ## 一般模式與進階模式已分開
 
@@ -38,12 +47,11 @@ App使用ad-hoc簽章、尚無Apple公證；更新可能需要重新核准本版
 | MacBook Fn／左Ctrl | 關，明確開關只改本機builtIn鍵盤 |
 | Windows鍵位置 | Command，可選Option |
 | 唯音守護／Carbon切換熱鍵 | 各自關；守護開啟後維持本 App 明確選定的唯音／ABC，預設唯音 |
-| Terminal／IDE | 共用完整 Windows 相容規則：複製、儲存、復原／重做、搜尋、分頁與文字導覽；Terminal 的 Ctrl+C 有選取時複製、沒有選取時中斷；Ctrl+Shift+C 明確中斷 |
-| Remote viewer／VM／Game | 遠端 Windows／VM 保留 Ctrl 給 Windows 處理，Game 保持原按鍵 |
+| Terminal／IDE | 共用完整 Windows 相容規則；Ctrl+C 一律複製，不查詢選取狀態；Terminal 的 Ctrl+Shift+C 中斷命令 |
+| Remote viewer／VM／Game | 遠端 Windows／VM 保留 Ctrl 給 Windows 處理；本機 Game／停用延伸規則的 Profile 仍提供 Ctrl+C／X／V／A，其他按鍵通過 |
 | HID／VirtualHID／root runtime | 進階選配，默認關 |
 | 快捷鍵規則預覽 | 設定 → 規則預覽；使用實際處理器計算，不啟用監聽、不輸出按鍵或更改 App 規則 |
 | 遠端來源校準 | 設定 → 遠端校準；明確開始、一次 Ctrl+C、60 秒期限、確認套用與還原 |
-| 截圖文字擷取 | 選單列或一般設定手動框選；Vision 本機繁中／英文辨識，不自動辨識一般截圖 |
 
 一般模式EventTap使用全部鍵盤，沒有可靠逐裝置ID。舊HID選擇不自動解鎖新進階模式，已有App規則、鍵位與明確功能選擇保留。Settings schema 6，損壞設置安全停用。
 
@@ -51,7 +59,7 @@ App使用ad-hoc簽章、尚無Apple公證；更新可能需要重新核准本版
 
 ## 截圖與儲存位置
 
-Win+Shift+S／PrintScreen、Alt+PrintScreen 及攔截的 ⌘⇧3／4 使用 App 私有暫存 PNG；擷取成功先複製，再顯示自製「截圖已複製」預覽，不等待 macOS 浮動縮圖存檔。預覽消失或點開的快速查看關閉後清除自己的暫存原圖。只有 Win+PrintScreen 明確保存全螢幕圖片到桌面，檔案不隨預覽關閉刪除。文字擷取完成後清除圖片。
+Win+Shift+S／PrintScreen、Alt+PrintScreen 及攔截的 ⌘⇧3／4 使用 App 私有暫存 PNG；擷取成功先複製，再顯示自製「截圖已複製」預覽，不等待 macOS 浮動縮圖存檔。預覽消失或點開的圖片視窗關閉後清除自己的暫存原圖。只有 Win+PrintScreen 明確保存全螢幕圖片到桌面，檔案不隨預覽關閉刪除。
 
 預覽由 220×160 放大為 320×248，採圓角圖片區與主副文字；macOS 26+ 且建置 SDK 支援時使用 Apple Liquid Glass，較舊版本使用毛玻璃。一般顯示 5 秒，滑鼠移入會保留，移出重新計時；點圖開啟系統快速查看。需要原生標記／分享工具時可用 ⌘⇧5；停用本 App 截圖功能後 ⌘⇧3／4 也恢復系統行為，該路徑才遵循系統截圖儲存位置。
 
@@ -63,7 +71,7 @@ Mac mini固定外接鍵盤、MacBook內建鍵盤，只有MacBook開啓Fn交換�
 
 一般模式沒有250ms／1s固定閒置輪詢，只有按鍵、系統通知及明確deadline；一般打字不會為計數喚醒主執行緒，遠端來源結束由kqueue事件通知。HID使用XPC ownership lease和Driver回報，放開所有鍵後不輪詢；尚有held output時保留單次安全檢查。截圖單輪、臨時PNG直接clipboard，TIFF／PDF按預算處理。代碼審查或CI不證明CPU穩定0.0–0.1%、完整App記憶體峰值、硬件交接或Driver恢復已通過。
 
-文字辨識只在明確框選後啟動獨立的短命 OCR 執行檔；主程式不直接連結 Vision，不預熱模型，一般截圖不啟動 OCR。工作結束即退出程序，系統層快取由 macOS 管理。辨識輸入限 2560 邊長／400 萬像素、結果限 64 KiB／1,000 行；工作逾時、取消或政策失效不寫入舊結果。像素快照透過已 unlink 的私有 regular-file descriptor 傳入，不保留命名 OCR 圖檔。行為依 [Apple Vision 文件](https://developer.apple.com/documentation/vision/recognizing-text-in-images) 實作；辨識準確度仍受字體、畫質與縮圖影響。
+OCR 目前停用：設定頁與選單沒有文字擷取入口，App 不封裝 OCR worker，不啟動辨識或載入 Vision／CoreML。原始碼與測試保留，內部開關位於 `ProductFeatures.screenshotTextRecognition`，預設為 `false`。一般截圖複製的是圖片，不需要 OCR。
 
 [2026-10-19 資源研究](Docs/BackgroundResources-2026-10-19.md) 分開記錄已安裝 build 54 的背景量測與 build 55 的合成 UI 生命週期檢查，附可重現數據。液態玻璃可見時的 GPU 成本仍待實機 profiling；無 GUI 自檢不能當成完整 App 的記憶體數字。
 
@@ -81,8 +89,8 @@ bash scripts/package-app-dmg.sh
 
 產出arm64 Release App與可拖入Applications的DMG，進階payload封裝於App內。Pinned SDK準備不需要安裝系統Driver；GitHub無.git ZIP仍可建置，來源會明確標記為archive，不冒用其他目錄的Git revision。`bash scripts/test.sh`是開發／Hosted CI測試入口，不執行權限授予或實際硬件驗收。
 
-完整測試會先執行一般測試，再以獨立程序執行截圖記憶體回歸，兩者都必須通過；`bash scripts/test.sh -c release` 同樣涵蓋兩階段。128 MiB 增量門檻與 60 次處理次數不變。明確指定 `--filter`／`--skip`、`--no-parallel`、測試清單或自訂報告輸出時，腳本保留該次呼叫；量測整個程序記憶體時請只選該測試或使用 `--no-parallel`。
+完整測試會先執行一般測試，再以獨立程序執行截圖與診斷快照記憶體回歸，兩者都必須通過；`bash scripts/test.sh -c release` 同樣涵蓋兩階段。128 MiB 增量門檻與 60 次處理次數不變。明確指定 `--filter`／`--skip`、`--no-parallel`、測試清單或自訂報告輸出時，腳本保留該次呼叫；量測整個程序記憶體時請只選該測試或使用 `--no-parallel`。
 
-`BridgePerformanceCheck` 是不封裝進 App 的離線工具，提供 `--routing-updates`、`--preview` 與 `--ocr-roundtrip <App executable>`，只使用合成按鍵／產生的圖片。App 的 `--render-feature-checks <new output directory>` 用合成狀態離線輸出新頁面供版面檢查，不建立輸入控制器或顯示視窗。
+`BridgePerformanceCheck` 是不封裝進 App 的離線工具，提供 `--modifier-cycles`、`--routing-updates`、`--preview` 與 `--ocr-roundtrip <App executable>`，只使用合成按鍵／產生的圖片。App 的 `--render-feature-checks <new output directory>` 用合成狀態離線輸出新頁面供版面檢查，不建立輸入控制器或顯示視窗。
 
 第三方MIT資源及官方Driver許可證保留在Resources/Licenses。未經Apple Developer／DriverKit資格，不能把官方簽章dext冒充為自制WindowsMacBridge Driver。

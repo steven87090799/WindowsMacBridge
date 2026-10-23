@@ -85,8 +85,51 @@ struct DestinationSemanticsTests {
         #expect(!DestinationSemanticPolicy.acceptsKeyDown(target: 0, foreground: 17, key: 8, nativeTabHeld: true))
         #expect(!DestinationSemanticPolicy.acceptsKeyDown(target: 0, foreground: 17, key: 48, nativeTabHeld: false))
         #expect(DestinationSemanticPolicy.acceptsKeyDown(target: 0, foreground: 17, key: 48, nativeTabHeld: true))
-        #expect(!DestinationSemanticPolicy.acceptsKeyDown(target: 18, foreground: 17, key: 48, nativeTabHeld: true))
+        #expect(DestinationSemanticPolicy.acceptsKeyDown(target: 18, foreground: 17, key: 48, nativeTabHeld: true))
         #expect(DestinationSemanticPolicy.acceptsKeyDown(target: 17, foreground: 17, key: 8, nativeTabHeld: false))
+    }
+    @Test func systemPanelUsesItsOwnRulesOverFinderTerminalOrRemoteWindows() {
+        let panel = ApplicationContext(processID: 18, bundleID: "com.apple.screencaptureui", mode: .macOS)
+        for mode: ApplicationMode in [.macOS, .terminal, .remoteWindows] {
+            let foreground = ApplicationContext(processID: 17, bundleID: "underlying.app", mode: mode)
+            let recipient = DestinationSemanticPolicy.context(target: 18, foreground: foreground, recipients: [18: panel])
+            #expect(recipient == panel)
+            #expect(DestinationSemanticPolicy.acceptsKeyDown(target: 18, foreground: 17, key: 8, nativeTabHeld: false))
+            var processor = KeyboardEventProcessor()
+            processor.configure(context: recipient!, enabled: true, layoutSupported: true, finderEnabled: true)
+            processor.reconcileNeutralHardware()
+            _ = processor.process(.init(.flagsChanged, keyCode: 59, modifiers: .control,
+                modifierSide: .leftControl, modifierDown: true))
+            for key: UInt16 in [8, 9, 7, 0, 6, 16, 1] {
+                guard case .rewrite = processor.process(.init(.down, keyCode: key, modifiers: .control)) else {
+                    Issue.record("A local panel must use native Windows equivalents, never foreground actions"); continue
+                }
+                _ = processor.process(.init(.up, keyCode: key, modifiers: .control))
+            }
+        }
+    }
+    @Test func unrecognizedOrMissingRecipientsCannotBorrowForegroundRules() {
+        let foreground = ApplicationContext(processID: 17, bundleID: "com.apple.finder", mode: .macOS)
+        #expect(DestinationSemanticPolicy.context(target: 17, foreground: foreground, recipients: [:]) == foreground)
+        for target: Int32 in [0, -1] {
+            #expect(DestinationSemanticPolicy.context(target: target, foreground: foreground, recipients: [:]) == nil)
+        }
+        #expect(DestinationSemanticPolicy.context(target: 18, foreground: foreground, recipients: [:])?.clipboardOnly == true)
+        let remote = ApplicationContext(processID: 18, bundleID: "com.microsoft.rdc.macos", mode: .remoteWindows)
+        #expect(DestinationSemanticPolicy.context(target: 18, foreground: foreground, recipients: [18: remote]) == remote)
+    }
+    @Test func firstControlCopyInASystemPanelWorksAfterANeutralProtectedApp() {
+        var processor = KeyboardEventProcessor()
+        processor.configure(context: .init(processID: 17, mode: .remoteWindows), enabled: true, layoutSupported: true)
+        processor.reconcileNeutralHardware()
+        // Annotated modifier delivery selects the panel before processing the
+        // first Control edge. No key was held across the protected boundary.
+        processor.configure(context: .init(processID: 18, bundleID: "com.apple.screencaptureui", mode: .macOS),
+            enabled: true, layoutSupported: true, preservingModifiersOnAppChange: true)
+        _ = processor.process(.init(.flagsChanged, keyCode: 59, modifiers: .control,
+            modifierSide: .leftControl, modifierDown: true))
+        #expect(processor.process(.init(.down, keyCode: 8, modifiers: .control)) ==
+            .rewrite(keyCode: 8, modifiers: .command, ruleID: "windows.copy"))
     }
     @Test func rawTransportSelectsRulesUsingReceivingAppInsteadOfSourceApp() {
         var target = KeyboardEventProcessor()

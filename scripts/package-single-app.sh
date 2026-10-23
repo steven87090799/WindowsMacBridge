@@ -54,5 +54,5 @@ bridge_zip="$bridge_root/build/download/WindowsMacBridge-$bridge_release-app-mac
 /usr/bin/ditto -c -k --noextattr --norsrc --keepParent "$bridge_output/WindowsMacBridge.app" "$bridge_zip"
 printf '%s\n' "$bridge_output/WindowsMacBridge.app" > build/SINGLE_APP_PATH.txt
 printf '%s\n' "$bridge_zip" > build/SINGLE_APP_RELEASE_PATH.txt
-/usr/bin/shasum -a 256 "$bridge_zip" > "$bridge_zip.sha256"
+(cd "$(dirname "$bridge_zip")" && /usr/bin/shasum -a 256 "$(basename "$bridge_zip")") > "$bridge_zip.sha256"
 printf 'Single App: %s\n' "$bridge_zip"

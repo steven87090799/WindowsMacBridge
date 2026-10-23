@@ -336,6 +336,21 @@ private final class DelayedTextRecognizer: ScreenshotTextRecognizing, @unchecked
 @MainActor private final class TextCaptureAuthorizationFixture { var granted = true }
 
 @MainActor struct ScreenshotTextCaptureTests {
+    @Test func disabledProductCannotStartOCRAndRegularScreenshotsStillWork() async throws {
+        let driver = CaptureDriverFixture(), recognizer = TextRecognizerFixture(.success("must not run"))
+        let board = NSPasteboard(name: .init("OCRDisabled-\(UUID().uuidString)")); defer { board.releaseGlobally() }
+        board.setString("keep", forType: .string); let before = board.changeCount
+        let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true },
+            captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: recognizer)
+        defer { manager.stop() }
+        _ = configure(manager)
+        manager.requestTextCapture()
+        #expect(driver.launches == 0 && recognizer.callCount == 0 && !manager.status.isBusy)
+        #expect(board.changeCount == before)
+        manager.requestCapture(.region)
+        try complete(driver); try await waitUntilIdle(manager)
+        #expect(board.data(forType: .init("public.png")) != nil && recognizer.callCount == 0)
+    }
     private func configure(_ manager: ScreenshotManager) -> (RuntimePolicyCoordinator, RuntimePolicyInput) {
         var input = RuntimePolicyInput(); input.backend = .deviceHID
         input.shortcutEnabled = true; input.screenshotEnabled = true
@@ -360,7 +375,7 @@ private final class DelayedTextRecognizer: ScreenshotTextRecognizing, @unchecked
         let driver = CaptureDriverFixture(), recognizer = TextRecognizerFixture(.success("測試文字 123"))
         let board = NSPasteboard(name: .init("OCRTextCapture-\(UUID().uuidString)")); defer { board.releaseGlobally() }
         let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true },
-            captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: recognizer)
+            captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: recognizer, textRecognitionEnabled: true)
         defer { manager.stop() }
         _ = configure(manager)
         manager.requestTextCapture(); manager.requestCapture(.region)
@@ -376,7 +391,7 @@ private final class DelayedTextRecognizer: ScreenshotTextRecognizing, @unchecked
         let driver = CaptureDriverFixture(), recognizer = TextRecognizerFixture(.success("unused"))
         let board = NSPasteboard(name: .init("OCRRegularImage-\(UUID().uuidString)")); defer { board.releaseGlobally() }
         let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true },
-            captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: recognizer)
+            captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: recognizer, textRecognitionEnabled: true)
         defer { manager.stop() }
         _ = configure(manager); manager.requestCapture(.region)
         try complete(driver); try await waitUntilIdle(manager)
@@ -388,7 +403,7 @@ private final class DelayedTextRecognizer: ScreenshotTextRecognizing, @unchecked
             let board = NSPasteboard(name: .init("OCRFailure-\(UUID().uuidString)")); defer { board.releaseGlobally() }
             board.setString("keep", forType: .string); let before = board.changeCount
             let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true },
-                captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: recognizer)
+                captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: recognizer, textRecognitionEnabled: true)
             defer { manager.stop() }
             _ = configure(manager); manager.requestTextCapture()
             try complete(driver); try await waitUntilIdle(manager)
@@ -402,7 +417,7 @@ private final class DelayedTextRecognizer: ScreenshotTextRecognizing, @unchecked
             let board = NSPasteboard(name: .init("OCRLateResult-\(UUID().uuidString)")); defer { board.releaseGlobally() }
             board.setString("original", forType: .string); let before = board.changeCount
             let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { true },
-                captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: gate)
+                captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: gate, textRecognitionEnabled: true)
             defer { manager.stop() }
             var (policy, input) = configure(manager)
             manager.requestTextCapture(); try complete(driver)
@@ -430,7 +445,7 @@ private final class DelayedTextRecognizer: ScreenshotTextRecognizing, @unchecked
         let board = NSPasteboard(name: .init("OCRPermission-\(UUID().uuidString)")); defer { board.releaseGlobally() }
         board.setString("keep", forType: .string); let before = board.changeCount
         let manager = ScreenshotManager(driver: driver, clipboard: board, authorization: { access.granted },
-            captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: gate)
+            captureDirectory: FileManager.default.temporaryDirectory, textRecognizer: gate, textRecognitionEnabled: true)
         defer { manager.stop() }
         _ = configure(manager); manager.requestTextCapture(); try complete(driver)
         for _ in 0..<500 where !gate.started { try await Task.sleep(for: .milliseconds(10)) }
