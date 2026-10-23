@@ -13,16 +13,22 @@ bridge_sdk_version="$(xcrun --sdk macosx --show-sdk-version)"
 # linked-on-or-after system appearance decisions see the current generation.
 bridge_sdk_link=(-Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$bridge_sdk_version")
 swift build --scratch-path "$task_scratch" --sdk "$bridge_sdk_path" -c "$configuration" --product WindowsMacBridge --jobs "${BRIDGE_BUILD_JOBS:-2}" "${bridge_sdk_link[@]}"
-swift build --scratch-path "$task_scratch" --sdk "$bridge_sdk_path" -c "$configuration" --product WindowsMacBridgeTextWorker --jobs "${BRIDGE_BUILD_JOBS:-2}" "${bridge_sdk_link[@]}"
 binary_directory="$(swift build --scratch-path "$task_scratch" -c "$configuration" --show-bin-path)"
+bridge_ocr_feature="$("$binary_directory/WindowsMacBridge" --print-ocr-feature)"
+[[ "$bridge_ocr_feature" == enabled || "$bridge_ocr_feature" == disabled ]] || exit 1
+if [[ "$bridge_ocr_feature" == enabled ]]; then
+    swift build --scratch-path "$task_scratch" --sdk "$bridge_sdk_path" -c "$configuration" --product WindowsMacBridgeTextWorker --jobs "${BRIDGE_BUILD_JOBS:-2}" "${bridge_sdk_link[@]}"
+fi
 mkdir -p "$task_scratch/Artifacts"
 bridge_stage="$(mktemp -d "$task_scratch/Artifacts/.app-stage.XXXXXX")"
 trap 'rm -rf "$bridge_stage"' EXIT
 app_directory="$bridge_stage/WindowsMacBridge.app"
 mkdir -p "$app_directory/Contents/MacOS" "$app_directory/Contents/Resources"
-mkdir -p "$app_directory/Contents/Helpers"
 cp "$binary_directory/WindowsMacBridge" "$app_directory/Contents/MacOS/WindowsMacBridge"
-cp "$binary_directory/WindowsMacBridgeTextWorker" "$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker"
+if [[ "$bridge_ocr_feature" == enabled ]]; then
+    mkdir -p "$app_directory/Contents/Helpers"
+    cp "$binary_directory/WindowsMacBridgeTextWorker" "$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker"
+fi
 cp "$task_root/Resources/Info.plist" "$app_directory/Contents/Info.plist"
 source "$task_root/scripts/source-version.sh"
 bridge_build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -59,23 +65,32 @@ swiftc "$bridge_optimization" -emit-executable -parse-as-library -module-name Wi
     "$task_root/Sources/BridgeCore/FinderModeSignal.swift" \
     "$task_root/Extensions/FinderSync/FinderSync.swift" \
     -o "$extension_directory/Contents/MacOS/WindowsMacBridgeFinderSync"
-python3 "$task_root/scripts/verify-build-sdk.py" "$bridge_sdk_version" \
-    "$app_directory/Contents/MacOS/WindowsMacBridge" \
-    "$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker" \
-    "$extension_directory/Contents/MacOS/WindowsMacBridgeFinderSync"
+bridge_sdk_binaries=("$app_directory/Contents/MacOS/WindowsMacBridge" "$extension_directory/Contents/MacOS/WindowsMacBridgeFinderSync")
+if [[ "$bridge_ocr_feature" == enabled ]]; then bridge_sdk_binaries+=("$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker"); fi
+python3 "$task_root/scripts/verify-build-sdk.py" "$bridge_sdk_version" "${bridge_sdk_binaries[@]}"
 # File providers can attach FinderInfo to generated bundles; codesign rejects it.
 # Only generated app metadata is affected, never source files or user documents.
 /usr/bin/xattr -dr com.apple.FinderInfo "$app_directory" 2>/dev/null || true
 /usr/bin/xattr -dr com.apple.ResourceFork "$app_directory" 2>/dev/null || true
-/usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --options runtime \
-    "$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker"
+if [[ "$bridge_ocr_feature" == enabled ]]; then
+    /usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --options runtime "$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker"
+fi
 /usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --options runtime \
     --entitlements "$task_root/Extensions/FinderSync/Entitlements.plist" "$extension_directory"
 /usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --options runtime \
     --entitlements "$task_root/Resources/AppEntitlements.plist" "$app_directory"
 /usr/bin/codesign --verify --strict "$app_directory"
-"$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker" --self-check
+if [[ "$bridge_ocr_feature" == enabled ]]; then "$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker" --self-check; fi
 "$app_directory/Contents/MacOS/WindowsMacBridge" --self-check
+"$app_directory/Contents/MacOS/WindowsMacBridge" --resource-self-check > "$bridge_stage/resource-check.json"
+python3 - "$bridge_stage/resource-check.json" <<'PY'
+import json, sys
+with open(sys.argv[1]) as source:
+    report = json.load(source)
+if report.get('loaded_ocr_frameworks') != []:
+    raise SystemExit('GUI must not load OCR frameworks; App packaging stopped.')
+print('GUI OCR frameworks: none')
+PY
 bridge_final="$task_scratch/Artifacts/WindowsMacBridge.app"
 bridge_previous="$task_scratch/Artifacts/.WindowsMacBridge-previous-$$.app"
 if [[ -e "$bridge_final" ]]; then mv "$bridge_final" "$bridge_previous"; fi

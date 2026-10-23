@@ -212,9 +212,11 @@ struct SettingsView: View {
                     Button("實機驗收步驟") { controller.openAcceptanceGuide() }
                 }
             }
-            ScreenshotTextCaptureSection(status: controller.screenshotStatus, canCapture: controller.canCaptureScreenshotText,
-                featuresEnabled: controller.settings.enabled && controller.settings.screenshotAutoCopy,
-                onCapture: controller.captureScreenshotText, onCancel: controller.cancelScreenshot)
+            if ProductFeatures.screenshotTextRecognition {
+                ScreenshotTextCaptureSection(status: controller.screenshotStatus, canCapture: controller.canCaptureScreenshotText,
+                    featuresEnabled: controller.settings.enabled && controller.settings.screenshotAutoCopy,
+                    onCapture: controller.captureScreenshotText, onCancel: controller.cancelScreenshot)
+            }
             Section {
                 DisclosureGroup("進階選項") {
                     Toggle("解鎖進階後端模式（實驗性）", isOn: Binding(get: { controller.settings.isAdvancedModeEnabled }, set: { controller.setAdvancedModeEnabled($0) }))

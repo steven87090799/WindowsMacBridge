@@ -2,7 +2,7 @@ import AppKit
 import BridgePlatform
 
 /// No window, model, observer or repeating timer exists before an image arrives.
-/// One small thumbnail and at most one user-requested native Quick Look window.
+/// One small thumbnail and at most one user-requested native image window.
 @MainActor final class ScreenshotThumbnailPresenter: NSObject {
     private var panel: NSPanel?
     private var preview: ScreenshotPreview?
@@ -73,7 +73,7 @@ import BridgePlatform
         guard let value = preview, let image = NSImage(data: value.thumbnailPNG) else { return }
         let screen = panel?.screen ?? NSScreen.main
         let frame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
-        let opened = ScreenshotPreviewWindow(sourceURL: value.sourceURL, imageSize: image.size, visibleFrame: frame)
+        let opened = ScreenshotPreviewWindow(sourceURL: value.sourceURL, imageSize: image.size, visibleFrame: frame, thumbnail: image)
         opened.onClose = { [weak self] in self?.viewer = nil; self?.dismiss() }
         viewer = opened
         expiration?.cancel(); expiration = nil
@@ -103,7 +103,7 @@ import BridgePlatform
         imageButton.wantsLayer = true
         imageButton.layer?.cornerRadius = 12; imageButton.layer?.masksToBounds = true
         imageButton.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.08).cgColor
-        imageButton.setAccessibilityLabel("開啟截圖快速查看")
+        imageButton.setAccessibilityLabel("開啟截圖預覽")
         imageButton.toolTip = "點擊放大查看截圖"; content.addSubview(imageButton)
 
         let symbol = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil) ?? NSImage()

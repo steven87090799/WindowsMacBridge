@@ -220,6 +220,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     private let prepareThumbnail: @Sendable (Data) -> Data?
     private var textJobToken: ScreenshotCaptureLifecycle.Token?
     private let textRecognizer: any ScreenshotTextRecognizing
+    private let textRecognitionEnabled: Bool
     private let prepareImage: @Sendable (URL) -> Result<ScreenshotImagePayload, ScreenshotFailure>
     private let captureTimeout: TimeInterval
     private var pendingNativeURL: URL?
@@ -233,6 +234,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
                 prepareImage: @escaping @Sendable (URL) -> Result<ScreenshotImagePayload, ScreenshotFailure> = ScreenshotImagePreparation.prepareResult,
                 captureTimeout: TimeInterval = 120, captureDirectory: URL? = nil,
                 textRecognizer: any ScreenshotTextRecognizing = IsolatedScreenshotTextRecognizer(),
+                textRecognitionEnabled: Bool = ProductFeatures.screenshotTextRecognition,
                 prepareThumbnail: @escaping @Sendable (Data) -> Data? = ScreenshotPreviewPreparation.thumbnail) {
         // Initialize the shared marker outside the native event callback.
         _ = EventRewriter.generatedEventMarker
@@ -245,6 +247,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
         self.prepareImage = prepareImage
         self.prepareThumbnail = prepareThumbnail
         self.textRecognizer = textRecognizer
+        self.textRecognitionEnabled = textRecognitionEnabled
         self.captureTimeout = captureTimeout.isFinite && captureTimeout > 0 ? min(120, captureTimeout) : 120
         self.authorization = authorization ?? { !IsSecureEventInputEnabled() && CGPreflightScreenCaptureAccess() }
         logURL = fileManager.homeDirectoryForCurrentUser
@@ -348,7 +351,7 @@ public struct ScreenshotStatus: Equatable, Sendable {
     }
 
     public func requestTextCapture() {
-        guard enabled, captureAllowed, let token = capture.begin() else { return }
+        guard textRecognitionEnabled, enabled, captureAllowed, let token = capture.begin() else { return }
         sourceJob = nil; nativeFileJob = false; textJobToken = token
         beginCapture(token, kind: .region)
     }

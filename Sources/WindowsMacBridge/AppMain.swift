@@ -156,9 +156,13 @@ import InputSourceCore
         action("直到 App 重啟", #selector(pauseUntilRestart), in: submenu)
         pause.submenu = submenu; menu.addItem(pause)
         menu.addItem(.separator())
-        let textCapture = action("截圖文字擷取…", #selector(captureScreenshotText), in: menu, symbol: "text.viewfinder")
-        textCapture.isEnabled = controller.canCaptureScreenshotText
-        if controller.screenshotStatus.isBusy { action("取消截圖／文字辨識", #selector(cancelScreenshot), in: menu) }
+        if ProductFeatures.screenshotTextRecognition {
+            let textCapture = action("截圖文字擷取…", #selector(captureScreenshotText), in: menu, symbol: "text.viewfinder")
+            textCapture.isEnabled = controller.canCaptureScreenshotText
+        }
+        if controller.screenshotStatus.isBusy {
+            action(ProductFeatures.screenshotTextRecognition ? "取消截圖／文字辨識" : "取消截圖", #selector(cancelScreenshot), in: menu)
+        }
         label("輸入法：\(controller.sourceStatus.summary)", in: menu)
         let guardItem = action("啟用唯音輸入法守護", #selector(toggleGuard), in: menu)
         guardItem.state = controller.sourceStatus.enabled ? .on : .off
@@ -224,6 +228,10 @@ import InputSourceCore
     @MainActor static func main() {
         if HIDRuntimeCommand.handle(Array(CommandLine.arguments.dropFirst())) { return }
         guard geteuid() != 0 else { exit(77) }
+        if CommandLine.arguments.dropFirst().first == "--print-ocr-feature" {
+            print(ProductFeatures.screenshotTextRecognition ? "enabled" : "disabled")
+            return
+        }
         // Older private diagnostic commands must never accidentally start the GUI.
         if CommandLine.arguments.dropFirst().first == ScreenshotTextBudget.workerArgument { exit(64) }
         if FeatureResourceCheck.handle(Array(CommandLine.arguments.dropFirst())) { return }
@@ -234,9 +242,15 @@ import InputSourceCore
             do {
                 let registry = try ApplicationRegistry()
                 if Bundle.main.bundleURL.pathExtension == "app" {
-                    guard let worker = IsolatedScreenshotTextRecognizer.bundledExecutable(),
-                          FileManager.default.isExecutableFile(atPath: worker.path) else {
-                        print("WindowsMacBridge self-check failed: OCR helper missing.")
+                    if ProductFeatures.screenshotTextRecognition {
+                        guard let worker = IsolatedScreenshotTextRecognizer.bundledExecutable(),
+                              FileManager.default.isExecutableFile(atPath: worker.path) else {
+                            print("WindowsMacBridge self-check failed: OCR helper missing.")
+                            exit(1)
+                        }
+                    } else if let worker = IsolatedScreenshotTextRecognizer.bundledExecutable(),
+                              FileManager.default.fileExists(atPath: worker.path) {
+                        print("WindowsMacBridge self-check failed: disabled OCR helper must not be packaged.")
                         exit(1)
                     }
                     let extensionURL = Bundle.main.bundleURL.appendingPathComponent("Contents/PlugIns/WindowsMacBridgeFinderSync.appex")

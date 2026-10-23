@@ -37,7 +37,7 @@ struct PerformanceReadout: View {
             Section("WindowsMacBridge 主程式") {
                 LabeledContent("CPU 使用率", value: percent(snapshot?.processCPUPercent))
                 LabeledContent("記憶體占用", value: bytes(snapshot?.processFootprint))
-                Text("CPU 以一個核心為 100%，多核心工作時可超過 100%。記憶體採 physical footprint；不含獨立的 Finder 延伸功能與文字辨識輔助程式。")
+                Text("CPU 以一個核心為 100%，多核心工作時可超過 100%。記憶體採 physical footprint；不含獨立的 Finder 延伸功能。")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Section {

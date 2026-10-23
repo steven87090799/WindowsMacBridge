@@ -850,8 +850,11 @@ import IOKit.hid
             NSWorkspace.shared.open(url)
         }
     }
-    var canCaptureScreenshotText: Bool { policy.current?.permitsScreenshots == true && !screenshotStatus.isBusy }
-    func captureScreenshotText() { screenshot.requestTextCapture() }
+    var canCaptureScreenshotText: Bool { ProductFeatures.screenshotTextRecognition && policy.current?.permitsScreenshots == true && !screenshotStatus.isBusy }
+    func captureScreenshotText() {
+        guard canCaptureScreenshotText else { return }
+        screenshot.requestTextCapture()
+    }
     func cancelScreenshot() { screenshot.cancelCapture() }
     func requestScreenRecording() {
         if !CGPreflightScreenCaptureAccess() { _ = CGRequestScreenCaptureAccess() }

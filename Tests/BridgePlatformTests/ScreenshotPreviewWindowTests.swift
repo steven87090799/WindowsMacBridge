@@ -3,7 +3,7 @@ import Testing
 @testable import BridgePlatform
 
 @MainActor struct ScreenshotPreviewWindowTests {
-    @Test func controlAndCommandCopyTheFullImageAndCloseReleasesQuickLook() async throws {
+    @Test func controlAndCommandCopyTheFullImageAndCloseReleasesPreview() async throws {
         _ = NSApplication.shared
         let pixels = try #require(CGContext(data: nil, width: 32, height: 24, bitsPerComponent: 8,
             bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
