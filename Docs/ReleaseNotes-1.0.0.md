@@ -1,4 +1,4 @@
-# WindowsMacBridge v0.6.0（build 63）
+# WindowsMacBridge v1.0.0（build 63）
 
 這是本次選定的正式發佈版本，適用 Apple Silicon（M 系列）Mac、macOS 14 以上。提供包含完整 App 的 ZIP 與可拖放安裝的 DMG，兩者均由 GitHub Actions 從發佈提交建置。
 
@@ -15,10 +15,10 @@
 
 ## 下載與在另一台 Mac 安裝
 
-建議下載 **WindowsMacBridge-0.6.0-macos-arm64.dmg**。也可下載 **WindowsMacBridge-0.6.0-app-macos-arm64.zip**，解壓後取得同一個完整 App。`WindowsMacBridge-build-info.json` 記錄建置提交、build、簽章方式與 SHA256；下載旁邊的 `.sha256` 檔可核對封裝內容。
+建議下載 **WindowsMacBridge-1.0.0-macos-arm64.dmg**。也可下載 **WindowsMacBridge-1.0.0-app-macos-arm64.zip**，解壓後取得同一個完整 App。`WindowsMacBridge-build-info.json` 記錄建置提交、build、簽章方式與 SHA256；下載旁邊的 `.sha256` 檔可核對封裝內容。
 
 1. 從選單列正常結束舊版，等待鍵盤交換還原，再將完整 `WindowsMacBridge.app` 放到「應用程式」並取代舊版。既有偏好設定保留。
-2. 從「應用程式」開啟，確認版本 **0.6.0（63）**。新電腦先使用預設一般模式。
+2. 從「應用程式」開啟，確認版本 **1.0.0（63）**。新電腦先使用預設一般模式。
 3. 在該台 Mac 分別核准輔助功能與輸入監控，回 App 確認；需要截圖再核准螢幕錄製。重新簽章後 macOS 可能要求再次核准或重新開啟。
 4. MacBook 如需交換 Fn／左 Ctrl，在一般設定明確開啟。另一台電腦的權限、Karabiner 個人設定及鍵盤還原 journal 不會包含在 App 中，請勿複製舊機的還原紀錄。
 5. 通用控制由 macOS 設定連線，兩台 Mac 均使用此版本並各自完成權限設定。用文字編輯測 C／X／V／A，兩個方向分別測 Ctrl+C／V；MacBook 另測原左 Ctrl→Fn 及關閉交換後的還原。

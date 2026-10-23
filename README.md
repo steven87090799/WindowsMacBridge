@@ -1,12 +1,12 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。正式版本 **0.6.0（build 63）**，修正通用控制的重複 Ctrl、雙側修飾鍵與遠端來源處理，並改善診斷記憶體及鍵盤事件耗時。Ctrl+C／X／V／A 共用本機剪貼簿規則，涵蓋系統浮動視窗、Terminal、輸入法與本機 App Profile；截圖縮圖點擊後直接置中並啟用 App 內的圖片預覽視窗。設定側邊欄保留清晰文字與原生液態玻璃切換動畫；包含規則預覽與遠端校準介面（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。
+Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。正式版本 **1.0.0（build 63）**，修正通用控制的重複 Ctrl、雙側修飾鍵與遠端來源處理，並改善診斷記憶體及鍵盤事件耗時。Ctrl+C／X／V／A 共用本機剪貼簿規則，涵蓋系統浮動視窗、Terminal、輸入法與本機 App Profile；截圖縮圖點擊後直接置中並啟用 App 內的圖片預覽視窗。設定側邊欄保留清晰文字與原生液態玻璃切換動畫；包含規則預覽與遠端校準介面（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。
 
-## v0.6.0 正式版（build 63）
+## v1.0.0 正式版（build 63）
 
 - [本次問題、根因、修改位置、事件證據與後續注意事項](Docs/Build62-FnControl-UniversalControl-Handoff.md)
 - [完整實機診斷紀錄](Docs/FnControlDiagnosis-2026-10-23.md)／[修復前後事件節錄](Docs/UCControlEventEvidence-2026-10-23.txt)
-- [正式版更新與換機安裝說明](Docs/ReleaseNotes-0.6.0.md)／[下載 v0.6.0 完整 ZIP 或 DMG](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v0.6.0)
+- [正式版更新與換機安裝說明](Docs/ReleaseNotes-1.0.0.md)／[下載 v1.0.0 完整 ZIP 或 DMG](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.0)
 - [build 63 的修正、資源量測與驗證範圍](Docs/Build62-Review-2026-10-23.md)
 
 535 項自動測試通過。build 62 的前次操作中，使用者已在本次 MacBook 實測內建 Fn+C／X／V／A、左 Ctrl→Fn，以及另一台 Mac 外接鍵盤經通用控制送入的 Ctrl+C／V。其他硬體、舊系統與進階 HID 安裝仍需各自驗收；一般模式不需要另裝 Driver。
