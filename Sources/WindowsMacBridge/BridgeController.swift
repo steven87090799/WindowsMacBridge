@@ -25,6 +25,8 @@ import IOKit.hid
     @Published var pausedUntilRestart = false
     @Published var diagnosticsEnabled = false
     @Published var configurationError: String?
+    @Published var recoveryProtectionArmed = false
+    @Published var recoveryProtectionIssue: String?
     @Published var presetNotice: String?
     var bundledInstallerAvailable: Bool { BundledBackendInstaller.available }
     var backgroundInstallationNeeded: Bool { settings.usesHID && BundledBackendInstaller.needsInstallation }

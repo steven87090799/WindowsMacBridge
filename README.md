@@ -1,13 +1,13 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。正式版本 **1.0.2（build 65）**，修正系統應用程式清單包含重複無效 PID 時，背景程式會當機退出的問題。Ctrl+C／X／V／A 共用本機剪貼簿規則，涵蓋系統浮動視窗、Terminal、輸入法與本機 App Profile；截圖縮圖點擊後直接置中並啟用 App 內的圖片預覽視窗。設定側邊欄保留清晰文字與原生液態玻璃切換動畫；包含規則預覽與遠端校準介面（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。
+Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。正式版本 **1.0.2（build 66）**，修正系統應用程式清單包含重複無效 PID 時，背景程式會當機退出的問題。Ctrl+C／X／V／A 共用本機剪貼簿規則，涵蓋系統浮動視窗、Terminal、輸入法與本機 App Profile；截圖縮圖點擊後直接置中並啟用 App 內的圖片預覽視窗。設定側邊欄保留清晰文字與原生液態玻璃切換動畫；包含規則預覽與遠端校準介面（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。
 
-## v1.0.2 正式版（build 65）
+## v1.0.2 正式版（build 66）
 
 - [背景當機的證據、原因與修正](Docs/BackgroundCrash-2026-10-24.md)
 - [更新與跨機安裝說明](Docs/ReleaseNotes-1.0.2.md)／[下載 v1.0.2](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.2)
 
-本機 Debug／Release 各 546 項 Swift 測試通過，含 8 項此次新增的當機回歸。
+修正重複無效 PID 當機，並加入異常停止後的自動恢復與提示；正常結束不重開，連續失敗有次數限制。恢復程序採事件等待，沒有固定心跳輪詢。
 
 ## v1.0.1 正式版（build 64）
 

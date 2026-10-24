@@ -1,8 +1,10 @@
-# WindowsMacBridge 1.0.2（build 65）
+# WindowsMacBridge 1.0.2（build 66）
 
 修正 WindowsMacBridge 可能在背景突然退出、必須手動重開的問題。1.0.1 在重新整理應用程式清單時，若系統回傳多筆沒有程序編號的項目（PID -1），會因字典 key 重複而整個當機。1.0.2 略過無效與已結束項目，安全更新重複的有效 PID，並保留快捷鍵接收端的正確身分。詳見[當機證據、原因與修正](BackgroundCrash-2026-10-24.md)。
 
 這版保留 1.0.1 的 Apple 螢幕共享／VNC、通用控制與 MacBook Fn／左 Ctrl 功能；登入時啟動仍沿用使用者自己的選擇。
+
+也加入異常停止後的自動恢復與提示：意外停止時重新開啟，成功後顯示恢復訊息；主動按「結束」會正常關閉。本輪五分鐘內最多恢復三次，連續失敗或無法確認啟動時停止嘗試並通知使用者。一般設定顯示保護狀態，恢復程序本身停止也會告知。平常以事件等待，不增加心跳輪詢。
 
 ## 下載與更新
 
@@ -14,6 +16,6 @@
 
 ## 驗證範圍
 
-本機 Debug／Release 各 **546 項 Swift 測試通過**，包含新增的 8 項當機與生命週期回歸測試，以及隔離執行的記憶體回歸。發行附件 `WindowsMacBridge-build-info.json` 記錄實際建置版本、來源 commit、封裝驗證與檔案雜湊；GitHub CI 狀態以對應提交的 Actions 結果為準。
+本機 Debug／Release 各 **551 項 Swift 測試通過**，含 8 項應用程式清單回歸與 5 項恢復交接驗證。另有 **13 項恢復程序測試通過**，涵蓋正常結束、異常停止、重開確認、次數限制、啟動卡住與失敗提示。發行檔驗證記錄在附件 `WindowsMacBridge-build-info.json`；GitHub CI 狀態以對應提交的 Actions 結果為準。
 
 這次未重新進行兩台 Mac 的實體鍵盤或進階 Driver 安裝驗收；1.0.1 的既有觀察保留於 [TwoMacAcceptance.md](../Resources/TwoMacAcceptance.md)，不能當成本版所有硬體已重新驗收。

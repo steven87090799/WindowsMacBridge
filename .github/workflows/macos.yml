@@ -105,6 +105,8 @@ jobs:
         run: python3 -m unittest discover -s Tests/InstallerTests -v
       - name: Resource measurement regressions
         run: python3 -m unittest discover -s Tests/MonitoringTests -v
+      - name: Crash recovery, normal quit and restart limit regressions
+        run: python3 -m unittest discover -s Tests/RecoveryTests -v
       - name: Build and verify development app
         run: bash scripts/build-app.sh
       - name: Render generated feature layouts without input services
