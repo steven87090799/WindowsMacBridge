@@ -25,6 +25,8 @@ import IOKit.hid
     @Published var pausedUntilRestart = false
     @Published var diagnosticsEnabled = false
     @Published var configurationError: String?
+    @Published var recoveryProtectionArmed = false
+    @Published var recoveryProtectionIssue: String?
     @Published var presetNotice: String?
     var bundledInstallerAvailable: Bool { BundledBackendInstaller.available }
     var backgroundInstallationNeeded: Bool { settings.usesHID && BundledBackendInstaller.needsInstallation }
@@ -321,9 +323,11 @@ import IOKit.hid
         engine.maintain()
         remoteRegistry.maintain(engine.producerInbox.take())
         for pid in engine.recipientInbox.take() {
-            if let app = NSRunningApplication(processIdentifier: pid) {
-                let value = applicationContext(app)
+            if let app = NSRunningApplication(processIdentifier: pid),
+               let value = applicationContext(app), value.processID == pid {
                 if recipientContexts[pid] != value { recipientContexts[pid] = value }
+            } else {
+                recipientContexts.removeValue(forKey: pid)
             }
         }
         screenshot.applyInputRouting(remoteRegistry.snapshot)
@@ -377,20 +381,14 @@ import IOKit.hid
     }
     private func currentApplicationContext() -> ApplicationContext {
         guard let app = NSWorkspace.shared.frontmostApplication else { return ApplicationContext() }
-        return applicationContext(app)
+        return applicationContext(app) ?? ApplicationContext()
     }
-    private func applicationContext(_ app: NSRunningApplication) -> ApplicationContext {
-        let bundle = app.bundleIdentifier ?? ""
-        let path = app.executableURL?.path ?? ""
-        let mode = registry?.mode(for: bundle, executablePath: path, overrides: settings.overrides) ?? .disabled
-        return ApplicationContext(processID: app.processIdentifier, bundleID: bundle,
-                                  displayName: app.localizedName ?? "Unknown", mode: mode,
-                                  executablePath: path, isBrowser: registry?.isBrowser(bundle) ?? false)
+    private func applicationContext(_ app: NSRunningApplication) -> ApplicationContext? {
+        RunningApplicationSnapshot.context(for: app, registry: registry, overrides: settings.overrides)
     }
     private func refreshRecipientContexts() {
-        recipientContexts = Dictionary(uniqueKeysWithValues: NSWorkspace.shared.runningApplications.map {
-            ($0.processIdentifier, applicationContext($0))
-        })
+        recipientContexts = RunningApplicationSnapshot.contexts(for: NSWorkspace.shared.runningApplications,
+                                                               registry: registry, overrides: settings.overrides)
         recipientOverrides = settings.overrides
     }
     private func refreshApplication() {

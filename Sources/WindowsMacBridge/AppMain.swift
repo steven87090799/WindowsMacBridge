@@ -9,6 +9,7 @@ import InputSourceSupport
 import InputSourceCore
 
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
+    var recovery: AppRecoverySupervisor?
     private var controller: BridgeController!
     private var item: NSStatusItem!
     private var settingsWindow: NSWindow?
@@ -20,6 +21,15 @@ import InputSourceCore
         NSApp.setActivationPolicy(.accessory)
         installMainMenu()
         controller = BridgeController()
+        if let recovery {
+            controller.recoveryProtectionArmed = recovery.isArmed
+            controller.recoveryProtectionIssue = recovery.startupIssue
+            recovery.onStatusChange = { [weak self, weak recovery] in
+                guard let self, let recovery else { return }
+                self.controller.recoveryProtectionArmed = recovery.isArmed
+                self.controller.recoveryProtectionIssue = recovery.startupIssue
+            }
+        }
         if controller.bundledInstallerAvailable && Bundle.main.bundleURL.standardizedFileURL.path != "/Applications/WindowsMacBridge.app" {
             let alert = NSAlert()
             alert.messageText = "請先將 App 拖進「應用程式」"
@@ -39,6 +49,9 @@ import InputSourceCore
             updateStatusItem()
         }
         controller.start()
+        if let recovery {
+            DispatchQueue.main.async { recovery.showStartupNotice() }
+        }
         if !controller.permissions.keyboardControlGranted || !controller.permissions.listening ||
             !controller.settings.enabled || controller.backgroundInstallationNeeded || controller.preparedSetupThisLaunch ||
             CommandLine.arguments.contains("--permission-relaunch") { showSettings() }
@@ -84,6 +97,7 @@ import InputSourceCore
         return .terminateLater
     }
     func applicationWillTerminate(_ notification: Notification) {
+        recovery?.disarm()
         terminationTask?.cancel(); terminationTask = nil
         controller?.stop()
     }
@@ -242,6 +256,11 @@ import InputSourceCore
             do {
                 let registry = try ApplicationRegistry()
                 if Bundle.main.bundleURL.pathExtension == "app" {
+                    let recoveryHelper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/WindowsMacBridgeRecovery")
+                    guard FileManager.default.isExecutableFile(atPath: recoveryHelper.path) else {
+                        print("WindowsMacBridge self-check failed: recovery helper missing.")
+                        exit(1)
+                    }
                     if ProductFeatures.screenshotTextRecognition {
                         guard let worker = IsolatedScreenshotTextRecognizer.bundledExecutable(),
                               FileManager.default.isExecutableFile(atPath: worker.path) else {
@@ -297,8 +316,11 @@ import InputSourceCore
             return
         }
         guard InputSourceCoordinator.acquireSingleInstance() else { return }
+        let recovery = AppRecoverySupervisor()
+        recovery.start()
         let application = NSApplication.shared
         let delegate = AppDelegate()
+        delegate.recovery = recovery
         application.delegate = delegate
         withExtendedLifetime(delegate) { application.run() }
     }

@@ -25,6 +25,11 @@ trap 'rm -rf "$bridge_stage"' EXIT
 app_directory="$bridge_stage/WindowsMacBridge.app"
 mkdir -p "$app_directory/Contents/MacOS" "$app_directory/Contents/Resources"
 cp "$binary_directory/WindowsMacBridge" "$app_directory/Contents/MacOS/WindowsMacBridge"
+mkdir -p "$app_directory/Contents/Helpers"
+clang -target arm64-apple-macos14.0 -isysroot "$bridge_sdk_path" "${bridge_sdk_link[@]}" \
+    -std=c11 -O2 -Wall -Wextra -Werror -framework CoreFoundation \
+    "$task_root/Tools/RecoveryHelper/RecoveryHelper.c" \
+    -o "$app_directory/Contents/Helpers/WindowsMacBridgeRecovery"
 if [[ "$bridge_ocr_feature" == enabled ]]; then
     mkdir -p "$app_directory/Contents/Helpers"
     cp "$binary_directory/WindowsMacBridgeTextWorker" "$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker"
@@ -66,12 +71,14 @@ swiftc "$bridge_optimization" -emit-executable -parse-as-library -module-name Wi
     "$task_root/Extensions/FinderSync/FinderSync.swift" \
     -o "$extension_directory/Contents/MacOS/WindowsMacBridgeFinderSync"
 bridge_sdk_binaries=("$app_directory/Contents/MacOS/WindowsMacBridge" "$extension_directory/Contents/MacOS/WindowsMacBridgeFinderSync")
+bridge_sdk_binaries+=("$app_directory/Contents/Helpers/WindowsMacBridgeRecovery")
 if [[ "$bridge_ocr_feature" == enabled ]]; then bridge_sdk_binaries+=("$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker"); fi
 python3 "$task_root/scripts/verify-build-sdk.py" "$bridge_sdk_version" "${bridge_sdk_binaries[@]}"
 # File providers can attach FinderInfo to generated bundles; codesign rejects it.
 # Only generated app metadata is affected, never source files or user documents.
 /usr/bin/xattr -dr com.apple.FinderInfo "$app_directory" 2>/dev/null || true
 /usr/bin/xattr -dr com.apple.ResourceFork "$app_directory" 2>/dev/null || true
+/usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --options runtime "$app_directory/Contents/Helpers/WindowsMacBridgeRecovery"
 if [[ "$bridge_ocr_feature" == enabled ]]; then
     /usr/bin/codesign --force --sign "${CODE_SIGN_IDENTITY:--}" --options runtime "$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker"
 fi
@@ -81,6 +88,7 @@ fi
     --entitlements "$task_root/Resources/AppEntitlements.plist" "$app_directory"
 /usr/bin/codesign --verify --strict "$app_directory"
 if [[ "$bridge_ocr_feature" == enabled ]]; then "$app_directory/Contents/Helpers/WindowsMacBridgeTextWorker" --self-check; fi
+"$app_directory/Contents/Helpers/WindowsMacBridgeRecovery" --self-check
 "$app_directory/Contents/MacOS/WindowsMacBridge" --self-check
 "$app_directory/Contents/MacOS/WindowsMacBridge" --resource-self-check > "$bridge_stage/resource-check.json"
 python3 - "$bridge_stage/resource-check.json" <<'PY'

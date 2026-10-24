@@ -209,6 +209,10 @@ struct SettingsView: View {
                 .disabled(!controller.settings.enabled)
                 Toggle("開機自動啟動", isOn: Binding(get: { controller.permissions.loginItem }, set: { controller.setLoginEnabled($0) }))
                 if let issue = controller.sourceStatus.loginIssue { Text(issue).foregroundStyle(.orange) }
+                Label(controller.recoveryProtectionArmed ? "異常停止後自動恢復：已啟用" : "異常停止後自動恢復：未就緒",
+                      systemImage: controller.recoveryProtectionArmed ? "checkmark.shield" : "exclamationmark.shield")
+                explanation("意外停止時重新開啟並提示；五分鐘內最多恢復三次。主動按「結束」會正常關閉，不會重新開啟。")
+                if let issue = controller.recoveryProtectionIssue { Text(issue).font(.caption).foregroundStyle(.orange) }
                 HStack {
                     Button("輔助功能授權") { controller.settingsPage = .permissions }
                     Button("使用說明") { controller.openUserGuide() }
