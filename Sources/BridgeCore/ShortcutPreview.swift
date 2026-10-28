@@ -22,7 +22,7 @@ public struct ShortcutPreviewConfiguration: Equatable, Sendable {
     public var finderPermanentDeleteEnabled = true
     public var textNavigationEnabled = true
     public var altF4Enabled = true
-    public var windowsKeyModifier: WindowsKeyModifier = .command
+    public var windowsKeyModifier: WindowsKeyModifier = .option
     public var winRunEnabled = false, winSettingsEnabled = false, winTaskViewEnabled = false
     public var screenshotEnabled = true
     public var printScreen: PrintScreenBehavior = .snipping

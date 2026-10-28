@@ -76,7 +76,7 @@ public struct RemoteSourceRouter: Sendable {
                             layoutSupported: config.layoutSupported, controlsEnabled: false,
                             finderEnabled: config.finderEnabled, finderPermanentDeleteEnabled: config.finderPermanentDeleteEnabled,
                             textNavigationEnabled: config.textNavigationEnabled, altF4Enabled: config.altF4Enabled,
-                            windowsKeyModifier: .command, winRunEnabled: config.winRunEnabled,
+                            windowsKeyModifier: .option, winRunEnabled: config.winRunEnabled,
                             winSettingsEnabled: config.winSettingsEnabled, winTaskViewEnabled: config.winTaskViewEnabled,
                             nativeAppSwitchEnabled: true, screenshotEnabled: config.screenshotEnabled, printScreen: config.printScreen,
                             preservingModifiersOnAppChange: preservingModifiers)
@@ -134,8 +134,8 @@ public struct RemoteSourceRouter: Sendable {
         case .macOS, .alreadyTranslated:
             event.allowsTranslation = ClipboardShortcutPolicy.isClipboardInput(key: event.keyCode, modifiers: event.modifiers)
         case .automatic:
-            // Raw Control is strong evidence. Command chords and ambiguous Option navigation
-            // are already valid Mac input, so automatic mode never converts them again.
+            // Raw Control and supported Option/Win chords may use Windows rules.
+            // Already-Command shortcuts and Option text navigation remain native.
             // Apple's signed Screen Sharing host is a known incoming producer on the
             // receiving Mac. Give its raw Control chords the same Windows rules as
             // Google's host without requiring a per-Mac calibration setting.
@@ -143,7 +143,10 @@ public struct RemoteSourceRouter: Sendable {
                 producer.confidence == .known &&
                 (producer.transport == .googleRemoteDesktop || producer.transport == .vnc) &&
                 (!event.modifiers.contains(.command) && (event.modifiers.contains(.control) || event.modifiers.subtracting(.shift).isEmpty ||
-                 (event.modifiers.subtracting(.shift) == .option && (event.keyCode == 48 || event.keyCode == 118 || event.keyCode == 105))))
+                 RuleEngine.system.match(keyCode: event.keyCode, modifiers: event.modifiers) != nil ||
+                 RuleEngine.systemExtras.match(keyCode: event.keyCode, modifiers: event.modifiers) != nil ||
+                 WindowsScreenshotShortcuts.match(key: event.keyCode, modifiers: event.modifiers,
+                    windowsKey: .option, printScreen: configuration.printScreen) != nil))
         }
         var decision = slots[index]!.processor.process(event)
         processedCount &+= 1
@@ -154,19 +157,19 @@ public struct RemoteSourceRouter: Sendable {
         if case .rewrite(_, _, "windows.nativeAppSwitch") = decision, event.phase == .down {
             if !slots[index]!.appSwitchHeld {
                 let state = slots[index]!.processor.modifiers
-                slots[index]!.appSwitchKey = state.isDown(.rightOption) && !state.isDown(.leftOption) ? 54 : 55
+                slots[index]!.appSwitchKey = state.isDown(.rightCommand) && !state.isDown(.leftCommand) ? 54 : 55
             }
             slots[index]!.appSwitchHeld = true
         }
         if slots[index]!.appSwitchHeld {
-            let flags = event.modifiers.subtracting(.option).union(event.modifiers.contains(.option) ? .command : [])
+            let flags = event.modifiers
             if event.phase == .flagsChanged {
-                let key = event.modifierSide == .rightOption || event.modifierSide == .leftOption ? slots[index]!.appSwitchKey : event.keyCode
+                let key = event.modifierSide?.group == .command ? slots[index]!.appSwitchKey : event.keyCode
                 decision = .rewrite(keyCode: key, modifiers: flags, ruleID: "windows.nativeAppSwitch.modifier")
             } else if decision == .passThrough {
                 decision = .rewrite(keyCode: event.keyCode, modifiers: flags, ruleID: "windows.nativeAppSwitch.held")
             }
-            if !event.modifiers.contains(.option) { slots[index]!.appSwitchHeld = false }
+            if !event.modifiers.contains(.command) { slots[index]!.appSwitchHeld = false }
         }
         return .init(decision, validity: .init(origin: producer.work, frame: slots[index]!.frame,
                                               producerProcessID: producer.processID, producerSession: producer.session))

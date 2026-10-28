@@ -106,11 +106,7 @@ public enum WindowsCompatibilityRules {
         ShortcutRule(id: "karabiner.12", input: .init(keyCode: 14, modifiers: [.option]), output: .init(keyCode: 14, modifiers: [.option]), action: .system(.openFinder)), // #12
         ShortcutRule(id: "karabiner.78", input: .init(keyCode: 53, modifiers: [.control, .shift]), output: .init(keyCode: 53, modifiers: [.control, .shift]), action: .system(.activityMonitor)), // #78
     ]
-    public static let systemCommand: [ShortcutRule] = system.map { rule in
-        guard rule.input.modifiers == .option else { return rule }
-        return ShortcutRule(id: rule.id, input: .init(keyCode: rule.input.keyCode, modifiers: .command),
-                            output: rule.output, action: rule.action)
-    }
+
     public static let systemExtras: [ShortcutRule] = [
         ShortcutRule(id: "windows.winR", input: .init(keyCode: 15, modifiers: .option),
                      output: .init(keyCode: 49, modifiers: .command)), // Spotlight as a Run/search equivalent.
@@ -119,8 +115,5 @@ public enum WindowsCompatibilityRules {
         ShortcutRule(id: "windows.winTab", input: .init(keyCode: 48, modifiers: .option),
                      output: .init(keyCode: 126, modifiers: .control)), // Mission Control, not an app-level Cmd-Tab.
     ]
-    public static let systemExtrasCommand: [ShortcutRule] = systemExtras.map { rule in
-        ShortcutRule(id: rule.id, input: .init(keyCode: rule.input.keyCode, modifiers: .command),
-                     output: rule.output, action: rule.action)
-    }
+
 }

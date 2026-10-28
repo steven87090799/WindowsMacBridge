@@ -1,3 +1,5 @@
+> 2026-10-28：目前統一 Option＝Win、Command＝Alt，Shift+Option+S 框選截圖。下方 Win＝Command 屬歷史紀錄，見[現行按鍵對應](WindowsKeyMapping-2026-10-28.md)。
+
 # Fn／Ctrl 與通用控制複製診斷（2026-10-23）
 
 狀態：已安裝 build 62，完成本次故障路徑與內建 Fn／Ctrl 的實體驗收，以及關閉／退出的映射還原檢查。下文分別列出使用者實測、事件 metadata 與自動測試，未用屬性讀回代替實體驗證。

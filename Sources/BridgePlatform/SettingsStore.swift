@@ -16,7 +16,7 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     public var effectiveKeyboardScope: KeyboardScope { isAdvancedModeEnabled ? keyboardScope : .allKeyboards }
     public var effectiveDeviceInputs: [DeviceInputPreference] { isAdvancedModeEnabled ? deviceInputs : [] }
     public var screenshotAutoCopy = true
-    public var windowsKeyModifier: WindowsKeyModifier = .command
+    public var windowsKeyModifier: WindowsKeyModifier = .option
     public var winRunEnabled = false
     public var winSettingsEnabled = false
     public var winTaskViewEnabled = false
@@ -90,7 +90,7 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     public private(set) var errorMessage: String?
     public init(defaults: UserDefaults = .standard, portableHost: Bool? = nil) {
         self.defaults = defaults
-        let defaultModifier: WindowsKeyModifier = .command
+        let defaultModifier: WindowsKeyModifier = .option
         if let data = defaults.data(forKey: "bridge.settings.v1") {
             do {
                 guard data.count <= Self.maximumEncodedBytes else { throw CocoaError(.coderReadCorrupt) }

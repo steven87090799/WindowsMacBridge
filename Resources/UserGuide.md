@@ -5,7 +5,7 @@
 1. 點兩下 DMG，先正常結束舊版，把 WindowsMacBridge.app 拖進「應用程式」取代，再開啟。
 2. 預設「一般模式」：權限頁逐項列出輔助功能、輸入監控、螢幕錄製與選用的登入時啟動。先核准前兩項；需要截圖再核准螢幕錄製。每次只按一列，核准 WindowsMacBridge 後回來重新檢查；需要時正常結束並重開 App。綠燈必須經本版 App 的原生檢查，不以舊版同名開關作為依據。
 3. 本機 App、Terminal 與 IDE 套用完整 Windows 相容快捷鍵：Ctrl+C／V／A／X、S／Z／Y／F、T／W 與文字導覽等。Ctrl+C 一律複製；Terminal 使用 Ctrl+Shift+C 中斷命令。Game 與停用延伸規則的本機 Profile 也保留這四個剪貼簿快捷鍵，且不依賴 ABC／注音切換。遠端 Windows 與 VM 接收原始 Ctrl，交由 Windows 執行複製貼上。總開關關閉與暫停會停止轉換。
-4. Win+Shift+S 或 PrintScreen 框選後直接貼上圖片；⌘⇧3／⌘⇧4 也直接複製。成功複製後右下角顯示較大的自製玻璃預覽約 5 秒，滑鼠移入會保留；點圖用系統快速查看放大，關閉後釋放，新截圖取代舊縮圖。首次擷取可能要求螢幕錄製授權；這不是 HID／Root 授權。
+4. Shift+Option+S 或 PrintScreen 框選後直接貼上圖片；⌘⇧3／⌘⇧4 也直接複製。成功複製後右下角顯示較大的自製玻璃預覽約 5 秒，滑鼠移入會保留；點圖用系統快速查看放大，關閉後釋放，新截圖取代舊縮圖。首次擷取可能要求螢幕錄製授權；這不是 HID／Root 授權。
 
 一般模式不安裝進階 HID 背景元件、不連線 root XPC、不捕捉 IOHID、不啟用 Driver。App 使用 ad-hoc 簽章，更新可能需要重新核准目前版本；沒有 Apple 公證。不要為此關閉 Gatekeeper／SIP 或重設其他 App 的權限。
 
@@ -22,13 +22,15 @@
 | Windows 模式總開關 | 開；統一控制 Windows 快捷鍵、Fn／Ctrl 交換、Finder 加強與截圖自動複製。關閉時暫停這些功能、保留子項設定。快捷鍵含複製、貼上、復原、儲存、分頁與文字導覽；Alt+Tab 使用 macOS 原生切換器。唯音守護與登入啟動各自獨立。 |
 | MacBook 鍵盤模式 | 關；明確開啟才交換本機內建 Fn／Globe 與左 Ctrl。外接與 UC 虛擬鍵盤不交換。切換前放開所有按鍵。 |
 | Finder 檔案操作加強 | 開；Ctrl+X→切資料夾→Ctrl+V 移動、F2 改名、Delete 垃圾桶。Shift+Delete 交由 Finder 原生「立即刪除」確認視窗決定，舊版明確停用永久刪除的設定保留。文字編輯／未知焦點不會盲刪；讀不到 Finder 焦點時 Ctrl+V 只做一般貼上，不搬移檔案。無需 Finder 擴充。 |
-| Windows 快捷截圖 | 開；Win+Shift+S／PrintScreen 框選，Alt+PrintScreen 當前視窗，Win+PrintScreen 全螢幕存檔＋複製。⌘⇧3／⌘⇧4 使用相同取消／自動複製流程。 |
-| 這臺 Mac 收到的 Windows 鍵 | Command；若實際 Win 發出 Option，改選 Option。不是交換整臺鍵盤的 Ctrl／Command。 |
+| Windows 快捷截圖 | 開；Shift+Option+S／PrintScreen 框選，Command+PrintScreen 當前視窗，Option+PrintScreen 全螢幕存檔＋複製。⌘⇧3／⌘⇧4 使用相同取消／自動複製流程。 |
+| Windows Win 鍵 | 固定為 Option ⌥；Command ⌘ 對應 Windows Alt。新安裝與舊版 Command 設定都使用這個對應。 |
 | 開機自動啟動 | 使用系統原生登入項目，只有明確切換才註冊／移除；不因截圖開關而自動申請。 |
 
 從側邊欄切換權限、一般設定、唯音與輸入法、App 規則、規則預覽與遠端校準；進階模式另顯示診斷。工具列左側可收合側邊欄（⌃⌘S），右側問號開啟使用說明。視窗、選單與控制項跟隨 macOS 外觀，macOS 26 以上採系統液態玻璃，舊系統保留原生材質；亮／暗色及輔助使用的透明度與對比設定由系統管理。
 
 唯音守護與切換熱鍵預設關閉，關閉守護時保留原輸入來源。開啟守護後預設維持唯音繁體；如需英文，用 App 的 ABC 按鈕或切換快捷鍵明確選擇，這個目標會保存。系統或其他程式改變輸入來源不會更改守護目標；喚醒及解除暫停後會恢復目標。自訂 App／來源／裝置與明確關閉的功能設定保留；損壞設定安全停用，不覆寫原資料。
+
+Option+E 開啟 Finder、Option+L 鎖定；選用的 Win+R／I／Tab 使用 Option+R／I／Tab。Alt+Tab／F4 使用 Command+Tab／F4，瀏覽器與 Finder 的 Alt+左右鍵使用 Command+左右鍵。Ctrl+C／V 等仍轉成原生 ⌘C／V；⌘⇧3／4／5 仍是 macOS 截圖鍵。一般模式、HID、預覽與已辨識遠端來源共用此對應。遠端 Windows／VM 原樣通過；未知來源不猜測。
 
 ## 快捷鍵規則預覽
 

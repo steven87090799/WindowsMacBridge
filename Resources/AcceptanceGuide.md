@@ -14,6 +14,8 @@ DMG 拖入 Applications → 一般模式 → 權限頁逐項核准輔助功能�
 
 ## 1. 快捷鍵與持鍵
 
+所有測試統一 Option＝Win、Command＝Alt；新安裝、舊版 Command 設定遷移、規則預覽、一般模式與 HID 分別核對。測 Option+E／L 以及已啟用的 Option+R／I／Tab；Command+E／R／I／L 不得誤用為 Win 動作，Command+Shift+S 不得觸發 Windows 框選截圖，Ctrl+Shift+S 仍是另存新檔。Command+Tab／F4 與 Command+左右鍵各測按住、重複與先放修飾鍵，避免殘留 Command。
+
 Terminal 與 IDE 也測 Ctrl+S／Z／Y／F／T／W、Ctrl+Arrow、Home／End、Alt+Tab／Alt+F4 與截圖，確認套用完整 Windows 相容規則。各 App 是否提供對應命令另行記錄，不以送出 Command 快捷鍵當作功能成功。兩套輸入後端都須驗收。
 
 TextEdit、Safari 各測 Ctrl+A/C/X/V/Z/Y/F/S/P、Ctrl+Tab、Ctrl+Shift+Tab、Ctrl+T/W／Shift+T、Ctrl+Arrow／Shift+Arrow、Home/End/Delete。先複製後按住 Ctrl 再 Tab，確認仍是分頁切換，沒有殘留 Command。左右 Ctrl／Shift／Alt 重疊，字母先放／修飾鍵先放各測一次。按住 Ctrl 在兩個普通 App 來回，重復 Ctrl+C；進入 Remote、Pause、Secure Input、session鎖定後放開鍵，回來新快捷鍵恢復。不要關閉系統的真正安全輸入。
@@ -30,13 +32,13 @@ TextEdit、Safari 各測 Ctrl+A/C/X/V/Z/Y/F/S/P、Ctrl+Tab、Ctrl+Shift+Tab、Ct
 
 ## 4. 截圖與記憶體
 
-Win+Shift+S／PrintScreen 框選、Alt+PrintScreen 當前窗口、Win+PrintScreen 全屏存檔，完成選區後直接 Ctrl+V／Cmd+V，不應等待系統縮圖消失或貼上上一份內容。CmdShift3 全屏、CmdShift4 選區也走自製預覽與複製；暫停或關閉後恢復系統原生行為。以可丟棄文字設置測試剪貼簿，再截產生的測試圖片確認貼上是新圖，記錄擷取完成到可貼上的時間。
+Shift+Option+S（Win+Shift+S）／PrintScreen 框選、Command+PrintScreen（Alt+PrintScreen）當前窗口、Option+PrintScreen（Win+PrintScreen）全屏存檔，完成選區後直接 Ctrl+V／Cmd+V，不應等待系統縮圖消失或貼上上一份內容。CmdShift3 全屏、CmdShift4 選區也走自製預覽與複製；暫停或關閉後恢復系統原生行為。以可丟棄文字設置測試剪貼簿，再截產生的測試圖片確認貼上是新圖，記錄擷取完成到可貼上的時間。
 
 複製成功後右下角應有 320×248 自製預覽，標示「截圖已複製」、貼上提示與關閉按鈕，圖片完整依比例顯示。檢查寬／高／小圖、亮／暗模式與多螢幕邊緣；macOS 26+ 且 SDK 支援時採 Liquid Glass，舊版毛玻璃，減少透明度／高對比下文字與操作仍清楚。預設 5 秒消失，移入時保留，移出重新計時。點圖用系統快速查看放大；連續截圖最多一個預覽及一個快速查看程序。這些快捷鍵不應另顯示 macOS 浮動縮圖。
 
 一般框選／視窗／CmdShift3、4 的暫存 PNG 在預覽或快速查看結束後刪除；Win+PrintScreen 在桌面保留 PNG，關預覽不能刪除。⌘⇧5 的原生截圖及其檔案不由自製預覽管理。Esc 取消保持原 clipboard；框選中→Pause／換 backend／鎖屏／關功能再開，舊結果不得寫入，縮圖準備中暫停／新截圖後不得冒出舊預覽。核准／撤銷 ScreenCapture 不得偽成功；磁碟／程序／解碼／編碼失敗各有錯誤。
 
-展開控制中心／選單列面板（包含螢幕共享面板），保持面板開啟，分別按 Win+Shift+S／PrintScreen；應可框選並貼上面板內容。全螢幕截圖也應可用，Alt+PrintScreen 仍只接受前景 App 的視窗。跨 Mac Universal Control 測試時，來源 Mac 不得因為沒有本機事件接收程序而啟動截圖。
+展開控制中心／選單列面板（包含螢幕共享面板），保持面板開啟，分別按 Shift+Option+S／PrintScreen；應可框選並貼上面板內容。全螢幕截圖也應可用，Command+PrintScreen 仍只接受前景 App 的視窗。跨 Mac Universal Control 測試時，來源 Mac 不得因為沒有本機事件接收程序而啟動截圖。
 
 圖片預算覆蓋PNG／TIFF／PDF、PDF嵌圖與inline image，壓縮文件小不表示可無限解碼。記錄5K／4K多屏截圖時 **App＋screencapture＋WindowServer＋clipboard** 的峰值，分開 RSS 與 footprint；現有預算不是整體峰值保證。不要用自動化讀取使用者當前clipboard或屏幕作為測試素材。
 

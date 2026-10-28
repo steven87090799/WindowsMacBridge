@@ -9,7 +9,9 @@
 5. MacBook→Mac mini：來源端開 Terminal，目的端開 TextEdit，Fn+C 應在目的端複製，來源Terminal不能中斷。再在 Finder 用可丟棄檔案測 Ctrl+X／V，來源 Finder 不得操作。
 6. Mac mini→MacBook：外接 Ctrl+C 應在目的端複製，MacBook 的 Fn 交換不能套到外接／UC 服務上。
 7. 兩方向都測：按 Ctrl+C 後繼續按住 Ctrl 再 Tab、Ctrl+Shift 重疊、先放字母／先放 Ctrl、持鍵跨邊緣、切 App、Pause、斷線／重新連線、休眠喚醒。放開所有鍵後應恢復，沒有殘留 Command／Option。
-8. Win+Shift+S／PrintScreen、⌘⇧3／⌘⇧4 截圖後直接 Ctrl+V；取消不改剪貼簿，Pause 後舊框選不得寫入新 session。
+8. Shift+Option+S（Win+Shift+S）／PrintScreen、⌘⇧3／⌘⇧4 截圖後直接 Ctrl+V；取消不改剪貼簿，Pause 後舊框選不得寫入新 session。
+
+兩方向另外測 Option+E／L、啟用的 Option+R／I／Tab，以及 Command+Tab／F4（Windows Alt）。接收端遠端語意為「自動」時，已是 Command 的 Mac 快捷鍵保持原樣；確定需要 Windows Alt 動作時使用該來源的「原始 Windows 按鍵」模式。首次與重新連線後各測一次。
 
 每格記錄兩臺 macOS／App 版本、方向、鍵盤、來源／目的 App、成功與失敗。一般模式 EventTap 的來源／目的 metadata 可能被 UC 隱藏；若某一格失敗，保留具體組合再評估進階模式，不把整體標成「100% 支援」。進階需另外測硬件接管與釋放，不要在第二臺安裝舊版 helper。
 

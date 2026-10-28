@@ -10,12 +10,23 @@ public struct Modifiers: OptionSet, Hashable, Codable, Sendable {
     public static let fn = Self(rawValue: 16)
 }
 
-/// The macOS modifier produced by the key the user treats as Windows/Win.
-/// This selects only Win-specific shortcuts; it never swaps global modifiers.
+/// Option represents Windows/Win throughout the app; Command represents Alt.
+/// Native macOS outputs (for example Command+C) keep their original modifiers.
 public enum WindowsKeyModifier: String, CaseIterable, Codable, Sendable {
-    case option, command
-    public var flag: Modifiers { self == .option ? .option : .command }
-    public var altFlag: Modifiers { self == .option ? .command : .option }
+    case option
+    public var flag: Modifiers { .option }
+    public var altFlag: Modifiers { .command }
+
+    public init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer()
+        let stored = try value.decode(String.self)
+        // Read the former Command preference without disabling the user's other
+        // settings. Every subsequent save writes the current Option mapping.
+        guard stored == "option" || stored == "command" else {
+            throw DecodingError.dataCorruptedError(in: value, debugDescription: "Unknown Windows key modifier")
+        }
+        self = .option
+    }
 }
 
 public enum ModifierSide: Int, CaseIterable, Sendable {

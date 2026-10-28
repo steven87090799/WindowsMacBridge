@@ -33,7 +33,7 @@ private final class ThumbnailBarrier: @unchecked Sendable {
         input.shortcutEnabled = true; input.screenshotEnabled = true
         input.foreground = .init(processID: .max, bundleID: "fixture", mode: .macOS)
         var policy = RuntimePolicyCoordinator()
-        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
         return (policy, input)
     }
     private func png() throws -> Data {
@@ -94,7 +94,7 @@ private final class ThumbnailBarrier: @unchecked Sendable {
         for _ in 0..<500 where !barrier.hasEntered { try await Task.sleep(for: .milliseconds(2)) }
         #expect(barrier.hasEntered && board.data(forType: .init("public.png")) == bytes)
         input.paused = true
-        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
         barrier.release.signal()
         for _ in 0..<500 where FileManager.default.fileExists(atPath: url.path) { try await Task.sleep(for: .milliseconds(2)) }
         #expect(count == 0 && !FileManager.default.fileExists(atPath: url.path))

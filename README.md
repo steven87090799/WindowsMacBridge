@@ -55,9 +55,9 @@ App使用ad-hoc簽章、尚無Apple公證；更新可能需要重新核准本版
 | Ctrl複製／貼上／復原／全選／儲存、文字導覽、瀏覽器分頁 | 開 |
 | Alt+Tab、Alt+F4 | macOS原生切換／當前窗口關閉，保留未儲存提示 |
 | Finder Ctrl+X→V移動、F2、Delete、確認式ShiftDelete | 開；ShiftDelete由Finder原生確認；焦點無法確認時只貼上不搬移；不需FinderSync，根目錄監控已移除 |
-| Windows截圖與CmdShift3／4 | 開；完成直接寫PNG clipboard，取消／舊session不寫入 |
+| Shift+Option+S、PrintScreen 與 ⌘⇧3／4 | 開；完成直接寫PNG clipboard，取消／舊session不寫入 |
 | MacBook Fn／左Ctrl | 關，明確開關只改本機builtIn鍵盤 |
-| Windows鍵位置 | Command，可選Option |
+| Windows鍵位置 | Option ⌥；Command ⌘ 對應 Alt，舊版 Command 設定自動遷移 |
 | 唯音守護／Carbon切換熱鍵 | 各自關；守護開啟後維持本 App 明確選定的唯音／ABC，預設唯音 |
 | Terminal／IDE | 共用完整 Windows 相容規則；Ctrl+C 一律複製，不查詢選取狀態；Terminal 的 Ctrl+Shift+C 中斷命令 |
 | Remote viewer／VM／Game | 遠端 Windows／VM 保留 Ctrl 給 Windows 處理；本機 Game／停用延伸規則的 Profile 仍提供 Ctrl+C／X／V／A，其他按鍵通過 |
@@ -69,9 +69,17 @@ App使用ad-hoc簽章、尚無Apple公證；更新可能需要重新核准本版
 
 進階抽屜勾選後才顯示後端、安裝／移除、Driver、裝置偏好與診斷。所有材料封裝在同一App；root模式用root-owned簽章鏡像，不讓root執行用戶可替換的Applications文件。共享官方Karabiner Driver不改簽章名稱、不因切一般或卸載本App的runtime被刪除。支持的Driver版本有checksum／簽章／交易恢復限制，不宣稱任意升級與降級都已驗收。
 
+## Windows 按鍵對應
+
+所有流程統一使用 Option＝Windows Win、Command＝Windows Alt。Shift+Option+S 框選截圖；Option+E 開啟 Finder、Option+L 鎖定，選用的 Option+R／I／Tab 分別開啟搜尋、系統設定與 Mission Control。Command+Tab／F4 對應 Alt+Tab／F4；瀏覽器與 Finder 的 Alt+左右鍵使用 Command+左右鍵。Ctrl+C 等仍輸出 macOS 原生 ⌘C。新安裝、舊設定、快捷鍵預覽、一般 EventTap、HID 與已辨識遠端來源共用此對應。
+
+Windows／VM 的原樣通過保護維持原始輸入；未知來源不猜測鍵位。外部鍵盤若已由系統或其他工具換位，以實際送入的 Option／Command 為準；本 App 不更改外部工具設定。
+
+[完整按鍵對應與驗證記錄](Docs/WindowsKeyMapping-2026-10-28.md)。
+
 ## 截圖與儲存位置
 
-Win+Shift+S／PrintScreen、Alt+PrintScreen 及攔截的 ⌘⇧3／4 使用 App 私有暫存 PNG；擷取成功先複製，再顯示自製「截圖已複製」預覽，不等待 macOS 浮動縮圖存檔。預覽消失或點開的圖片視窗關閉後清除自己的暫存原圖。只有 Win+PrintScreen 明確保存全螢幕圖片到桌面，檔案不隨預覽關閉刪除。
+Shift+Option+S／PrintScreen、Command+PrintScreen（Alt+PrintScreen）及攔截的 ⌘⇧3／4 使用 App 私有暫存 PNG；擷取成功先複製，再顯示自製「截圖已複製」預覽，不等待 macOS 浮動縮圖存檔。預覽消失或點開的圖片視窗關閉後清除自己的暫存原圖。只有 Option+PrintScreen（Win+PrintScreen）明確保存全螢幕圖片到桌面，檔案不隨預覽關閉刪除。
 
 預覽由 220×160 放大為 320×248，採圓角圖片區與主副文字；macOS 26+ 且建置 SDK 支援時使用 Apple Liquid Glass，較舊版本使用毛玻璃。一般顯示 5 秒，滑鼠移入會保留，移出重新計時；點圖開啟系統快速查看。需要原生標記／分享工具時可用 ⌘⇧5；停用本 App 截圖功能後 ⌘⇧3／4 也恢復系統行為，該路徑才遵循系統截圖儲存位置。
 

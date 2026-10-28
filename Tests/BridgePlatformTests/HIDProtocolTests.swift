@@ -30,12 +30,12 @@ struct HIDProtocolTests {
         var policy = HIDConfiguration()
         policy.enabled = true; policy.processID = 42; policy.bundleID = "remote.test"; policy.mode = .remoteWindows
         policy.generation = 7; policy.restartToken = 2
-        policy.windowsKeyModifier = .command; policy.macBookFnControlSwap = true
+        policy.windowsKeyModifier = .option; policy.macBookFnControlSwap = true
         policy.altF4Enabled = true; policy.textNavigationEnabled = false
         let data = try JSONEncoder().encode(policy); #expect(data.count < 4096)
         let next = try JSONDecoder().decode(HIDConfiguration.self, from: data)
         #expect(next.valid); #expect(next.context.mode == .remoteWindows); #expect(next.generation == 7)
-        #expect(next.windowsKeyModifier == .command && next.macBookFnControlSwap)
+        #expect(next.windowsKeyModifier == .option && next.macBookFnControlSwap)
         #expect(next.altF4Enabled && !next.textNavigationEnabled)
     }
     @Test func onlyFixedActionsAreDecoded() {

@@ -41,8 +41,6 @@ public struct RuleEngine: Sendable {
     public static let finderCommandAlt = try! RuleEngine(rules: WindowsCompatibilityRules.finderCommandAlt)
     public static let finderExtras = try! RuleEngine(rules: WindowsCompatibilityRules.finderExtras)
     public static let system = try! RuleEngine(rules: WindowsCompatibilityRules.system)
-    public static let systemCommand = try! RuleEngine(rules: WindowsCompatibilityRules.systemCommand)
     public static let systemExtras = try! RuleEngine(rules: WindowsCompatibilityRules.systemExtras)
-    public static let systemExtrasCommand = try! RuleEngine(rules: WindowsCompatibilityRules.systemExtrasCommand)
     public static let textNavigation = try! RuleEngine(rules: WindowsCompatibilityRules.textNavigation)
 }

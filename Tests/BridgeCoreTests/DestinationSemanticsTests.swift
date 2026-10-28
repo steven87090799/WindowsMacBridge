@@ -23,7 +23,7 @@ struct DestinationSemanticsTests {
                 hid.configure(context: .init(processID: 1, bundleID: "com.apple.finder", mode: .macOS),
                     layoutSupported: true, finderEnabled: true, windowsKeyModifier: modifier,
                     winRunEnabled: true, winTaskViewEnabled: true, transportOnly: true)
-                let win: UInt16 = modifier == .command ? 0xe3 : 0xe2
+                let win: UInt16 = 0xe2
                 _ = hid.observe(device: 1, page: 7, usage: win, down: true)
                 let action = hid.observe(device: 1, page: 7, usage: key, down: true)
                 #expect(action == nil)
@@ -31,7 +31,7 @@ struct DestinationSemanticsTests {
                 #expect(out.modifiers == flags && out.keys.prefix(out.keyCount).contains(output))
                 _ = hid.observe(device: 1, page: 7, usage: key, down: false)
                 let released = hid.render(into: &out); #expect(released)
-                #expect(out.modifiers == (modifier == .command ? 8 : 4) && out.keyCount == 0)
+                #expect(out.modifiers == 4 && out.keyCount == 0)
             }
         }
     }
@@ -39,7 +39,7 @@ struct DestinationSemanticsTests {
         var hid = HIDTranslationEngine(); _ = hid.register(1)
         hid.configure(context: .init(processID: 1, bundleID: "com.apple.finder", mode: .macOS),
                       layoutSupported: true, finderEnabled: true, altF4Enabled: true,
-                      windowsKeyModifier: .command, screenshotEnabled: true, transportOnly: true)
+                      windowsKeyModifier: .option, screenshotEnabled: true, transportOnly: true)
         _ = hid.observe(device: 1, page: 7, usage: 0xe0, down: true)
         let cut = hid.observe(device: 1, page: 7, usage: 0x1b, down: true)
         var out = HIDOutput(); let rendered = hid.render(into: &out)

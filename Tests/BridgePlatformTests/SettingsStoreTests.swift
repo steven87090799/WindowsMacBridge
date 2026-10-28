@@ -86,7 +86,7 @@ import BridgePlatform
         #expect(settings.keyboardScope == .allKeyboards)
         #expect(settings.finderEnabled && settings.allowIMEShortcuts)
         #expect(settings.screenshotAutoCopy)
-        #expect(settings.windowsKeyModifier == .command)
+        #expect(settings.windowsKeyModifier == .option)
         #expect(!settings.winRunEnabled && !settings.winSettingsEnabled && !settings.winTaskViewEnabled)
         #expect(KeyboardLayoutResolver.supports(sourceID: "org.atelierInmu.inputmethod.vChewing.IMECHT", asciiLayoutID: "com.apple.keylayout.ABC", allowIME: settings.allowIMEShortcuts))
         let registry = try ApplicationRegistry()
@@ -173,20 +173,40 @@ import BridgePlatform
         #expect(!store.settings.screenshotAutoCopy)
         store.update { $0.screenshotAutoCopy = true }
         #expect(SettingsStore(defaults: defaults).settings.screenshotAutoCopy)
-        store.update { $0.windowsKeyModifier = .command }
+        store.update { $0.windowsKeyModifier = .option }
         store.update { $0.winRunEnabled = true; $0.winSettingsEnabled = true; $0.winTaskViewEnabled = true }
         store.applyRecommendedPreset()
-        #expect(SettingsStore(defaults: defaults).settings.windowsKeyModifier == .command)
+        #expect(SettingsStore(defaults: defaults).settings.windowsKeyModifier == .option)
         #expect(store.settings.winRunEnabled && store.settings.winSettingsEnabled && store.settings.winTaskViewEnabled)
     }
 
-    @Test func macBookMigrationUsesCommandButExplicitKeyboardChoiceWins() throws {
+    @Test func legacyCommandWinPreferenceMigratesWithoutLosingOtherSettings() throws {
+        for portable in [false, true] {
+            let (name, defaults) = isolatedDefaults()
+            defer { defaults.removePersistentDomain(forName: name) }
+            let legacy = Data(#"{"schemaVersion":6,"enabled":true,"overrides":{"custom.remote":"remoteWindows"},"windowsKeyModifier":"command","screenshotAutoCopy":false,"macBookFnControlSwap":true,"winRunEnabled":true,"altF4Enabled":false}"#.utf8)
+            defaults.set(legacy, forKey: "bridge.settings.v1")
+            let store = SettingsStore(defaults: defaults, portableHost: portable)
+            #expect(store.errorMessage == nil && store.settings.enabled)
+            #expect(store.settings.windowsKeyModifier == .option)
+            #expect(store.settings.macBookFnControlSwap && store.settings.winRunEnabled)
+            #expect(!store.settings.screenshotAutoCopy && !store.settings.altF4Enabled)
+            #expect(store.settings.overrides["custom.remote"] == .remoteWindows)
+            store.applyRecommendedPreset()
+            let data = try #require(defaults.data(forKey: "bridge.settings.v1"))
+            let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            #expect(object["windowsKeyModifier"] as? String == "option")
+            let relaunched = SettingsStore(defaults: defaults, portableHost: portable)
+            #expect(relaunched.settings == store.settings)
+        }
+    }
+    @Test func macBookMigrationUsesOptionAndPreservesFnChoice() throws {
         let (name, defaults) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: name) }
         let previous = Data(#"{"schemaVersion":3,"enabled":true,"overrides":{},"screenshotAutoCopy":true}"#.utf8)
         defaults.set(previous, forKey: "bridge.settings.v1")
         let migrated = SettingsStore(defaults: defaults, portableHost: true)
-        #expect(migrated.settings.windowsKeyModifier == .command)
+        #expect(migrated.settings.windowsKeyModifier == .option)
         #expect(!migrated.settings.macBookFnControlSwap)
         migrated.update { $0.windowsKeyModifier = .option }
         #expect(SettingsStore(defaults: defaults, portableHost: true).settings.windowsKeyModifier == .option)
@@ -197,7 +217,7 @@ import BridgePlatform
         defer { defaults.removePersistentDomain(forName: name) }
         let store = SettingsStore(defaults: defaults, portableHost: true)
         #expect(!store.settings.macBookFnControlSwap)
-        #expect(store.settings.windowsKeyModifier == .command)
+        #expect(store.settings.windowsKeyModifier == .option)
         store.update { $0.macBookFnControlSwap = false }
         #expect(!SettingsStore(defaults: defaults, portableHost: true).settings.macBookFnControlSwap)
         store.applyRecommendedPreset()
@@ -220,7 +240,7 @@ import BridgePlatform
         #expect(!store.settings.enabled && store.settings.finderEnabled)
         #expect(store.settings.overrides["example.remote"] == .remoteWindows)
         #expect(!store.settings.screenshotAutoCopy && !store.settings.allowIMEShortcuts)
-        #expect(store.settings.windowsKeyModifier == .command)
+        #expect(store.settings.windowsKeyModifier == .option)
         #expect(store.settings.textNavigationEnabled)
         store.update { $0.altF4Enabled = true }
         #expect(SettingsStore(defaults: defaults).settings.altF4Enabled)

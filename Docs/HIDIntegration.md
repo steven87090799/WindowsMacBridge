@@ -1,3 +1,5 @@
+> 2026-10-28：目前統一 Option＝Win、Command＝Alt，Shift+Option+S 框選截圖。下方 Win＝Command 屬歷史紀錄，見[現行按鍵對應](WindowsKeyMapping-2026-10-28.md)。
+
 > 0.6.0 起 HIDRuntime 與 GUI 編譯成同一個 WindowsMacBridge executable。Input Monitoring 使用單一 App ID；root launchd 僅執行 `/Library/Application Support/WindowsMacBridge/WindowsMacBridge.app` 的唯讀、同簽章副本與 `--hid-service`。不執行使用者可替換的 Applications 副本。舊 HIDHelper Mach label 僅保留為內部 IPC 相容名稱；舊獨立 Helper App 在交易成功時移除，失敗時還原。Driver 保留官方簽章，不能假改 macOS 核准名稱。
 
 # 0.5.15 HID 整合與驗收界線

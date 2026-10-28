@@ -513,13 +513,6 @@ import IOKit.hid
         guard store.errorMessage == nil else { return }
         publish()
     }
-    func setWindowsKeyModifier(_ value: WindowsKeyModifier) {
-        store.update { $0.windowsKeyModifier = value }
-        settings = store.settings
-        configurationError = store.errorMessage
-        guard store.errorMessage == nil else { return }
-        publish()
-    }
     func setWinRunEnabled(_ value: Bool) {
         store.update { $0.winRunEnabled = value }; settings = store.settings
         configurationError = store.errorMessage; publish()

@@ -164,8 +164,8 @@ public final class InputEngine: @unchecked Sendable {
         let marker = EventRewriter.generatedEventMarker
         self.marker = marker; actions = ShortcutActionDispatcher(marker: marker)
         // Compile every table before an event callback can run.
-        _ = RuleEngine.browser; _ = RuleEngine.finder; _ = RuleEngine.finderExtras
-        _ = RuleEngine.textNavigation; _ = RuleEngine.system
+        _ = RuleEngine.browserCommandAlt; _ = RuleEngine.finderCommandAlt; _ = RuleEngine.finderExtras
+        _ = RuleEngine.textNavigation; _ = RuleEngine.system; _ = RuleEngine.systemExtras
     }
     @MainActor public func setScreenshotHandler(_ handler: @escaping @MainActor @Sendable (ScreenshotKind, SourceWorkToken?) -> Void) {
         actions.onScreenshot = handler
@@ -648,7 +648,7 @@ public final class InputEngine: @unchecked Sendable {
         traceResult = "processor"
         var routed = physical ? RoutedInputDecision(destinationPhysical ? processor.processIndependentSource(normalized) : processor.process(normalized)) :
             remote.process(normalized, evidence: evidence, now: ProcessInfo.processInfo.systemUptime)
-        if physical && configuration.windowsKeyModifier == .command {
+        if physical {
             routed.decision = appSwitch.apply(routed.decision, event: normalized, state: processor.modifiers,
                                              target: (deliveryContext ?? configuration.context).processID)
         }

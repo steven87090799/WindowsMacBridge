@@ -1,4 +1,4 @@
-/// A native Cmd+Tab session owns one synthetic Command side until physical Alt release.
+/// A native Cmd+Tab session tracks the Command key used as Windows Alt.
 /// No window enumeration, custom MRU list, timer or App switching UI is involved.
 public struct NativeAppSwitchLatch: Sendable {
     private var held = false
@@ -9,19 +9,19 @@ public struct NativeAppSwitchLatch: Sendable {
     public mutating func apply(_ original: EventDecision, event: KeyboardEvent,
                                state: ModifierStateMachine, target: Int32) -> EventDecision {
         if case .rewrite(_, _, "windows.nativeAppSwitch") = original, event.phase == .down {
-            if !held { key = state.isDown(.rightOption) && !state.isDown(.leftOption) ? 54 : 55; self.target = target }
+            if !held { key = state.isDown(.rightCommand) && !state.isDown(.leftCommand) ? 54 : 55; self.target = target }
             held = true
         }
         guard held else { return original }
-        let flags = event.modifiers.subtracting(.option).union(event.modifiers.contains(.option) ? .command : [])
+        let flags = event.modifiers
         var decision = original
         if event.phase == .flagsChanged {
-            let outputKey = event.modifierSide?.group == .option ? key : event.keyCode
+            let outputKey = event.modifierSide?.group == .command ? key : event.keyCode
             decision = .rewrite(keyCode: outputKey, modifiers: flags, ruleID: "windows.nativeAppSwitch.modifier")
         } else if original == .passThrough {
             decision = .rewrite(keyCode: event.keyCode, modifiers: flags, ruleID: "windows.nativeAppSwitch.held")
         }
-        if !event.modifiers.contains(.option) { held = false }
+        if !event.modifiers.contains(.command) { held = false }
         return decision
     }
     public mutating func drain(_ release: (UInt16, Modifiers, Int32) -> Void) {

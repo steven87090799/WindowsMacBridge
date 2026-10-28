@@ -70,7 +70,7 @@ public struct HIDTranslationEngine: Sendable {
     public private(set) var faulted = false
     public private(set) var processed: UInt64 = 0, translated: UInt64 = 0
     public private(set) var lastRuleID: String?
-    public init() { _ = RuleEngine.windows; _ = RuleEngine.clipboard; _ = RuleEngine.terminalClipboard; _ = RuleEngine.finder; _ = RuleEngine.browser; _ = RuleEngine.system; _ = HIDKeyMap.usage }
+    public init() { _ = RuleEngine.windows; _ = RuleEngine.clipboard; _ = RuleEngine.terminalClipboard; _ = RuleEngine.finderCommandAlt; _ = RuleEngine.browserCommandAlt; _ = RuleEngine.system; _ = RuleEngine.systemExtras; _ = HIDKeyMap.usage }
     public mutating func register(_ id: UInt64, builtIn isBuiltIn: Bool = false) -> Bool {
         if let i = devices.firstIndex(of: id) { return builtIn[i] == isBuiltIn }
         guard let i = devices.firstIndex(of: nil) else { return false }
@@ -169,15 +169,7 @@ public struct HIDTranslationEngine: Sendable {
         }
     }
     private func outputModifier(_ modifier: HIDModifier, slot: Int) -> HIDModifier {
-        let value = inputModifier(modifier, slot: slot)
-        guard !transportOnly && windowsKeyModifier == .command else { return value }
-        switch value {
-        case .leftOption: return .leftCommand
-        case .rightOption: return .rightCommand
-        case .leftCommand: return .leftOption
-        case .rightCommand: return .rightOption
-        default: return value
-        }
+        inputModifier(modifier, slot: slot)
     }
     /// Rules see the physical Win/Alt key, but the built-in Fn/Ctrl exchange
     /// takes effect before Ctrl shortcut matching.
@@ -209,17 +201,17 @@ public struct HIDTranslationEngine: Sendable {
     }
     private func match(key: UInt16, flags: Modifiers) -> ShortcutRule? {
         if context.mode == .terminal, let terminal = RuleEngine.terminalClipboard.match(keyCode: key, modifiers: flags) { return terminal }
-        let system = windowsKeyModifier == .option ? RuleEngine.system : RuleEngine.systemCommand
+        let system = RuleEngine.system
         if let rule = system.match(keyCode: key, modifiers: flags) {
             if flags != windowsKeyModifier.flag { return rule }
-            let left = windowsKeyModifier == .option ? HIDModifier.leftOption.bit : HIDModifier.leftCommand.bit
-            let right = windowsKeyModifier == .option ? HIDModifier.rightOption.bit : HIDModifier.rightCommand.bit
+            let left = HIDModifier.leftOption.bit
+            let right = HIDModifier.rightOption.bit
             if aggregate & left != 0 && aggregate & right == 0 { return rule }
         }
-        let extras = windowsKeyModifier == .option ? RuleEngine.systemExtras : RuleEngine.systemExtrasCommand
+        let extras = RuleEngine.systemExtras
         if flags == windowsKeyModifier.flag {
-            let left = windowsKeyModifier == .option ? HIDModifier.leftOption.bit : HIDModifier.leftCommand.bit
-            let right = windowsKeyModifier == .option ? HIDModifier.rightOption.bit : HIDModifier.rightCommand.bit
+            let left = HIDModifier.leftOption.bit
+            let right = HIDModifier.rightOption.bit
             if aggregate & left != 0 && aggregate & right == 0,
                let rule = extras.match(keyCode: key, modifiers: flags) {
                 switch rule.id {
@@ -231,11 +223,11 @@ public struct HIDTranslationEngine: Sendable {
             }
         }
         if altF4Enabled && key == 118 && flags == windowsKeyModifier.altFlag {
-            return windowsKeyModifier == .option ? WindowsCompatibilityRules.altF4Command : WindowsCompatibilityRules.altF4
+            return WindowsCompatibilityRules.altF4Command
         }
         if context.bundleID == "com.apple.finder" {
             if finderEnabled {
-                let finder = windowsKeyModifier == .option ? RuleEngine.finderCommandAlt : RuleEngine.finder
+                let finder = RuleEngine.finderCommandAlt
                 if let rule = finder.match(keyCode: key, modifiers: flags) { return rule }
                 if let rule = RuleEngine.finderExtras.match(keyCode: key, modifiers: flags) {
                     return rule.action == .finder(.permanentDelete) && !finderPermanentDeleteEnabled ? nil : rule
@@ -249,7 +241,7 @@ public struct HIDTranslationEngine: Sendable {
             if key == 7 { return nil }
         }
         if context.isBrowser || context.mode == .terminal || context.mode == .ide {
-            let browser = windowsKeyModifier == .option ? RuleEngine.browserCommandAlt : RuleEngine.browser
+            let browser = RuleEngine.browserCommandAlt
             if let rule = browser.match(keyCode: key, modifiers: flags) { return rule }
         }
         if textNavigationEnabled,
@@ -265,14 +257,14 @@ public struct HIDTranslationEngine: Sendable {
     private func transportSystemRule(key: UInt16, flags: Modifiers) -> ShortcutRule? {
         guard transportOnly, !manualPassThrough, !emergencyPaused, Self.systemTransportAllowed(context.mode),
               flags == windowsKeyModifier.flag else { return nil }
-        let left = windowsKeyModifier == .option ? HIDModifier.leftOption.bit : HIDModifier.leftCommand.bit
-        let right = windowsKeyModifier == .option ? HIDModifier.rightOption.bit : HIDModifier.rightCommand.bit
+        let left = HIDModifier.leftOption.bit
+        let right = HIDModifier.rightOption.bit
         guard aggregate & left != 0 && aggregate & right == 0 else { return nil }
         // App-independent HID outputs travel with UC to the receiving machine.
         // Never invoke Finder, AX, Clipboard or source-side system actions here.
-        let rules = windowsKeyModifier == .option ? RuleEngine.system : RuleEngine.systemCommand
+        let rules = RuleEngine.system
         if let rule = rules.match(keyCode: key, modifiers: flags), rule.id == "karabiner.11" { return rule }
-        let extras = windowsKeyModifier == .option ? RuleEngine.systemExtras : RuleEngine.systemExtrasCommand
+        let extras = RuleEngine.systemExtras
         guard let rule = extras.match(keyCode: key, modifiers: flags), rule.action == nil else { return nil }
         return (rule.id == "windows.winR" && winRunEnabled || rule.id == "windows.winTab" && winTaskViewEnabled) ? rule : nil
     }

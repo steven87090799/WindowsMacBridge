@@ -1,3 +1,5 @@
+> 2026-10-28：目前統一 Option＝Win、Command＝Alt，Shift+Option+S 框選截圖。下方 Win＝Command 屬歷史紀錄，見[現行按鍵對應](WindowsKeyMapping-2026-10-28.md)。
+
 # Unified Windows Keyboard Experience：架構與驗證
 
 > 歷史報告：後續修復、授權調查與接收端語意改動見 [0.5.16 修復報告](ConsistencyRepair-2026-10-02.md)。本文件的測試數量、架構和限制只對應當時版本。

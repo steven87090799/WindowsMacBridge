@@ -25,7 +25,7 @@ import BridgePlatform
         case "--preview":
             var configuration = ShortcutPreviewConfiguration()
             configuration.context = .init(processID: 10, bundleID: "com.apple.Terminal", mode: .terminal)
-            let samples = ShortcutPreview.samples(windowsKey: .command)
+            let samples = ShortcutPreview.samples(windowsKey: .option)
             var count = 0
             let metrics = measure(iterations: 500) {
                 for sample in samples {

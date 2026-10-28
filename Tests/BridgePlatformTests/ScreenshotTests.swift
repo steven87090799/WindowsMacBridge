@@ -13,12 +13,12 @@ struct ScreenshotShortcutTests {
 
     @Test func menuRecipientCanStartGlobalCaptureAndReleaseAfterTheMenuCloses() throws {
         for (key, flags, behavior, kind): (UInt16, CGEventFlags, PrintScreenBehavior, ScreenshotKind) in [
-            (1, [.maskCommand, .maskShift], .snipping, .region),
+            (1, [.maskAlternate, .maskShift], .snipping, .region),
             (105, [], .snipping, .region),
             (105, [], .fullScreenClipboard, .fullScreen),
-            (105, [.maskCommand], .snipping, .fullScreenSave)
+            (105, [.maskAlternate], .snipping, .fullScreenSave)
         ] {
-            var shortcut = ScreenshotShortcut(windowsKeyModifier: .command)
+            var shortcut = ScreenshotShortcut(windowsKeyModifier: .option)
             shortcut.printScreenBehavior = behavior
             let down = try nativeEvent(isDown: true)
             down.setIntegerValueField(.keyboardEventKeycode, value: Int64(key))
@@ -39,14 +39,14 @@ struct ScreenshotShortcutTests {
 
     @Test func unownedOrProtectedScreenshotPressPassesThroughWithoutClaimingItsRelease() throws {
         for (target, flags, allowed): (Int64, CGEventFlags, Bool) in [
-            (0, [.maskCommand, .maskShift], true),
-            (-1, [.maskCommand, .maskShift], true),
-            (18, [.maskCommand, .maskShift], false),
-            (18, [.maskAlternate], true) // Active-window PrintScreen requires foreground ownership.
+            (0, [.maskAlternate, .maskShift], true),
+            (-1, [.maskAlternate, .maskShift], true),
+            (18, [.maskAlternate, .maskShift], false),
+            (18, [.maskCommand], true) // Active-window PrintScreen requires foreground ownership.
         ] {
-            var shortcut = ScreenshotShortcut(windowsKeyModifier: .command)
+            var shortcut = ScreenshotShortcut(windowsKeyModifier: .option)
             let down = try nativeEvent(isDown: true)
-            let key: Int64 = flags == [.maskAlternate] ? 105 : 1
+            let key: Int64 = flags == [.maskCommand] ? 105 : 1
             down.setIntegerValueField(.keyboardEventKeycode, value: key)
             down.setIntegerValueField(.eventTargetUnixProcessID, value: target)
             down.flags = flags
@@ -61,15 +61,15 @@ struct ScreenshotShortcutTests {
         for selected in WindowsKeyModifier.allCases {
             var shortcut = ScreenshotShortcut(windowsKeyModifier: selected)
             let wanted = try nativeEvent(isDown: true)
-            wanted.flags = selected == .option ? [.maskAlternate, .maskShift] : [.maskCommand, .maskShift]
+            wanted.flags = [.maskAlternate, .maskShift]
             let other = try nativeEvent(isDown: true)
-            other.flags = selected == .option ? [.maskCommand, .maskShift] : [.maskAlternate, .maskShift]
+            other.flags = [.maskCommand, .maskShift]
             #expect(shortcut.handle(type: .keyDown, event: other) == .passThrough)
             #expect(shortcut.handle(type: .keyDown, event: wanted) == .capture)
             let released = try nativeEvent(isDown: false)
             #expect(shortcut.handle(type: .keyUp, event: released) == .suppress)
             let control = try nativeEvent(isDown: true)
-            control.flags = selected == .option ? [.maskControl, .maskAlternate, .maskShift] : [.maskControl, .maskCommand, .maskShift]
+            control.flags = [.maskControl, .maskAlternate, .maskShift]
             #expect(shortcut.handle(type: .keyDown, event: control) == .passThrough)
         }
     }
@@ -86,11 +86,11 @@ struct ScreenshotShortcutTests {
     }
 
     @Test func exactShortcutClaimsOneBalancedPair() {
-        var shortcut = ScreenshotShortcut(windowsKeyModifier: .command)
+        var shortcut = ScreenshotShortcut(windowsKeyModifier: .option)
         #expect(shortcut.handle(keyCode: 1, isDown: true, isRepeat: false,
-                                command: true, shift: true, option: false, control: false) == .capture)
+                                command: false, shift: true, option: true, control: false) == .capture)
         #expect(shortcut.handle(keyCode: 1, isDown: true, isRepeat: true,
-                                command: true, shift: true, option: false, control: false) == .suppress)
+                                command: false, shift: true, option: true, control: false) == .suppress)
         #expect(shortcut.handle(keyCode: 1, isDown: false, isRepeat: false,
                                 command: false, shift: false, option: false, control: false) == .suppress)
         #expect(shortcut.handle(keyCode: 1, isDown: false, isRepeat: false,
@@ -98,8 +98,8 @@ struct ScreenshotShortcutTests {
     }
 
     @Test func otherChordsAndResetPassThrough() {
-        var shortcut = ScreenshotShortcut(windowsKeyModifier: .command)
-        for (key, command, shift, option, control) in [
+        var shortcut = ScreenshotShortcut(windowsKeyModifier: .option)
+        for (key, option, shift, command, control) in [
             (UInt16(21), true, true, false, false),
             (UInt16(1), false, true, false, false),
             (UInt16(1), true, false, false, false),
@@ -110,17 +110,17 @@ struct ScreenshotShortcutTests {
                                     command: command, shift: shift, option: option, control: control) == .passThrough)
         }
         #expect(shortcut.handle(keyCode: 1, isDown: true, isRepeat: false,
-                                command: true, shift: true, option: false, control: false) == .capture)
+                                command: false, shift: true, option: true, control: false) == .capture)
         shortcut.reset()
         #expect(shortcut.handle(keyCode: 1, isDown: false, isRepeat: false,
                                 command: false, shift: false, option: false, control: false) == .passThrough)
     }
 
     @Test func missedReleaseCanRecoverOnFreshDown() {
-        var shortcut = ScreenshotShortcut(windowsKeyModifier: .command)
+        var shortcut = ScreenshotShortcut(windowsKeyModifier: .option)
         for _ in 0..<2 {
             #expect(shortcut.handle(keyCode: 1, isDown: true, isRepeat: false,
-                                    command: true, shift: true, option: false, control: false) == .capture)
+                                    command: false, shift: true, option: true, control: false) == .capture)
         }
     }
 
@@ -141,7 +141,7 @@ struct ScreenshotShortcutTests {
                                      modifierSide: .leftControl, modifierDown: true))
         _ = processor.process(.init(.flagsChanged, keyCode: 56, modifiers: [.control, .shift],
                                      modifierSide: .leftShift, modifierDown: true))
-        var shortcut = ScreenshotShortcut(windowsKeyModifier: .command)
+        var shortcut = ScreenshotShortcut(windowsKeyModifier: .option)
         for (phase, repeatKey) in [(KeyPhase.down, false), (.down, true), (.up, false)] {
             let decision = processor.process(.init(phase, keyCode: 1, modifiers: [.control, .shift],
                                                    isRepeat: repeatKey))
@@ -169,15 +169,15 @@ struct ScreenshotShortcutTests {
                 processor.configure(context: .init(processID: .max, bundleID: "test.tapOrder", mode: .macOS),
                                     enabled: true, layoutSupported: true)
                 processor.reconcileNeutralHardware()
-                let modifier: Modifiers = useControl ? .control : .command
-                _ = processor.process(.init(.flagsChanged, keyCode: useControl ? 59 : 55, modifiers: modifier,
-                                             modifierSide: useControl ? .leftControl : .leftCommand, modifierDown: true))
+                let modifier: Modifiers = useControl ? .control : .option
+                _ = processor.process(.init(.flagsChanged, keyCode: useControl ? 59 : 58, modifiers: modifier,
+                                             modifierSide: useControl ? .leftControl : .leftOption, modifierDown: true))
                 _ = processor.process(.init(.flagsChanged, keyCode: 56, modifiers: [modifier, .shift],
                                              modifierSide: .leftShift, modifierDown: true))
-                var shortcut = ScreenshotShortcut(windowsKeyModifier: .command)
+                var shortcut = ScreenshotShortcut(windowsKeyModifier: .option)
                 for phase in [KeyPhase.down, .up] {
                     let event = try nativeEvent(isDown: phase == .down)
-                    event.flags = useControl ? [.maskControl, .maskShift] : [.maskCommand, .maskShift]
+                    event.flags = useControl ? [.maskControl, .maskShift] : [.maskAlternate, .maskShift]
                     // Actual macOS modifier flags, not the key legends or a synthetic Ctrl alias.
                     #expect(event.getIntegerValueField(.eventSourceUserData) == 0)
                     if screenshotFirst {
@@ -207,9 +207,9 @@ struct ScreenshotShortcutTests {
     }
 
     @Test func generatedEventsCannotReleaseOrRepeatAnOriginalScreenshotPress() throws {
-        var shortcut = ScreenshotShortcut(windowsKeyModifier: .command)
+        var shortcut = ScreenshotShortcut(windowsKeyModifier: .option)
         let down = try nativeEvent(isDown: true)
-        down.flags = [.maskCommand, .maskShift]
+        down.flags = [.maskAlternate, .maskShift]
         #expect(down.getIntegerValueField(.eventSourceUserData) == 0)
         #expect(shortcut.handle(type: .keyDown, event: down) == .capture)
         let ownUp = try nativeEvent(isDown: false)
@@ -224,7 +224,7 @@ struct ScreenshotShortcutTests {
         #expect(shortcut.handle(type: .keyUp, event: up) == .passThrough)
         // Another source's nonzero metadata is not our marker and remains eligible.
         let foreignDown = try nativeEvent(isDown: true)
-        foreignDown.flags = [.maskCommand, .maskShift]
+        foreignDown.flags = [.maskAlternate, .maskShift]
         foreignDown.setIntegerValueField(.eventSourceUserData, value: -1)
         #expect(shortcut.handle(type: .keyDown, event: foreignDown) == .capture)
     }
