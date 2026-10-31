@@ -71,8 +71,8 @@ struct ShortcutPreviewView: View {
                         keyPicker
                         HStack {
                             modifierToggle("Ctrl", .control)
-                            modifierToggle("Option", .option)
-                            modifierToggle("Command", .command)
+                            modifierToggle("Option (Win)", .option)
+                            modifierToggle("Command (Alt)", .command)
                         }
                         HStack {
                             modifierToggle("Shift", .shift)
@@ -109,8 +109,8 @@ struct ShortcutPreviewView: View {
         HStack {
             keyPicker
             modifierToggle("Ctrl", .control)
-            modifierToggle("Option", .option)
-            modifierToggle("Command", .command)
+            modifierToggle("Option (Win)", .option)
+            modifierToggle("Command (Alt)", .command)
             modifierToggle("Shift", .shift)
             modifierToggle("Fn", .fn)
         }

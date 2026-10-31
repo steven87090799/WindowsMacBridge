@@ -1,3 +1,5 @@
+> 2026-10-28：目前統一 Option＝Win、Command＝Alt，Shift+Option+S 框選截圖。下方 Win＝Command 屬歷史紀錄，見[現行按鍵對應](WindowsKeyMapping-2026-10-28.md)。
+
 > 這份文件保留歷史版本記錄；目前行為、測試與阻擋項目以 [2026-09-30 修復報告](PreReleaseRepair-2026-09-30.md) 為準。自製 Alt+Tab 已移除，不再列為待實作功能。
 
 # 0.5.13 保護與一般使用者情境檢查

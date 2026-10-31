@@ -2,6 +2,46 @@ import Testing
 @testable import BridgeCore
 
 struct RemoteSemanticRegressionTests {
+    @Test func knownAutomaticHostsUseOptionWinWithoutReinterpretingMacCommandOrOptionNavigation() {
+        for transport: RemoteTransport in [.vnc, .googleRemoteDesktop] {
+            for confidence: InputConfidence in [.known, .unknown] {
+                var config = SourceTranslationConfiguration()
+                config.context = .init(processID: 1, bundleID: "com.apple.TextEdit", mode: .macOS)
+                config.enabled = true; config.layoutSupported = true; config.screenshotEnabled = true
+                config.winRunEnabled = true; config.winSettingsEnabled = true; config.winTaskViewEnabled = true
+                let source = RemoteProducer(processID: 42, identity: "incoming", session: 1, revision: 1,
+                    transport: transport, confidence: confidence, semantics: .automatic, independentFlags: true)
+                var r = RemoteSourceRouter(); r.update(.init(producers: [source]), configuration: config)
+                let evidence = InputOriginEvidence(processID: 42, stateID: 123)
+                for (key, flags, expected): (UInt16, Modifiers, EventDecision) in [
+                    (1, [.option, .shift], .action(.screenshot(.region), ruleID: "windows.screenshot")),
+                    (14, .option, .action(.system(.openFinder), ruleID: "karabiner.12")),
+                    (15, .option, .rewrite(keyCode: 49, modifiers: .command, ruleID: "windows.winR")),
+                    (34, .option, .action(.system(.openSettings), ruleID: "windows.winI")),
+                    (48, .option, .rewrite(keyCode: 126, modifiers: .control, ruleID: "windows.winTab")),
+                    (1, [.command, .shift], .passThrough), (14, .command, .passThrough),
+                    (123, .option, .passThrough), (48, .command, .passThrough)
+                ] {
+                    var held: Modifiers = []
+                    let edges: [(Modifiers, ModifierSide, UInt16)] = [(.option, .leftOption, 58),
+                        (.command, .leftCommand, 55), (.shift, .leftShift, 56)]
+                    for (group, side, modifierKey) in edges where flags.contains(group) {
+                        held.insert(group)
+                        _ = r.process(.init(.flagsChanged, keyCode: modifierKey, modifiers: held,
+                            modifierSide: side, modifierDown: true), evidence: evidence)
+                    }
+                    let result = r.process(.init(.down, keyCode: key, modifiers: flags), evidence: evidence).decision
+                    #expect(result == (confidence == .known ? expected : .passThrough))
+                    _ = r.process(.init(.up, keyCode: key, modifiers: flags), evidence: evidence)
+                    for (group, side, modifierKey) in edges.reversed() where flags.contains(group) {
+                        held.remove(group)
+                        _ = r.process(.init(.flagsChanged, keyCode: modifierKey, modifiers: held,
+                            modifierSide: side, modifierDown: false), evidence: evidence)
+                    }
+                }
+            }
+        }
+    }
     @Test func signedVNCInAutomaticModeTranslatesRawControlButKeepsMacCommand() {
         var r = RemoteSourceRouter()
         var config = SourceTranslationConfiguration()
@@ -49,12 +89,12 @@ struct RemoteSemanticRegressionTests {
     @Test func duplicateIndependentRightAltEdgesPreserveTheAppSwitchReleaseSide() {
         var r = router(semantics: .windows)
         for _ in 0..<2 {
-            _ = r.process(.init(.flagsChanged, keyCode: 61, modifiers: .option,
-                modifierSide: .rightOption), evidence: evidence)
+            _ = r.process(.init(.flagsChanged, keyCode: 54, modifiers: .command,
+                modifierSide: .rightCommand), evidence: evidence)
         }
-        let result = r.process(.init(.down, keyCode: 48, modifiers: .option), evidence: evidence)
+        let result = r.process(.init(.down, keyCode: 48, modifiers: .command), evidence: evidence)
         #expect(result.decision == .rewrite(keyCode: 48, modifiers: .command, ruleID: "windows.nativeAppSwitch"))
-        _ = r.process(.init(.up, keyCode: 48, modifiers: .option), evidence: evidence)
+        _ = r.process(.init(.up, keyCode: 48, modifiers: .command), evidence: evidence)
         var released = [UInt16]()
         r.invalidate { key, _, _ in released.append(key) }
         #expect(released == [54])
@@ -134,12 +174,12 @@ struct RemoteSemanticRegressionTests {
     }
     @Test func screenshotsAndAXCloseAreActionsAndAlreadyMacChordsPassThrough() {
         var r = router(semantics: .windows)
-        edge(&r, side: .leftOption, key: 58, flags: .option, down: true)
-        #expect(r.process(.init(.down, keyCode: 118, modifiers: .option), evidence: evidence).decision == .action(.window(.close), ruleID: "windows.altF4"))
-        _ = r.process(.init(.up, keyCode: 118, modifiers: .option), evidence: evidence)
-        #expect(r.process(.init(.down, keyCode: 105, modifiers: .option), evidence: evidence).decision == .action(.screenshot(.activeWindow), ruleID: "windows.screenshot"))
-        _ = r.process(.init(.up, keyCode: 105, modifiers: .option), evidence: evidence)
-        edge(&r, side: .leftOption, key: 58, flags: [], down: false)
+        edge(&r, side: .leftCommand, key: 55, flags: .command, down: true)
+        #expect(r.process(.init(.down, keyCode: 118, modifiers: .command), evidence: evidence).decision == .action(.window(.close), ruleID: "windows.altF4"))
+        _ = r.process(.init(.up, keyCode: 118, modifiers: .command), evidence: evidence)
+        #expect(r.process(.init(.down, keyCode: 105, modifiers: .command), evidence: evidence).decision == .action(.screenshot(.activeWindow), ruleID: "windows.screenshot"))
+        _ = r.process(.init(.up, keyCode: 105, modifiers: .command), evidence: evidence)
+        edge(&r, side: .leftCommand, key: 55, flags: [], down: false)
         for key: UInt16 in [8,9,7,0,6,1,3,13,17,45] {
             #expect(r.process(.init(.down, keyCode: key, modifiers: .command), evidence: evidence).decision == .passThrough)
             _ = r.process(.init(.up, keyCode: key, modifiers: .command), evidence: evidence)
@@ -170,13 +210,13 @@ struct RemoteSemanticRegressionTests {
         #expect(releases == 0 && r.translatedCount == 20_000)
     }
     @Test func rightAltAppSwitchLossReleasesItsCommandSideAndRevokesWork() {
-        var r = router()
+        var r = router(semantics: .windows)
         #expect(!r.hasNativeAppSwitchSession(evidence))
-        edge(&r, side: .rightOption, key: 61, flags: .option, down: true)
-        let work = r.process(.init(.down, keyCode: 48, modifiers: .option), evidence: evidence)
+        edge(&r, side: .rightCommand, key: 54, flags: .command, down: true)
+        let work = r.process(.init(.down, keyCode: 48, modifiers: .command), evidence: evidence)
         #expect(r.hasNativeAppSwitchSession(evidence))
         #expect(!r.hasNativeAppSwitchSession(.init(processID: 43, stateID: 0)))
-        _ = r.process(.init(.up, keyCode: 48, modifiers: .option), evidence: evidence)
+        _ = r.process(.init(.up, keyCode: 48, modifiers: .command), evidence: evidence)
         var releases = [UInt16]()
         r.invalidate { key, _, _ in releases.append(key) }
         #expect(!r.hasNativeAppSwitchSession(evidence))

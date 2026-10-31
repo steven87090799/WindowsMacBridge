@@ -10,8 +10,8 @@ struct WindowsFeatureTests {
                             enabled: true, layoutSupported: true, windowsKeyModifier: selected)
             value.reconcileNeutralHardware()
             let alt = selected.altFlag
-            let side: ModifierSide = selected == .option ? .leftCommand : .leftOption
-            let key: UInt16 = selected == .option ? 55 : 58
+            let side: ModifierSide = .leftCommand
+            let key: UInt16 = 55
             _ = value.process(.init(.flagsChanged, keyCode: key, modifiers: alt,
                                     modifierSide: side, modifierDown: true))
             #expect(value.process(.init(.down, keyCode: 48, modifiers: alt)) == .passThrough)
@@ -39,7 +39,7 @@ struct WindowsFeatureTests {
                         enabled: true, layoutSupported: true, finderEnabled: finder,
                         finderPermanentDeleteEnabled: permanentDelete,
                         textNavigationEnabled: text, altF4Enabled: altF4,
-                        windowsKeyModifier: .command)
+                        windowsKeyModifier: .option)
         value.reconcileNeutralHardware()
         return value
     }
@@ -137,8 +137,8 @@ struct WindowsFeatureTests {
             value.configure(context: .init(processID: 12, bundleID: "test", mode: .macOS),
                             enabled: true, layoutSupported: true, windowsKeyModifier: selected)
             value.reconcileNeutralHardware()
-            let side: ModifierSide = selected == .option ? .leftOption : .leftCommand
-            let key: UInt16 = selected == .option ? 58 : 55
+            let side: ModifierSide = .leftOption
+            let key: UInt16 = 58
             _ = value.process(.init(.flagsChanged, keyCode: key, modifiers: selected.flag,
                                     modifierSide: side, modifierDown: true))
             #expect(value.process(.init(.down, keyCode: 14, modifiers: selected.flag)) ==
@@ -146,9 +146,9 @@ struct WindowsFeatureTests {
             _ = value.process(.init(.up, keyCode: 14, modifiers: selected.flag))
             _ = value.process(.init(.flagsChanged, keyCode: key, modifiers: [],
                                     modifierSide: side, modifierDown: false))
-            let other: Modifiers = selected == .option ? .command : .option
-            let otherSide: ModifierSide = selected == .option ? .leftCommand : .leftOption
-            let otherKey: UInt16 = selected == .option ? 55 : 58
+            let other: Modifiers = .command
+            let otherSide: ModifierSide = .leftCommand
+            let otherKey: UInt16 = 55
             _ = value.process(.init(.flagsChanged, keyCode: otherKey, modifiers: other,
                                     modifierSide: otherSide, modifierDown: true))
             #expect(value.process(.init(.down, keyCode: 14, modifiers: other)) == .passThrough)

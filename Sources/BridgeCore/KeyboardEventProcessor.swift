@@ -261,18 +261,18 @@ public struct KeyboardEventProcessor: Sendable {
             return ShortcutRule(id: "windows.screenshot", input: .init(keyCode: event.keyCode, modifiers: event.modifiers),
                                 output: .init(keyCode: event.keyCode, modifiers: []), action: .screenshot(kind))
         }
-        let systemRules = windowsKeyModifier == .option ? RuleEngine.system : RuleEngine.systemCommand
+        let systemRules = RuleEngine.system
         if let system = systemRules.match(keyCode: event.keyCode, modifiers: event.modifiers),
            event.modifiers != windowsKeyModifier.flag ||
-           (modifiers.isDown(windowsKeyModifier == .option ? .leftOption : .leftCommand) &&
-            !modifiers.isDown(windowsKeyModifier == .option ? .rightOption : .rightCommand)) {
+           (modifiers.isDown(.leftOption) &&
+            !modifiers.isDown(.rightOption)) {
             return system
         }
         guard context.mode.allowsTranslation else { return nil }
-        let extraRules = windowsKeyModifier == .option ? RuleEngine.systemExtras : RuleEngine.systemExtrasCommand
+        let extraRules = RuleEngine.systemExtras
         if event.modifiers == windowsKeyModifier.flag,
-           modifiers.isDown(windowsKeyModifier == .option ? .leftOption : .leftCommand),
-           !modifiers.isDown(windowsKeyModifier == .option ? .rightOption : .rightCommand),
+           modifiers.isDown(.leftOption),
+           !modifiers.isDown(.rightOption),
            let extra = extraRules.match(keyCode: event.keyCode, modifiers: event.modifiers) {
             switch extra.id {
             case "windows.winR" where winRunEnabled: return extra
@@ -282,11 +282,11 @@ public struct KeyboardEventProcessor: Sendable {
             }
         }
         if altF4Enabled && event.keyCode == 118 && event.modifiers == windowsKeyModifier.altFlag {
-            return windowsKeyModifier == .option ? WindowsCompatibilityRules.altF4Command : WindowsCompatibilityRules.altF4
+            return WindowsCompatibilityRules.altF4Command
         }
         if context.bundleID == "com.apple.finder" {
             if finderEnabled {
-                let finderRules = windowsKeyModifier == .option ? RuleEngine.finderCommandAlt : RuleEngine.finder
+                let finderRules = RuleEngine.finderCommandAlt
                 if let rule = finderRules.match(keyCode: event.keyCode, modifiers: event.modifiers) {
                     return rule
                 }
@@ -305,7 +305,7 @@ public struct KeyboardEventProcessor: Sendable {
             if event.keyCode == 7 { return nil }
             return localRule(event)
         }
-        let browserRules = windowsKeyModifier == .option ? RuleEngine.browserCommandAlt : RuleEngine.browser
+        let browserRules = RuleEngine.browserCommandAlt
         if context.isBrowser || context.mode == .terminal || context.mode == .ide,
            let browser = browserRules.match(keyCode: event.keyCode, modifiers: event.modifiers) {
             return browser

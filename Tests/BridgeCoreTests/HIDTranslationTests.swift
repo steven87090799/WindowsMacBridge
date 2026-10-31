@@ -55,7 +55,7 @@ struct HIDTranslationTests {
         #expect(output(&e).isEmpty)
     }
     @Test func macBookFnControlSwapAffectsOnlyTheBuiltInDevice() {
-        var e = engine(windowsKeyModifier: .command, builtIn: true, fnSwap: true)
+        var e = engine(windowsKeyModifier: .option, builtIn: true, fnSwap: true)
         _ = e.observe(device: 1, page: 0xff, usage: 3, down: true)
         #expect(output(&e).modifiers == 1) // Built-in Fn becomes left Control.
         _ = e.observe(device: 1, page: 7, usage: 6, down: true)
@@ -72,9 +72,9 @@ struct HIDTranslationTests {
     }
     @Test func manualPassThroughRestoresPhysicalFnAndControlInRawAndLegacyModes() {
         for raw in [false, true] {
-            var e = engine(windowsKeyModifier: .command, builtIn: true, fnSwap: true)
+            var e = engine(windowsKeyModifier: .option, builtIn: true, fnSwap: true)
             e.configure(context: .init(processID: 10, bundleID: "test", mode: .macOS),
-                layoutSupported: true, finderEnabled: true, windowsKeyModifier: .command,
+                layoutSupported: true, finderEnabled: true, windowsKeyModifier: .option,
                 macBookFnControlSwap: true, transportOnly: raw)
             _ = e.observe(device: 1, page: 7, usage: 0xe6, down: true)
             _ = e.observe(device: 1, page: 7, usage: 0x13, down: true)
@@ -175,7 +175,7 @@ struct HIDTranslationTests {
     @Test func nativeAppSwitcherUsesPhysicalAltForBothLayouts() {
         for selected in WindowsKeyModifier.allCases {
             var e = engine(windowsKeyModifier: selected)
-            let altUsage: UInt16 = selected == .option ? 0xe3 : 0xe2
+            let altUsage: UInt16 = 0xe3
             _ = e.observe(device: 1, page: 7, usage: altUsage, down: true)
             for _ in 0..<4 {
                 _ = e.observe(device: 1, page: 7, usage: 0x2b, down: true)
@@ -190,8 +190,8 @@ struct HIDTranslationTests {
     @Test func hidWinActionsAndAltF4FollowTheSelectedPhysicalModifier() {
         for selected in WindowsKeyModifier.allCases {
             var e = engine(windowsKeyModifier: selected)
-            let winUsage: UInt16 = selected == .option ? 0xe2 : 0xe3
-            let altUsage: UInt16 = selected == .option ? 0xe3 : 0xe2
+            let winUsage: UInt16 = 0xe2
+            let altUsage: UInt16 = 0xe3
             _ = e.observe(device: 1, page: 7, usage: winUsage, down: true)
             #expect(e.observe(device: 1, page: 7, usage: 8, down: true) == .system(.openFinder))
             _ = e.observe(device: 1, page: 7, usage: 8, down: false)

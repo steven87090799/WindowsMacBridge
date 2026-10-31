@@ -95,11 +95,11 @@ struct InputSourceRoutingTests {
         var router = RemoteSourceRouter(); var c = config
         c.screenshotEnabled = true
         router.update(.init(producers: [producer(42, semantics: .windows)]), configuration: c)
-        _ = router.process(.init(.flagsChanged, keyCode: 58, modifiers: .option, modifierSide: .leftOption, modifierDown: true), evidence: .init(processID: 42, stateID: 0))
-        #expect(router.process(.init(.down, keyCode: 48, modifiers: .option), evidence: .init(processID: 42, stateID: 0)).decision ==
+        _ = router.process(.init(.flagsChanged, keyCode: 55, modifiers: .command, modifierSide: .leftCommand, modifierDown: true), evidence: .init(processID: 42, stateID: 0))
+        #expect(router.process(.init(.down, keyCode: 48, modifiers: .command), evidence: .init(processID: 42, stateID: 0)).decision ==
                 .rewrite(keyCode: 48, modifiers: .command, ruleID: "windows.nativeAppSwitch"))
-        _ = router.process(.init(.up, keyCode: 48, modifiers: .option), evidence: .init(processID: 42, stateID: 0))
-        #expect(router.process(.init(.flagsChanged, keyCode: 58, modifierSide: .leftOption, modifierDown: false), evidence: .init(processID: 42, stateID: 0)).decision ==
+        _ = router.process(.init(.up, keyCode: 48, modifiers: .command), evidence: .init(processID: 42, stateID: 0))
+        #expect(router.process(.init(.flagsChanged, keyCode: 55, modifierSide: .leftCommand, modifierDown: false), evidence: .init(processID: 42, stateID: 0)).decision ==
                 .rewrite(keyCode: 55, modifiers: [], ruleID: "windows.nativeAppSwitch.modifier"))
     }
     @Test func allSixPathsUseSameSemanticRulesWithUCReceivingAlreadyNormalizedOutput() {

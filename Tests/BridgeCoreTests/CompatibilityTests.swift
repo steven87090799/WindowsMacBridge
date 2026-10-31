@@ -4,7 +4,7 @@ import Testing
 
 struct CompatibilityTests {
     private func processor(browser: Bool = false, finder: Bool = false, mode: ApplicationMode = .macOS,
-                           windowsKeyModifier: WindowsKeyModifier = .command) -> KeyboardEventProcessor {
+                           windowsKeyModifier: WindowsKeyModifier = .option) -> KeyboardEventProcessor {
         var processor = KeyboardEventProcessor()
         processor.configure(context: .init(processID: 10, bundleID: finder ? "com.apple.finder" : "test", mode: mode,
                                             isBrowser: browser), enabled: true, layoutSupported: true, finderEnabled: finder,
@@ -25,7 +25,7 @@ struct CompatibilityTests {
     }
     @Test func generalAndBrowserChordsPairForBothHands() {
         for right in [false, true] {
-            for (browser, rules) in [(false, WindowsCompatibilityRules.general), (true, WindowsCompatibilityRules.browser)] {
+            for (browser, rules) in [(false, WindowsCompatibilityRules.general), (true, WindowsCompatibilityRules.browserCommandAlt)] {
                 for rule in rules {
                     var p = processor(browser: browser)
                     pressModifiers(rule.input.modifiers, &p, right: right)
@@ -39,13 +39,13 @@ struct CompatibilityTests {
             }
         }
     }
-    @Test func browserScopeAndOptionConsumption() {
+    @Test func browserScopeAndCommandConsumption() {
         var normal = processor(); pressModifiers(.control, &normal)
         #expect(normal.process(.init(.down, keyCode: 17, modifiers: .control)) == .passThrough)
-        var browser = processor(browser: true); pressModifiers(.option, &browser)
-        #expect(browser.process(.init(.down, keyCode: 123, modifiers: .option)) ==
+        var browser = processor(browser: true); pressModifiers(.command, &browser)
+        #expect(browser.process(.init(.down, keyCode: 123, modifiers: .command)) ==
                 .rewrite(keyCode: 33, modifiers: .command, ruleID: "karabiner.50"))
-        _ = browser.process(.init(.flagsChanged, keyCode: 58, modifierSide: .leftOption, modifierDown: false))
+        _ = browser.process(.init(.flagsChanged, keyCode: 55, modifierSide: .leftCommand, modifierDown: false))
         #expect(browser.process(.init(.up, keyCode: 123)) == .rewrite(keyCode: 33, modifiers: [], ruleID: "karabiner.50"))
     }
     @Test func rightOptionToggleIsPairedAndDoesNotAutorepeat() {
@@ -62,7 +62,7 @@ struct CompatibilityTests {
         #expect(left.process(.init(.down, keyCode: 35, modifiers: .option)) == .passThrough)
     }
     @Test func finderActionsConsumeExactlyOnePair() {
-        for rule in WindowsCompatibilityRules.finder {
+        for rule in WindowsCompatibilityRules.finderCommandAlt {
             var p = processor(finder: true); pressModifiers(rule.input.modifiers, &p)
             let down = p.process(.init(.down, keyCode: rule.input.keyCode, modifiers: rule.input.modifiers))
             if let action = rule.action {
@@ -113,7 +113,7 @@ struct CompatibilityTests {
     @Test func mixedShortcutStressHasBoundedLedger() {
         var p = processor(browser: true)
         for i in 0..<30_000 {
-            let rule = WindowsCompatibilityRules.browser[i % WindowsCompatibilityRules.browser.count]
+            let rule = WindowsCompatibilityRules.browserCommandAlt[i % WindowsCompatibilityRules.browserCommandAlt.count]
             p.reconcileNeutralHardware()
             pressModifiers(rule.input.modifiers, &p)
             _ = p.process(.init(.down, keyCode: rule.input.keyCode, modifiers: rule.input.modifiers))

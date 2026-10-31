@@ -82,7 +82,7 @@ private final class CaptureJobFixture: ScreenshotCaptureJob, @unchecked Sendable
         input.shortcutEnabled = true; input.screenshotEnabled = true
         input.foreground = .init(processID: .max, bundleID: "test", mode: .macOS)
         var policy = RuntimePolicyCoordinator()
-        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
         let origin = SourceWorkGate(), frame = SourceWorkGate()
         manager.requestCapture(.fullScreen, source: .init(origin: origin, frame: frame))
         #expect(driver.launches == 1)
@@ -102,7 +102,7 @@ private final class CaptureJobFixture: ScreenshotCaptureJob, @unchecked Sendable
             var input = RuntimePolicyInput(); input.backend = .deviceHID; input.shortcutEnabled = true; input.screenshotEnabled = true
             input.foreground = .init(processID: .max, bundleID: "test", mode: .macOS)
             var policy = RuntimePolicyCoordinator()
-            manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+            manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
             let token = SourceWorkToken(origin: .init(), frame: .init())
             manager.requestCapture(.region, source: remote ? token : nil)
             manager.applyPhysicalPreferences([.init(identity: "a", experience: .nativeMac)])
@@ -221,12 +221,12 @@ private final class CaptureJobFixture: ScreenshotCaptureJob, @unchecked Sendable
         input.shortcutEnabled = true; input.screenshotEnabled = true
         input.foreground = .init(processID: 1, bundleID: "fixture.A", mode: .macOS)
         var policy = RuntimePolicyCoordinator()
-        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
         manager.noteNativeScreenshotShortcut()
         input.paused = true
-        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
         input.paused = false
-        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("LateNative-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: path) }
         try Data([1]).write(to: path)
@@ -356,7 +356,7 @@ private final class DelayedTextRecognizer: ScreenshotTextRecognizing, @unchecked
         input.shortcutEnabled = true; input.screenshotEnabled = true
         input.foreground = .init(processID: .max, bundleID: "test.fake", mode: .macOS)
         var policy = RuntimePolicyCoordinator()
-        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
         return (policy, input)
     }
     private func complete(_ driver: CaptureDriverFixture) throws {
@@ -428,9 +428,9 @@ private final class DelayedTextRecognizer: ScreenshotTextRecognizing, @unchecked
             case 1: input.paused = true
             default: input.session &+= 1
             }
-            manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+            manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
             input.paused = false
-            manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+            manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
             manager.requestTextCapture()
             #expect(driver.launches == 1 && manager.status.isBusy)
             gate.finish(); try await waitUntilIdle(manager)

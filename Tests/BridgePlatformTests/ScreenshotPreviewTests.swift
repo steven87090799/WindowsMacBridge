@@ -26,7 +26,7 @@ private struct PreviewTextRecognizer: ScreenshotTextRecognizing {
         input.shortcutEnabled = true; input.screenshotEnabled = true
         input.foreground = .init(processID: .max, bundleID: "fixture", mode: .macOS)
         var policy = RuntimePolicyCoordinator()
-        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .command, printScreen: .snipping)
+        manager.applyRuntimePolicy(policy.transition(input), windowsKey: .option, printScreen: .snipping)
         return (policy,input)
     }
     private func png(width: Int = 8, height: Int = 8) throws -> Data {
