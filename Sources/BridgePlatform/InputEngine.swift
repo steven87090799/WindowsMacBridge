@@ -101,6 +101,7 @@ private final class EngineMailbox: @unchecked Sendable {
 /// @unchecked Sendable is confined here: mutable event state belongs exclusively to run().
 /// Only mailbox methods are callable across threads. No actor hops or I/O inside callback.
 public final class InputEngine: @unchecked Sendable {
+    static let eventMask = KeyboardEventTapCoverage.requiredEvents | MouseSelectionRewriter.events
     private let mailbox = EngineMailbox()
     private var configuration = EngineConfiguration()
     private var revision: UInt64 = .max
@@ -108,6 +109,7 @@ public final class InputEngine: @unchecked Sendable {
     private var deliveryContext: ApplicationContext?
     private var appSwitch = NativeAppSwitchLatch()
     private var remote = RemoteSourceRouter()
+    private var mouseSelection = MouseSelectionRewriter()
     public let producerInbox = InputProducerInbox()
     public let recipientInbox = InputProducerInbox()
     public let calibrationInbox = RemoteCalibrationInbox()
@@ -252,9 +254,11 @@ public final class InputEngine: @unchecked Sendable {
         mailbox.lock.lock()
         let changed = revision != mailbox.revision
         let deviceChanged = changed && configuration.deviceInputs != mailbox.configuration.deviceInputs
+        let pointerSourcesChanged = changed && configuration.inputRouting != mailbox.configuration.inputRouting
         let deliveryChanged = changed && configuration.destinationSemantics != mailbox.configuration.destinationSemantics
         let preserveModifiers = changed && mailbox.configuration.preservesModifiers(from: configuration)
         if changed {
+            if pointerSourcesChanged || deviceChanged { mouseSelection.invalidate() }
             if configuration.context != mailbox.configuration.context { deliveryContext = nil }
             configuration = mailbox.configuration; revision = mailbox.revision
         }
@@ -272,7 +276,7 @@ public final class InputEngine: @unchecked Sendable {
                 processor.invalidate()
             }
             if policyGeneration != configuration.generation {
-                queueReleases(invalidateRemote: !preserveModifiers)
+                queueReleases(invalidateRemote: !preserveModifiers, invalidateMouse: !preserveModifiers)
                 policyGeneration = configuration.generation; actionEpoch &+= 1
                 if !preserveModifiers { processor.invalidate() }
             }
@@ -290,7 +294,8 @@ public final class InputEngine: @unchecked Sendable {
         if changed { configureProcessor(preservingModifiersOnAppChange: preserveModifiers) }
     }
 
-    private func queueReleases(invalidateRemote: Bool = true) {
+    private func queueReleases(invalidateRemote: Bool = true, invalidateMouse: Bool = true) {
+        if invalidateMouse { mouseSelection.invalidate() }
         appSwitch.drain { key, flags, pid in
             guard releaseCount < releases.count else { return }
             releases[releaseCount] = (key, flags, pid); releaseCount += 1
@@ -484,8 +489,7 @@ public final class InputEngine: @unchecked Sendable {
     }
 
     private func createTap() {
-        let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue) |
-                   (1 << CGEventType.flagsChanged.rawValue)
+        let mask = Self.eventMask
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
             guard let userInfo else { return Unmanaged.passUnretained(event) }
             let engine = Unmanaged<InputEngine>.fromOpaque(userInfo).takeUnretainedValue()
@@ -514,6 +518,7 @@ public final class InputEngine: @unchecked Sendable {
     }
 
     private func destroyTap() {
+        mouseSelection.invalidate()
         if let tap { CGEvent.tapEnable(tap: tap, enable: false); CFMachPortInvalidate(tap) }
         if let source { CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes) }
         tap = nil; source = nil
@@ -553,7 +558,20 @@ public final class InputEngine: @unchecked Sendable {
                                            stateID: event.getIntegerValueField(.eventSourceStateID),
                                            ownEvent: event.getIntegerValueField(.eventSourceUnixProcessID) == Int64(getpid()))
         let origin = configuration.inputRouting.classify(evidence, physicalBackend: configuration.physicalBackend)
+        if evidence.processID > 0 && !evidence.ownEvent &&
+            !configuration.inputRouting.producers.contains(where: { $0.processID == evidence.processID }) &&
+            !observedProducers.contains(evidence.processID) {
+            observedProducers[observedProducerNext] = evidence.processID
+            observedProducerNext = (observedProducerNext + 1) % observedProducers.count
+            producerInbox.observe(evidence.processID); notifyActivity()
+        }
         let recipient = Int32(truncatingIfNeeded: event.getIntegerValueField(.eventTargetUnixProcessID))
+        if MouseSelectionRewriter.handles(type) {
+            let active = configuration.enabled && status.fault == nil &&
+                !status.emergencyPaused && !processor.manualPassThrough
+            mouseSelection.apply(to: event, origin: origin, configuration: configuration, active: active)
+            return Unmanaged.passUnretained(event)
+        }
         let key = UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode))
         let flags = Self.modifiers(event.flags)
         let trace = diagnostics.deadline != nil && diagnostics.isActive(at: ProcessInfo.processInfo.systemUptime) &&
@@ -577,9 +595,9 @@ public final class InputEngine: @unchecked Sendable {
                 wake()
             }
         }
-        if type == .keyDown, key == 8, recipient > 0,
+        if type == .keyDown, recipient > 0,
            event.getIntegerValueField(.keyboardEventAutorepeat) == 0,
-           flags == .control || flags == .command {
+           (key == 8 && (flags == .control || flags == .command) || key == 114 && flags == .control) {
             actions.observeNativeCopy()
         }
         let localDelivery = DestinationSemanticPolicy.acceptsDelivery(
@@ -590,13 +608,6 @@ public final class InputEngine: @unchecked Sendable {
         let destinationPhysical = !evidence.ownEvent &&
             (configuration.destinationSemantics && evidence.processID == 0 && evidence.stateID == 1 || origin == .universalControl)
         let physical = origin == .physicalFallback || destinationPhysical
-        if evidence.processID > 0 && !evidence.ownEvent &&
-            !configuration.inputRouting.producers.contains(where: { $0.processID == evidence.processID }) &&
-            !observedProducers.contains(evidence.processID) {
-            observedProducers[observedProducerNext] = evidence.processID
-            observedProducerNext = (observedProducerNext + 1) % observedProducers.count
-            producerInbox.observe(evidence.processID); notifyActivity()
-        }
         guard physical || { if case .remote = origin { return true }; return false }() else {
             return Unmanaged.passUnretained(event)
         }
@@ -633,7 +644,7 @@ public final class InputEngine: @unchecked Sendable {
                context != (deliveryContext ?? configuration.context) {
                 // Reconfiguring the router below retires its old outputs and
                 // actions. Do not first invalidate its held Control history.
-                queueReleases(invalidateRemote: false)
+                queueReleases(invalidateRemote: false, invalidateMouse: false)
                 deliveryContext = context
                 configureProcessor(preservingModifiersOnAppChange: true)
             }
@@ -662,9 +673,15 @@ public final class InputEngine: @unchecked Sendable {
                 actions.observeNativeCopy()
                 decision = fallback
             } else {
-                if physical { processor.rejectAction(keyCode: key) }
-                else { remote.rejectAction(keyCode: key, evidence: evidence) }
-                decision = .passThrough
+                if case .textNavigation = action {
+                    // Never leak a rejected Ctrl+Up into Mission Control. The
+                    // processor already owns a suppressed, paired key release.
+                    decision = .suppress
+                } else {
+                    if physical { processor.rejectAction(keyCode: key) }
+                    else { remote.rejectAction(keyCode: key, evidence: evidence) }
+                    decision = .passThrough
+                }
             }
         }
         var result: Unmanaged<CGEvent>? = Unmanaged.passUnretained(event)
@@ -696,7 +713,7 @@ public final class InputEngine: @unchecked Sendable {
                     output.post(tap: .cgSessionEventTap); result = nil
                 }
             } else {
-                if let output = EventRewriter.clipboardReplacement(for: event, keyCode: outputKey, modifiers: outputModifiers, marker: marker) {
+                if let output = EventRewriter.keyboardReplacement(for: event, keyCode: outputKey, modifiers: outputModifiers, marker: marker) {
                     // Quartz owns and releases a replacement returned by the
                     // tap. Transfer one retain; ARC keeps no per-key history.
                     result = Unmanaged.passRetained(output)

@@ -26,7 +26,16 @@
 
 Mac 文件末尾的額外 `v` 由使用者手動輸入，不能判定為第一次 Fn+V 失效。MacBook → Mac 螢幕共享的先前實測另見 [ScreenSharingVNC-2026-10-24.md](../Docs/ScreenSharingVNC-2026-10-24.md)。尚未完成重新連線後第一下、移除 Karabiner 後、更多快捷鍵與 App 的驗收。
 
-## Apple 螢幕共享／VNC（與通用控制分開測）
+## 1.0.3 build 68 多選與快捷鍵補充（尚待實機驗收）
+
+1. 本機 Finder 使用三個可丟棄檔案：按住 Ctrl 逐一左鍵點選第一與第三個，再點第一個取消，核對選取數量。測 Ctrl＋Shift、先放 Ctrl 再放左鍵、拖曳後放鍵、一般右鍵，以及暫停後恢復原生 Ctrl＋點擊。
+2. Windows → Google 遠端桌面 → 接收端 Mac：在 Mac 安裝 build 68，Windows 用實體 Ctrl 重複上述操作；遠端校準保留 Google host「自動」。核對初次、斷線重連後第一下與第二下。本機測試或合成事件不等於這條遠端路徑已通過。
+3. Apple 螢幕共享與通用控制另行測兩方向；Mac mini 用外接 Ctrl，MacBook 僅在啟用內建 Fn／Ctrl 交換時用 Fn。記錄版本、方向、實體按鍵與結果，不能由 Google 路徑推論其餘路徑。
+4. Finder 用可丟棄檔案測 Ctrl＋拖曳複製與 Ctrl＋Shift＋拖曳建立替身，核對來源仍存在、目的內容正確；不要只看游標。測先放 Ctrl 再放滑鼠，以及暫停／失焦後下一次普通點擊。
+5. TextEdit 測 Ctrl+B／I／U、Ctrl+Shift+V、Ctrl+Insert／Shift+Insert、Ctrl+上下鍵與選取。Finder 測 Ctrl+F／T、Alt+Enter；Chrome／Firefox／Safari 分別測 Ctrl+H／J、F3／F5，以及網頁和網址／文字欄位中的 Home／End。離開文字欄位後不得把 Home／End 送成瀏覽歷史。
+6. Google 自動模式測 Alt+F4／Alt+PrintScreen；原生 Command+C／D／Shift+S 保持原樣。需要完整 Windows Alt 動作時單獨測「原始 Windows 按鍵」；不把兩種設定的結果混在一起。
+
+## Apple 螢幕共享／VNC 鍵盤驗收
 
 1. 兩台各安裝同版 Bridge 並各自核准輔助功能與輸入監控；MacBook 開啟「MacBook 鍵盤模式」，一般 Mac 保持關閉。接收端「Windows 模式總開關」保持開啟，遠端來源保留「自動」。
 2. MacBook 控制一般 Mac：在接收端 TextEdit 選取新文字，用 MacBook Fn+C、Fn+V、Fn+Z 各測一次。接收端遠端校準頁應出現 Apple ScreensharingAgent。

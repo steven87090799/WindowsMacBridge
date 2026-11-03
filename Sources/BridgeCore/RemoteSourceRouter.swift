@@ -134,12 +134,16 @@ public struct RemoteSourceRouter: Sendable {
         case .macOS, .alreadyTranslated:
             event.allowsTranslation = ClipboardShortcutPolicy.isClipboardInput(key: event.keyCode, modifiers: event.modifiers)
         case .automatic:
+            // These Google-host chords have no native Mac shortcut meaning. Keep
+            // ordinary Command shortcuts (and all Apple VNC Command input) native.
+            let googleWindowsOnly = producer.confidence == .known && producer.transport == .googleRemoteDesktop &&
+                event.modifiers == .command && (event.keyCode == 118 || event.keyCode == 105)
             // Raw Control and supported Option/Win chords may use Windows rules.
             // Already-Command shortcuts and Option text navigation remain native.
             // Apple's signed Screen Sharing host is a known incoming producer on the
             // receiving Mac. Give its raw Control chords the same Windows rules as
             // Google's host without requiring a per-Mac calibration setting.
-            event.allowsTranslation = ClipboardShortcutPolicy.isClipboardInput(key: event.keyCode, modifiers: event.modifiers) ||
+            event.allowsTranslation = googleWindowsOnly || ClipboardShortcutPolicy.isClipboardInput(key: event.keyCode, modifiers: event.modifiers) ||
                 producer.confidence == .known &&
                 (producer.transport == .googleRemoteDesktop || producer.transport == .vnc) &&
                 (!event.modifiers.contains(.command) && (event.modifiers.contains(.control) || event.modifiers.subtracting(.shift).isEmpty ||

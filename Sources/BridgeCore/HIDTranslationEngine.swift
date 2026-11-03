@@ -70,7 +70,11 @@ public struct HIDTranslationEngine: Sendable {
     public private(set) var faulted = false
     public private(set) var processed: UInt64 = 0, translated: UInt64 = 0
     public private(set) var lastRuleID: String?
-    public init() { _ = RuleEngine.windows; _ = RuleEngine.clipboard; _ = RuleEngine.terminalClipboard; _ = RuleEngine.finderCommandAlt; _ = RuleEngine.browserCommandAlt; _ = RuleEngine.system; _ = RuleEngine.systemExtras; _ = HIDKeyMap.usage }
+    public init() {
+        _ = RuleEngine.windows; _ = RuleEngine.clipboard; _ = RuleEngine.terminalClipboard
+        _ = RuleEngine.finderCommandAlt; _ = RuleEngine.browserCommandAlt; _ = RuleEngine.system; _ = RuleEngine.systemExtras
+        _ = RuleEngine.textNavigation; _ = HIDKeyMap.usage; WindowsShortcutExtensions.prepare()
+    }
     public mutating func register(_ id: UInt64, builtIn isBuiltIn: Bool = false) -> Bool {
         if let i = devices.firstIndex(of: id) { return builtIn[i] == isBuiltIn }
         guard let i = devices.firstIndex(of: nil) else { return false }
@@ -227,31 +231,34 @@ public struct HIDTranslationEngine: Sendable {
         }
         if context.bundleID == "com.apple.finder" {
             if finderEnabled {
+                if let extra = WindowsShortcutExtensions.finderRule(key: key, modifiers: flags) { return extra }
                 let finder = RuleEngine.finderCommandAlt
                 if let rule = finder.match(keyCode: key, modifiers: flags) { return rule }
                 if let rule = RuleEngine.finderExtras.match(keyCode: key, modifiers: flags) {
                     return rule.action == .finder(.permanentDelete) && !finderPermanentDeleteEnabled ? nil : rule
                 }
                 if textNavigationEnabled {
-                    if let rule = RuleEngine.textNavigation.match(keyCode: key, modifiers: flags) { return rule }
+                    if let rule = TextNavigationPolicy.match(key: key, modifiers: flags, context: context) { return rule }
                     if let rule = RuleEngine.windows.match(keyCode: key, modifiers: flags), Self.isTextNavigation(rule) { return rule }
                 }
                 return nil
             }
             if key == 7 { return nil }
         }
+        if let extra = WindowsShortcutExtensions.browserRule(key: key, modifiers: flags, context: context) { return extra }
         if context.isBrowser || context.mode == .terminal || context.mode == .ide {
             let browser = RuleEngine.browserCommandAlt
             if let rule = browser.match(keyCode: key, modifiers: flags) { return rule }
         }
         if textNavigationEnabled,
-           let rule = RuleEngine.textNavigation.match(keyCode: key, modifiers: flags) { return rule }
+           let rule = TextNavigationPolicy.match(key: key, modifiers: flags, context: context) { return rule }
+        if let rule = WindowsShortcutExtensions.generalRule(key: key, modifiers: flags, context: context) { return rule }
         let rule = RuleEngine.windows.match(keyCode: key, modifiers: flags)
         if let rule, !textNavigationEnabled && Self.isTextNavigation(rule) { return nil }
         return rule
     }
     private static func isTextNavigation(_ rule: ShortcutRule) -> Bool {
-        (32...41).contains(Int(rule.id.split(separator: ".").last ?? "") ?? -1)
+        rule.isTextNavigation
     }
     private static func systemTransportAllowed(_ mode: ApplicationMode) -> Bool { mode.allowsTranslation }
     private func transportSystemRule(key: UInt16, flags: Modifiers) -> ShortcutRule? {

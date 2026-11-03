@@ -84,4 +84,28 @@ import BridgeCore
         #expect(event.flags.contains(.maskAlphaShift))
         #expect(event.getIntegerValueField(.keyboardEventKeycode) == 6)
     }
+    @Test func newFormattingAndPlainPasteMatchNativeMenusEvenWithRemoteUnicodeOverrides() throws {
+        _ = NSApplication.shared
+        for (inputKey, outputKey, flags, character, mask): (UInt16, UInt16, Modifiers, String, NSEvent.ModifierFlags) in [
+            (11, 11, .command, "b", .command), (34, 34, .command, "i", .command),
+            (32, 32, .command, "u", .command), (4, 16, .command, "y", .command),
+            (9, 9, [.command, .shift], "v", [.command, .shift]),
+            (9, 9, [.command, .option, .shift], "v", [.command, .option, .shift]),
+            (114, 8, .command, "c", .command), (114, 9, .command, "v", .command)
+        ] {
+            let event = try #require(CGEvent(keyboardEventSource: nil, virtualKey: inputKey, keyDown: true))
+            event.flags = .maskControl
+            var control: [UniChar] = [22]
+            event.keyboardSetUnicodeString(stringLength: 1, unicodeString: &control)
+            let output = try #require(EventRewriter.keyboardReplacement(for: event,
+                keyCode: outputKey, modifiers: flags, marker: 123))
+            let native = try #require(NSEvent(cgEvent: output))
+            let target = ShortcutTarget(), menu = NSMenu(title: "Private test menu")
+            menu.autoenablesItems = false
+            let item = NSMenuItem(title: "Test", action: #selector(ShortcutTarget.performTestShortcut(_:)), keyEquivalent: character)
+            item.keyEquivalentModifierMask = mask; item.target = target; menu.addItem(item)
+            #expect(menu.performKeyEquivalent(with: native), "Native menu must recognize \(inputKey) → \(outputKey)/\(flags.rawValue)")
+            #expect(target.invocations == 1)
+        }
+    }
 }

@@ -154,7 +154,8 @@ public struct ShortcutRule: Sendable {
     public init(id: String, input: Shortcut, output: Shortcut, action: ShortcutAction? = nil) {
         self.id = id; self.input = input; self.output = output
         self.action = action
-        isTextNavigation = id.hasPrefix("karabiner.") && (32...41).contains(Int(id.dropFirst(10)) ?? -1)
+        isTextNavigation = id.hasPrefix("text.") ||
+            id.hasPrefix("karabiner.") && (32...41).contains(Int(id.dropFirst(10)) ?? -1)
     }
 }
 
@@ -175,6 +176,7 @@ public enum WindowAction: Equatable, Sendable {
     case close
 }
 public enum ShortcutAction: Equatable, Sendable {
+    case textNavigation(TextNavigationAction)
     case terminalCopyOrInterrupt
     case finder(FinderAction)
     case system(SystemAction)

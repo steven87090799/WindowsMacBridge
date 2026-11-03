@@ -33,7 +33,7 @@ public struct RuleEngine: Sendable {
         return index == 0 ? nil : rules[Int(index) - 1]
     }
     public static let windows = try! RuleEngine(rules: WindowsCompatibilityRules.general)
-    public static let clipboard = try! RuleEngine(rules: WindowsCompatibilityRules.clipboard)
+    public static let clipboard = try! RuleEngine(rules: WindowsCompatibilityRules.clipboard + WindowsShortcutExtensions.clipboardAliases)
     public static let terminalClipboard = try! RuleEngine(rules: WindowsCompatibilityRules.terminalClipboard)
     public static let browser = try! RuleEngine(rules: WindowsCompatibilityRules.browser)
     public static let browserCommandAlt = try! RuleEngine(rules: WindowsCompatibilityRules.browserCommandAlt)
@@ -42,5 +42,5 @@ public struct RuleEngine: Sendable {
     public static let finderExtras = try! RuleEngine(rules: WindowsCompatibilityRules.finderExtras)
     public static let system = try! RuleEngine(rules: WindowsCompatibilityRules.system)
     public static let systemExtras = try! RuleEngine(rules: WindowsCompatibilityRules.systemExtras)
-    public static let textNavigation = try! RuleEngine(rules: WindowsCompatibilityRules.textNavigation)
+    public static let textNavigation = try! RuleEngine(rules: WindowsCompatibilityRules.textNavigation + WindowsShortcutExtensions.paragraphs)
 }

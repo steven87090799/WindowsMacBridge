@@ -178,7 +178,7 @@ struct SettingsView: View {
                 }
                 if controller.status.fault != nil { Button("重新啟動引擎") { controller.resume() } }
                 Toggle("Windows 模式總開關", isOn: Binding(get: { controller.settings.enabled }, set: { controller.setEnabled($0) }))
-                explanation("統一控制 Windows 快捷鍵、Fn／Ctrl 交換、Finder 加強與截圖自動複製。登入啟動與唯音輸入法守護各自獨立。")
+                explanation("統一控制 Windows 快捷鍵、Ctrl＋左鍵多選、Fn／Ctrl 交換、Finder 加強與截圖自動複製。登入啟動與唯音輸入法守護各自獨立。")
                 if !controller.settings.enabled {
                     Text("下列功能已暫停；設定保留，開啟總開關後恢復。").font(.caption).foregroundStyle(.secondary)
                 }

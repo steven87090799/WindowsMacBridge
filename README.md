@@ -2,6 +2,15 @@
 
 Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。正式版本 **1.0.2（build 66）**，修正系統應用程式清單包含重複無效 PID 時，背景程式會當機退出的問題。Ctrl+C／X／V／A 共用本機剪貼簿規則，涵蓋系統浮動視窗、Terminal、輸入法與本機 App Profile；截圖縮圖點擊後直接置中並啟用 App 內的圖片預覽視窗。設定側邊欄保留清晰文字與原生液態玻璃切換動畫；包含規則預覽與遠端校準介面（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。
 
+## v1.0.3 開發版（build 68）
+
+- 補上 Ctrl＋左鍵多選：舊版只監聽鍵盤事件，因此 Ctrl+C／V 可用卻無法轉換滑鼠多選。新版在本機及已辨識的 Google 遠端桌面／Apple 螢幕共享來源，把 Ctrl＋左鍵轉成 Command＋左鍵。
+- Finder 的 Ctrl＋拖曳改為複製，Ctrl＋Shift＋拖曳建立替身；放鍵順序不會把複製變成 Command 強制移動。保留原生 Command 點擊、一般右鍵及遠端 Windows／VM 的原始操作。
+- 補上 Ctrl+B／I／U、Ctrl+Shift+Z／V、Ctrl+Insert／Shift+Insert、Ctrl+F4、段落移動／選取，以及 Finder 搜尋、分頁、檔案資訊與瀏覽器歷史、下載、搜尋、功能鍵；Chrome、Firefox、Safari 使用各自的原生對應。
+- 瀏覽器／Finder 的 Home／End 在回呼外只查 AX 焦點角色：文字欄位使用行首／行尾，其餘使用原生 Home／End，避免誤觸上一頁／下一頁。未知文字焦點不會送出 Ctrl+上下鍵開啟視窗總覽。
+- Google 遠端「自動」模式補上明確的 Alt+F4／Alt+PrintScreen；一般 Command 與 Apple 螢幕共享 Command 輸入仍保持原樣。完整 Windows Alt 規則可使用該來源的「原始 Windows 按鍵」。
+- 實體本機與 Windows → Google 遠端桌面驗收待完成，步驟見 [TwoMacAcceptance.md](Resources/TwoMacAcceptance.md)。
+
 ## v1.0.2 正式版（build 66）
 
 - [背景當機的證據、原因與修正](Docs/BackgroundCrash-2026-10-24.md)

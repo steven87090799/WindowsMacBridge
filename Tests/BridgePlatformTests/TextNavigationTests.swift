@@ -69,4 +69,10 @@ import BridgeCore
         #expect(try apply(115, modifiers: [.control, .shift], at: 16).selectedRange() == NSRange(location: 0, length: 16))
         #expect(try apply(119, modifiers: [.control, .shift], at: 16).selectedRange() == NSRange(location: 16, length: 11))
     }
+    @Test func paragraphMovementAndSelectionDoNotInvokeSystemWindowCommands() throws {
+        #expect(try apply(126, modifiers: .control, at: 16).selectedRange() == NSRange(location: 14, length: 0))
+        #expect(try apply(125, modifiers: .control, at: 16).selectedRange() == NSRange(location: 27, length: 0))
+        #expect(try apply(126, modifiers: [.control, .shift], at: 16).selectedRange() == NSRange(location: 14, length: 2))
+        #expect(try apply(125, modifiers: [.control, .shift], at: 16).selectedRange() == NSRange(location: 16, length: 11))
+    }
 }
