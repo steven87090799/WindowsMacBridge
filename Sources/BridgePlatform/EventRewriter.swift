@@ -21,9 +21,17 @@ public enum EventRewriter {
     /// as menu key equivalents, even when their characters and flags look right.
     public static func clipboardReplacement(for event: CGEvent, keyCode: UInt16,
                                              modifiers: Modifiers, marker: Int64) -> CGEvent? {
+        guard [UInt16(8), 7, 9, 0].contains(keyCode) else { return nil }
+        return keyboardReplacement(for: event, keyCode: keyCode, modifiers: modifiers, marker: marker)
+    }
+
+    /// All translated native Command shortcuts need the same clean keyboard
+    /// representation, including formatting, browser commands and plain paste.
+    public static func keyboardReplacement(for event: CGEvent, keyCode: UInt16,
+                                           modifiers: Modifiers, marker: Int64) -> CGEvent? {
         guard event.type == .keyDown || event.type == .keyUp,
-              [UInt16(8), 7, 9, 0].contains(keyCode),
-              modifiers == .command || (event.type == .keyUp && modifiers.isEmpty),
+              keyCode < 128,
+              modifiers.contains(.command) || (event.type == .keyUp && modifiers.isEmpty),
               let source = CGEventSource(stateID: .privateState) else { return nil }
         source.keyboardType = UInt32(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeyboardType))
         guard let output = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: event.type == .keyDown) else { return nil }

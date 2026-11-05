@@ -62,6 +62,7 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
     private let keyEmitter: (@MainActor @Sendable (UInt16, Modifiers, ApplicationContext) -> Bool)?
     private let finderPasteboard: @MainActor @Sendable () -> NSPasteboard
     private let finderFocus: (@Sendable (Int32) async -> FinderFocus)?
+    private let textFocus: (@Sendable (Int32) async -> Bool)?
     @MainActor private var cut = FinderCutState()
     @MainActor private var armedCutTicket: UInt64 = 0
     private let clipboardIntent = FinderClipboardIntent()
@@ -77,10 +78,12 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
                 terminalKeyEmitter: (@MainActor @Sendable (UInt16, Modifiers, ApplicationContext) -> Bool)? = nil,
                 keyEmitter: (@MainActor @Sendable (UInt16, Modifiers, ApplicationContext) -> Bool)? = nil,
                 finderPasteboard: @escaping @MainActor @Sendable () -> NSPasteboard = { .general },
-                finderFocus: (@Sendable (Int32) async -> FinderFocus)? = nil) {
+                finderFocus: (@Sendable (Int32) async -> FinderFocus)? = nil,
+                textFocus: (@Sendable (Int32) async -> Bool)? = nil) {
         self.marker = marker; self.authorization = authorization; self.clock = clock; self.systemOpener = systemOpener
         self.terminalSelection = terminalSelection; self.terminalKeyEmitter = terminalKeyEmitter
         self.keyEmitter = keyEmitter; self.finderPasteboard = finderPasteboard; self.finderFocus = finderFocus
+        self.textFocus = textFocus
     }
 
     /// Per-device preferences invalidate local work without revoking a remote source.
@@ -193,6 +196,16 @@ public final class ShortcutActionDispatcher: @unchecked Sendable {
                 continue
             }
             switch request.action {
+            case .textNavigation(let action):
+                let textFocused: Bool
+                if let textFocus { textFocused = await textFocus(request.context.processID) }
+                else {
+                    textFocused = await Task.detached(priority: .userInitiated) {
+                        TextNavigationFocusReader.read(pid: request.context.processID)
+                    }.value
+                }
+                guard allowed(request), let output = action.output(textFocused: textFocused) else { continue }
+                _ = emit(output.keyCode, output.modifiers, request: request)
             case .terminalCopyOrInterrupt: await performTerminalCopy(request)
             case .system(let action):
                 let bundle: String

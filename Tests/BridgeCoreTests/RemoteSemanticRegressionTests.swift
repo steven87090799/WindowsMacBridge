@@ -127,6 +127,12 @@ struct RemoteSemanticRegressionTests {
             if input.contains(.shift) { edge(&r, side: .leftShift, key: 56, flags: input, down: true) }
             for phase: KeyPhase in [.down,.up] {
                 let decision = r.process(.init(phase, keyCode: key, modifiers: input), evidence: evidence).decision
+                if key == 115 || key == 119 {
+                    let action: TextNavigationAction = key == 115 ?
+                        (input.contains(.shift) ? .selectHome : .home) : (input.contains(.shift) ? .selectEnd : .end)
+                    #expect(decision == (phase == .down ? .action(.textNavigation(action), ruleID: "text.contextual." + action.rawValue) : .suppress))
+                    continue
+                }
                 guard case .rewrite(let actualKey, let actualFlags, _) = decision else { Issue.record("Missing translation \(key)/\(input) in \(phase)"); continue }
                 #expect(actualKey == outputKey && actualFlags == flags)
             }

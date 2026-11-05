@@ -119,6 +119,7 @@ public struct HIDDeviceStatus: Codable, Equatable, Identifiable, Sendable {
 public enum HIDActionCodec {
     public static func encode(_ action: ShortcutAction) -> String {
         switch action {
+        case .textNavigation(let value): "textNavigation." + value.rawValue
         case .terminalCopyOrInterrupt: "terminal.copyOrInterrupt"
         case .finder(let value): "finder." + value.rawValue
         case .system(let value): "system." + value.rawValue
@@ -127,6 +128,7 @@ public enum HIDActionCodec {
         }
     }
     public static func decode(_ id: String) -> ShortcutAction? {
+        if id.hasPrefix("textNavigation."), let value = TextNavigationAction(rawValue: String(id.dropFirst(15))) { return .textNavigation(value) }
         if id == "terminal.copyOrInterrupt" { return .terminalCopyOrInterrupt }
         if id.hasPrefix("finder."), let value = FinderAction(rawValue: String(id.dropFirst(7))) { return .finder(value) }
         if id.hasPrefix("system."), let value = SystemAction(rawValue: String(id.dropFirst(7))) { return .system(value) }

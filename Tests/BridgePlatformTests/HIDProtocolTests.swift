@@ -41,6 +41,7 @@ struct HIDProtocolTests {
     @Test func onlyFixedActionsAreDecoded() {
         for value in FinderAction.allCases { #expect(HIDActionCodec.decode(HIDActionCodec.encode(.finder(value))) == .finder(value)) }
         for value in SystemAction.allCases { #expect(HIDActionCodec.decode(HIDActionCodec.encode(.system(value))) == .system(value)) }
+        for value in TextNavigationAction.allCases { #expect(HIDActionCodec.decode(HIDActionCodec.encode(.textNavigation(value))) == .textNavigation(value)) }
         #expect(HIDActionCodec.decode(HIDActionCodec.encode(.terminalCopyOrInterrupt)) == .terminalCopyOrInterrupt)
         #expect(HIDActionCodec.decode("shell.rm") == nil); #expect(HIDActionCodec.decode("keyboard.inject") == nil)
         #expect(HIDActionCodec.decode("finder.unknown") == nil)

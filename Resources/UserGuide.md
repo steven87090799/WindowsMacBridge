@@ -1,4 +1,4 @@
-# WindowsMacBridge 1.0.2（build 66）
+# WindowsMacBridge 1.0.3（build 68）
 
 ## 安裝與使用
 
@@ -31,6 +31,26 @@
 唯音守護與切換熱鍵預設關閉，關閉守護時保留原輸入來源。開啟守護後預設維持唯音繁體；如需英文，用 App 的 ABC 按鈕或切換快捷鍵明確選擇，這個目標會保存。系統或其他程式改變輸入來源不會更改守護目標；喚醒及解除暫停後會恢復目標。自訂 App／來源／裝置與明確關閉的功能設定保留；損壞設定安全停用，不覆寫原資料。
 
 Option+E 開啟 Finder、Option+L 鎖定；選用的 Win+R／I／Tab 使用 Option+R／I／Tab。Alt+Tab／F4 使用 Command+Tab／F4，瀏覽器與 Finder 的 Alt+左右鍵使用 Command+左右鍵。Ctrl+C／V 等仍轉成原生 ⌘C／V；⌘⇧3／4／5 仍是 macOS 截圖鍵。一般模式、HID、預覽與已辨識遠端來源共用此對應。遠端 Windows／VM 原樣通過；未知來源不猜測。
+
+## Ctrl＋左鍵多選
+
+Windows 模式開啟時，本機的 Ctrl＋滑鼠左鍵轉成 Mac 的 Command＋左鍵，可在 Finder 或支援此操作的檔案清單逐一加入／取消選取。Ctrl＋Shift＋左鍵保留 Shift。在 Finder 開始拖曳後，Ctrl＋拖曳改為 Option 的複製語意，Ctrl＋Shift＋拖曳改為 Option＋Command 的建立替身語意，沿用到放開滑鼠；先放 Ctrl 也不會變成強制移動或留下合成的 Command 按鍵。一般右鍵不變；Windows 模式關閉或暫停時恢復原生 Ctrl＋點擊。
+
+Windows 透過 Google 遠端桌面控制這台 Mac 時，在**接收端 Mac** 安裝新版並開啟 Windows 模式，即可轉換已辨識 Google host 傳來的 Ctrl＋左鍵。Apple 螢幕共享的已驗證接收來源也適用。未知來源的第一下可能原樣通過，請放開後重試；已傳成 Command 的點擊保持原樣。遠端來源手動選「原生 Mac 按鍵」或「已轉成 Mac 快捷鍵」時不改寫滑鼠。
+
+遠端 Windows／VM、遊戲及停用延伸規則的 App 保持原樣。裝置 HID 使用特定鍵盤範圍或混合 Native Mac 裝置偏好時，因無法從滑鼠事件辨識 Ctrl 所屬鍵盤，不啟用本機滑鼠轉換；獨立遠端來源仍依自身設定。MacBook 若開啟 Fn／左 Ctrl 交換，內建 Fn 才是交換後的 Ctrl，原左 Ctrl 已成為 Fn。
+
+## 常用 Windows 快捷鍵補充
+
+- 一般文字 App：Ctrl+B／I／U 格式、Ctrl+Shift+Z 重做、Ctrl+H 取代、Ctrl+F4 關閉文件。各 App 仍需有對應的原生命令。
+- Ctrl+Insert／Shift+Insert 使用同一組複製／貼上規則；Finder 的 Shift+Insert 也能消耗已標記的剪下移動。Ctrl+Shift+V 在一般文字 App 使用「貼上並符合樣式」、Chrome／Firefox 使用純文字貼上，Terminal 使用一般貼上。
+- 一般文字 App 的 Ctrl+上下鍵與 Ctrl+Shift+上下鍵移動／選取段落；Terminal／IDE 保留其原有上下鍵與 Ctrl+G 綁定，避免變成移動程式碼行或覆寫 shell 操作。瀏覽器與 Finder 的 Home／End 先在事件回呼之外確認焦點角色：文字欄位走行首／行尾，其餘保留原生頁面／列表 Home／End；無法確認文字焦點時不送出會啟動視窗總覽的 Ctrl+上下鍵。只查焦點角色及可編輯能力，不讀取文字或欄位值。
+- Finder：Ctrl+F／E 搜尋、Ctrl+T 新分頁、Ctrl+F4 關閉分頁、Alt+Enter 檔案資訊、Alt+D 前往資料夾。此處 Alt 依本 App 對應為 Command。
+- 瀏覽器：Ctrl+H 歷史、Ctrl+J 下載、Ctrl+K／E／Alt+D 網址／搜尋列；Ctrl+G／Shift+G 與 F3／Shift+F3 尋找下一個／上一個、F5 重新載入、Shift+F5 忽略快取、F11 全螢幕。歷史與下載依 Chrome／Firefox／Safari 選擇各自對應，不把 Chrome 專用命令套到 Terminal／IDE。
+- Chrome 系列另有 Ctrl+U 原始碼、Ctrl+Shift+O 書籤管理、Ctrl+Shift+D 全部分頁加入書籤、Ctrl+Shift+Delete 清除資料視窗、Ctrl+Shift+J／F12 開發工具。清除資料只開啟原生視窗，不自動確認刪除。
+- Google host「自動」模式接受明確的 Alt+F4／Alt+PrintScreen；其餘已是 Command 的輸入保留 Mac 原生語意。若 Windows 客戶端需要完整 Alt+D 等規則，將該來源明確設為「原始 Windows 按鍵」。Windows 端未傳送到 Mac 的組合，接收端無法補回。
+
+以上是程式支援範圍；本機、Google 遠端桌面、Apple 螢幕共享與通用控制仍須各自實機驗收，不能從規則測試推論所有 App 的行為。
 
 ## 快捷鍵規則預覽
 

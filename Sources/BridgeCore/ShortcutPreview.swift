@@ -43,6 +43,12 @@ public struct ShortcutPreviewResult: Equatable, Sendable, Identifiable {
         case .togglePassThrough: "切換原樣通過"
         case .action(let action, _):
             switch action {
+            case .textNavigation(let action):
+                switch action {
+                case .home, .selectHome: "依文字焦點移到／選到行首；網頁與檔案列表使用原生 Home"
+                case .end, .selectEnd: "依文字焦點移到／選到行尾；網頁與檔案列表使用原生 End"
+                default: "文字焦點中的段落移動／選取"
+                }
             case .terminalCopyOrInterrupt: "Terminal：複製"
             case .finder(let action):
                 switch action {
@@ -139,8 +145,10 @@ public enum ShortcutPreview {
         let groups: [[ShortcutRule]] = [WindowsCompatibilityRules.general, WindowsCompatibilityRules.browser,
             WindowsCompatibilityRules.finder, WindowsCompatibilityRules.finderExtras,
             WindowsCompatibilityRules.system, WindowsCompatibilityRules.systemExtras,
-            WindowsCompatibilityRules.textNavigation]
-        var keys: Set<UInt16> = [48, 105, 118]
+            WindowsCompatibilityRules.textNavigation, WindowsShortcutExtensions.general,
+            WindowsShortcutExtensions.clipboardAliases, WindowsShortcutExtensions.finder,
+            WindowsShortcutExtensions.paragraphs]
+        var keys: Set<UInt16> = WindowsShortcutExtensions.browserKeys.union([48, 105, 118])
         for group in groups {
             for rule in group { keys.insert(rule.input.keyCode) }
         }
@@ -160,7 +168,7 @@ public enum ShortcutPreview {
             12:"Q",13:"W",14:"E",15:"R",16:"Y",17:"T",18:"1",19:"2",20:"3",21:"4",22:"6",23:"5",24:"=",
             25:"9",26:"7",27:"−",28:"8",29:"0",30:"]",31:"O",32:"U",33:"[",34:"I",35:"P",36:"Return",
             37:"L",38:"J",40:"K",43:",",45:"N",46:"M",48:"Tab",49:"Space",51:"Backspace",53:"Esc",
-            105:"PrintScreen",115:"Home",117:"Delete",118:"F4",119:"End",120:"F2",123:"←",124:"→",125:"↓",126:"↑"]
+            96:"F5",99:"F3",103:"F11",105:"PrintScreen",111:"F12",114:"Insert",115:"Home",116:"PageUp",117:"Delete",118:"F4",119:"End",120:"F2",121:"PageDown",123:"←",124:"→",125:"↓",126:"↑"]
     public static func keyLabel(_ key: UInt16) -> String {
         keyNames[key] ?? "Key \(key)"
     }

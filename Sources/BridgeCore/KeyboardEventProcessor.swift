@@ -36,7 +36,10 @@ public struct KeyboardEventProcessor: Sendable {
     public private(set) var rules = RuleEngine.windows
     public var activePressCount: Int { pressCount }
     public var isAwaitingNeutral: Bool { awaitingNeutral }
-    public init() { _ = RuleEngine.clipboard; _ = RuleEngine.terminalClipboard }
+    public init() {
+        _ = RuleEngine.clipboard; _ = RuleEngine.terminalClipboard
+        _ = RuleEngine.textNavigation; WindowsShortcutExtensions.prepare()
+    }
 
     public mutating func configure(context newContext: ApplicationContext, enabled: Bool,
                                    layoutSupported: Bool, controlsEnabled: Bool = true,
@@ -99,7 +102,16 @@ public struct KeyboardEventProcessor: Sendable {
         case .finder(.copy), .finder(.cut), .finder(.paste), .terminalCopyOrInterrupt: break
         default: return nil
         }
-        guard let rule = RuleEngine.clipboard.match(keyCode: keyCode, modifiers: .control) else { return nil }
+        let canonical: UInt16
+        switch action {
+        case .finder(.paste): canonical = 9
+        case .finder(.cut): canonical = 7
+        default: canonical = 8
+        }
+        guard let original = press.rule else { return nil }
+        guard let fallback = RuleEngine.clipboard.match(keyCode: canonical, modifiers: .control) else { return nil }
+        let rule = ShortcutRule(id: fallback.id, input: original.input,
+            output: .init(keyCode: canonical, modifiers: .command))
         presses[Int(keyCode)]?.rule = rule
         presses[Int(keyCode)]?.suppress = false
         presses[Int(keyCode)]?.outputModifiers = .command
@@ -286,6 +298,7 @@ public struct KeyboardEventProcessor: Sendable {
         }
         if context.bundleID == "com.apple.finder" {
             if finderEnabled {
+                if let extra = WindowsShortcutExtensions.finderRule(key: event.keyCode, modifiers: event.modifiers) { return extra }
                 let finderRules = RuleEngine.finderCommandAlt
                 if let rule = finderRules.match(keyCode: event.keyCode, modifiers: event.modifiers) {
                     return rule
@@ -295,7 +308,7 @@ public struct KeyboardEventProcessor: Sendable {
                     return rule
                 }
                 if textNavigationEnabled {
-                    if let extra = RuleEngine.textNavigation.match(keyCode: event.keyCode, modifiers: event.modifiers) { return extra }
+                    if let extra = TextNavigationPolicy.match(key: event.keyCode, modifiers: event.modifiers, context: context) { return extra }
                     if let general = rules.match(keyCode: event.keyCode, modifiers: event.modifiers),
                        Self.isTextNavigation(general) { return general }
                 }
@@ -305,6 +318,7 @@ public struct KeyboardEventProcessor: Sendable {
             if event.keyCode == 7 { return nil }
             return localRule(event)
         }
+        if let extra = WindowsShortcutExtensions.browserRule(key: event.keyCode, modifiers: event.modifiers, context: context) { return extra }
         let browserRules = RuleEngine.browserCommandAlt
         if context.isBrowser || context.mode == .terminal || context.mode == .ide,
            let browser = browserRules.match(keyCode: event.keyCode, modifiers: event.modifiers) {
@@ -314,7 +328,8 @@ public struct KeyboardEventProcessor: Sendable {
     }
 
     private func localRule(_ event: KeyboardEvent) -> ShortcutRule? {
-        if textNavigationEnabled, let rule = RuleEngine.textNavigation.match(keyCode: event.keyCode, modifiers: event.modifiers) { return rule }
+        if textNavigationEnabled, let rule = TextNavigationPolicy.match(key: event.keyCode, modifiers: event.modifiers, context: context) { return rule }
+        if let rule = WindowsShortcutExtensions.generalRule(key: event.keyCode, modifiers: event.modifiers, context: context) { return rule }
         let rule = rules.match(keyCode: event.keyCode, modifiers: event.modifiers)
         if !textNavigationEnabled, let rule, Self.isTextNavigation(rule) { return nil }
         return rule

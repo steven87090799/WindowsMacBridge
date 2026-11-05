@@ -9,12 +9,14 @@ public enum ClipboardShortcutPolicy {
         }
         guard let ordinary = RuleEngine.clipboard.match(keyCode: key, modifiers: modifiers) else { return nil }
         if context.bundleID == "com.apple.finder", finderEnabled {
-            if key == 9, !finderMovePending { return ordinary }
-            return RuleEngine.finder.match(keyCode: key, modifiers: modifiers) ?? ordinary
+            let canonical = ordinary.output.keyCode
+            if canonical == 9, !finderMovePending { return ordinary }
+            guard let finder = RuleEngine.finder.match(keyCode: canonical, modifiers: .control) else { return ordinary }
+            return .init(id: finder.id, input: ordinary.input, output: finder.output, action: finder.action)
         }
         return ordinary
     }
     public static func isClipboardInput(key: UInt16, modifiers: Modifiers) -> Bool {
-        modifiers == .control && [UInt16(8), 7, 9, 0].contains(key)
+        modifiers == .control && [UInt16(8), 7, 9, 0, 114].contains(key) || key == 114 && modifiers == .shift
     }
 }
