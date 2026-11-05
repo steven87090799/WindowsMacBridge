@@ -47,6 +47,8 @@ public struct ShortcutPreviewResult: Equatable, Sendable, Identifiable {
                 switch action {
                 case .home, .selectHome: "依文字焦點移到／選到行首；網頁與檔案列表使用原生 Home"
                 case .end, .selectEnd: "依文字焦點移到／選到行尾；網頁與檔案列表使用原生 End"
+                case .documentHome, .selectDocumentHome: "文字焦點中移到／選到開頭；檔案列表使用原生 Home"
+                case .documentEnd, .selectDocumentEnd: "文字焦點中移到／選到結尾；檔案列表使用原生 End"
                 default: "文字焦點中的段落移動／選取"
                 }
             case .terminalCopyOrInterrupt: "Terminal：複製"

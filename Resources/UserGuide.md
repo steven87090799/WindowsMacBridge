@@ -1,4 +1,4 @@
-# WindowsMacBridge 1.0.3（build 68）
+# WindowsMacBridge 1.0.3（build 69）
 
 ## 安裝與使用
 
@@ -31,6 +31,8 @@
 唯音守護與切換熱鍵預設關閉，關閉守護時保留原輸入來源。開啟守護後預設維持唯音繁體；如需英文，用 App 的 ABC 按鈕或切換快捷鍵明確選擇，這個目標會保存。系統或其他程式改變輸入來源不會更改守護目標；喚醒及解除暫停後會恢復目標。自訂 App／來源／裝置與明確關閉的功能設定保留；損壞設定安全停用，不覆寫原資料。
 
 Option+E 開啟 Finder、Option+L 鎖定；選用的 Win+R／I／Tab 使用 Option+R／I／Tab。Alt+Tab／F4 使用 Command+Tab／F4，瀏覽器與 Finder 的 Alt+左右鍵使用 Command+左右鍵。Ctrl+C／V 等仍轉成原生 ⌘C／V；⌘⇧3／4／5 仍是 macOS 截圖鍵。一般模式、HID、預覽與已辨識遠端來源共用此對應。遠端 Windows／VM 原樣通過；未知來源不猜測。
+
+Finder 的 Ctrl+Home／End 在文字欄位移到內容開頭／結尾，加入 Shift 可選取；檔案列表使用原生 Home／End 並保留 Shift，不會變成開啟父資料夾或所選項目。Firefox 的 F11 使用原生全螢幕、Ctrl+F5 強制重新載入，Shift+F5 保留 Firefox 效能分析功能。Edge 的 Ctrl+J、Opera 的 Ctrl+H／J／U 與 Vivaldi 的 Ctrl+Shift+D 使用各 App 的原生對應；自訂 App 快捷鍵仍須依個人設定核對。
 
 ## Ctrl＋左鍵多選
 
