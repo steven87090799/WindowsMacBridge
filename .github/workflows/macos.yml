@@ -75,7 +75,8 @@ jobs:
             ${{ runner.temp }}/native-glass-resources.json
   test-and-package:
     runs-on: macos-15
-    timeout-minutes: 15
+    # Slower runners can spend 12 minutes on the two Swift builds alone.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Swift and SDK versions
@@ -83,15 +84,15 @@ jobs:
           xcodebuild -version
           xcrun --show-sdk-version
           swift --version
-      - name: Unit and AppKit tests with isolated memory regression
+      - name: Unit and AppKit tests with isolated memory and HID ownership suites
         env:
           SWIFT_BACKTRACE: enable=yes,interactive=no
-        # test.sh runs the process-wide footprint check separately; both must pass.
+        # test.sh isolates the memory checks and real XPC deadlines in separate processes.
         # Failing test lines become annotations, readable without log access.
         run: |
           set -o pipefail
           bash scripts/test.sh 2>&1 | tee -a "$RUNNER_TEMP/swift-tests.log"
-      - name: Full optimized regressions with isolated memory check
+      - name: Optimized tests with isolated memory and HID ownership suites
         env:
           SWIFT_BACKTRACE: enable=yes,interactive=no
         # Failing test lines become annotations, readable without log access.

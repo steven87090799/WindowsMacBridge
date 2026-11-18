@@ -61,8 +61,8 @@ private final class FakeHelper: NSObject, HIDHelperProtocol, NSXPCListenerDelega
     while !condition(), ProcessInfo.processInfo.systemUptime < deadline { try await Task.sleep(for: .milliseconds(10)) }
 }
 
-// Serialized: each test drives real XPC on the MainActor; running all of them
-// at once starves configure replies on small CI runners.
+// Each test uses real XPC on the MainActor. The full test runner isolates these
+// deadlines from unrelated suites; direct runs still serialize this suite.
 @MainActor @Suite(.serialized) struct HIDReleaseStateMachineTests {
     private func client(_ helper: FakeHelper, _ liveness: FakeLiveness, timeout: TimeInterval = 3,
                         created: ((NSXPCConnection) -> Void)? = nil) -> HIDBackendClient {
@@ -90,7 +90,9 @@ private final class FakeHelper: NSObject, HIDHelperProtocol, NSXPCListenerDelega
         try await eventually { helper.stopRequests > 0 }
         helper.acknowledge()
         try await eventually { !client.releasePending }
-        #expect(client.lastReleaseOutcome == .acknowledged && !client.releaseUnconfirmed && liveness.cancelled == 1)
+        #expect(client.lastReleaseOutcome == .acknowledged)
+        #expect(!client.releaseUnconfirmed)
+        #expect(liveness.cancelled == 1)
     }
     @Test func stopTimeoutWithLiveHelperFailsClosed() async throws {
         let helper = FakeHelper(); defer { helper.shutdown() }

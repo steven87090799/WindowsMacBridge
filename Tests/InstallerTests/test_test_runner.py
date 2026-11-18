@@ -14,6 +14,10 @@ MEMORY_TESTS = (
     'BridgePlatformTests.ScreenshotBoundedReadTests/repeatedPreparationDoesNotGrowMemoryWithCaptureCount',
     'BridgePlatformTests.InputDiagnosticsTests/repeatedTraceSnapshotsKeepMemoryBounded',
 )
+HID_TESTS = (
+    'BridgePlatformTests.HIDReleaseStateMachineTests/stopAcknowledgementReleasesTheGate',
+    'BridgePlatformTests.BackendOwnershipTests/leavingHIDKeepsTheRetiringLeaseUntilItsStopIsAcknowledged',
+)
 
 
 class TestRunnerTests(unittest.TestCase):
@@ -46,29 +50,35 @@ sys.exit(97 if count + 1 == int(os.environ['WMB_FAIL_CALL']) else 0)
             calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
             return result, calls
 
-    def test_full_run_requires_main_and_separate_memory_process(self):
+    def test_full_run_separates_memory_and_hid_ownership_from_the_parallel_suites(self):
         result, calls = self.run_runner()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(calls), 3)
         self.assertEqual(calls[0][-2], '--skip')
-        memory_pattern = calls[0][-1]
-        self.assertEqual(calls[1][-3:], ['--no-parallel', '--filter', memory_pattern])
-        for name in MEMORY_TESTS:
-            self.assertIsNotNone(re.fullmatch(memory_pattern, name))
-        self.assertIsNone(re.search(memory_pattern, 'BridgePlatformTests.InputDiagnosticsTests/disabledAndEmptySessionsAllocateNoRecordStorage'))
-        self.assertIn('--skip-build', calls[1])
-        self.assertNotIn('--skip', calls[1])
+        excluded = calls[0][-1]
+        for call, selected, other in ((calls[1], MEMORY_TESTS, HID_TESTS), (calls[2], HID_TESTS, MEMORY_TESTS)):
+            pattern = call[-1]
+            self.assertEqual(call[-3:], ['--no-parallel', '--filter', pattern])
+            self.assertIn('--skip-build', call)
+            self.assertNotIn('--skip', call)
+            for name in selected:
+                self.assertIsNotNone(re.search(excluded, name))
+                self.assertIsNotNone(re.search(pattern, name))
+            for name in other:
+                self.assertIsNone(re.search(pattern, name))
+        self.assertIsNone(re.search(excluded, 'BridgePlatformTests.InputDiagnosticsTests/disabledAndEmptySessionsAllocateNoRecordStorage'))
 
-    def test_release_plugin_and_build_options_are_preserved_for_memory_process(self):
+    def test_release_and_plugin_options_are_preserved_in_each_process(self):
         result, calls = self.run_runner(['-c', 'release', '--parallel', '--num-workers', '4'], with_plugin=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(calls), 3)
         for call in calls:
             self.assertEqual(call[call.index('-c') + 1], 'release')
             self.assertIn('-load-plugin-library', call)
         self.assertIn('--parallel', calls[0])
-        self.assertNotIn('--parallel', calls[1])
-        self.assertNotIn('--num-workers', calls[1])
+        for call in calls[1:]:
+            self.assertNotIn('--parallel', call)
+            self.assertNotIn('--num-workers', call)
 
     def test_explicit_selection_serial_and_report_requests_are_not_rewritten(self):
         for args in [('--filter', 'SettingsStoreTests'), ('--filter=SettingsStoreTests',),
@@ -80,8 +90,8 @@ sys.exit(97 if count + 1 == int(os.environ['WMB_FAIL_CALL']) else 0)
                 self.assertEqual(len(calls), 1)
                 self.assertEqual(calls[0][-len(args):], list(args))
 
-    def test_failures_in_either_process_fail_the_gate(self):
-        for failure, call_count in [(1, 1), (2, 2)]:
+    def test_failure_in_any_process_fails_the_gate(self):
+        for failure, call_count in [(1, 1), (2, 2), (3, 3)]:
             with self.subTest(failure=failure):
                 result, calls = self.run_runner(fail_call=failure)
                 self.assertEqual(result.returncode, 97)
@@ -90,7 +100,9 @@ sys.exit(97 if count + 1 == int(os.environ['WMB_FAIL_CALL']) else 0)
     def test_existing_skip_build_is_forwarded_once(self):
         result, calls = self.run_runner(['--skip-build', '-c', 'release'])
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(calls[1].count('--skip-build'), 1)
+        self.assertEqual(len(calls), 3)
+        for call in calls:
+            self.assertEqual(call.count('--skip-build'), 1)
 
 
 if __name__ == '__main__':

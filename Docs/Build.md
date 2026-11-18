@@ -61,4 +61,4 @@ hdiutil verify build/download/WindowsMacBridge-1.0.3-local.1-macos-arm64.dmg
 | 精確提交的建置、簽章與介面檢查 | [GitHub Actions](https://github.com/steven87090799/WindowsMacBridge/actions) 依[工作流程](../.github/workflows/macos.yml)執行並保存產物 |
 | 鍵盤、系統權限、進階 HID 與遠端桌面 | 依[功能驗收](../Resources/AcceptanceGuide.md)及[雙機驗收](../Resources/TwoMacAcceptance.md)各自測試 |
 
-請使用 `scripts/test.sh` 作為完整測試入口。它會先準備固定版本 SDK，並把程序記憶體回歸放在獨立程序執行。要在其他分支自行移植 Intel，請依 [Intel 移植指南](IntelPorting.md)調整建置和封裝。
+請使用 `scripts/test.sh` 作為完整測試入口。它會先準備固定版本 SDK，再分開執行一般測試、程序記憶體回歸及 HID 交接測試。要在其他分支自行移植 Intel，請依 [Intel 移植指南](IntelPorting.md)調整建置和封裝。
