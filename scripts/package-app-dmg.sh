@@ -23,9 +23,11 @@ ditto --noextattr --norsrc "$bridge_app" "$bridge_stage/Volume/WindowsMacBridge.
 ln -s /Applications "$bridge_stage/Volume/Applications"
 cp Resources/DragInstall.txt "$bridge_stage/Volume/開始使用.txt"
 codesign --verify --strict "$bridge_stage/Volume/WindowsMacBridge.app"
-hdiutil create -quiet -volname WindowsMacBridge -srcfolder "$bridge_stage/Volume" \
+echo 'Creating drag-install DMG'
+hdiutil create -volname WindowsMacBridge -srcfolder "$bridge_stage/Volume" \
     -format UDZO "$bridge_stage/$bridge_name.dmg"
-hdiutil verify -quiet "$bridge_stage/$bridge_name.dmg"
+echo 'Verifying drag-install DMG'
+hdiutil verify "$bridge_stage/$bridge_name.dmg"
 cp "$bridge_stage/$bridge_name.dmg" "$bridge_output"
 (cd "$(dirname "$bridge_output")" && shasum -a 256 "$(basename "$bridge_output")") > "$bridge_output.sha256"
 printf '%s\n' "$bridge_output" > build/DMG_PATH.txt
