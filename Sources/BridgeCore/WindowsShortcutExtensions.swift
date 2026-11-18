@@ -54,6 +54,7 @@ public enum WindowsShortcutExtensions {
         rule("browser.viewSource", 32, .control, 32, [.command, .option]),
         rule("browser.clearData", 117, [.control, .shift], 51, [.command, .shift]),
         rule("browser.console", 38, [.control, .shift], 38, [.command, .option]),
+        rule("browser.devTools", 34, [.control, .shift], 34, [.command, .option]),
         rule("browser.devToolsF12", 111, [], 34, [.command, .option]),
         rule("browser.reloadIgnoringCache", 96, .shift, 15, [.command, .shift]),
         rule("browser.homePage", 115, .command, 4, [.command, .shift])
@@ -63,25 +64,57 @@ public enum WindowsShortcutExtensions {
         rule("browser.downloads", 38, .control, 38, .command),
         rule("browser.pastePlain", 9, [.control, .shift], 9, [.command, .shift]),
         rule("browser.viewSource", 32, .control, 32, .command),
-        rule("browser.reloadIgnoringCache", 96, .shift, 15, [.command, .shift])
+        rule("browser.reloadIgnoringCache", 96, .control, 15, [.command, .shift]),
+        rule("browser.fullScreenF11", 103, [], 3, [.command, .shift]),
+        rule("browser.searchCtrlK", 40, .control, 40, .command),
+        rule("browser.searchCtrlE", 14, .control, 40, .command),
+        rule("browser.homePage", 115, .command, 115, .option),
+        rule("browser.bookmarkAll", 2, [.control, .shift], 2, [.command, .shift]),
+        rule("browser.bookmarkManager", 31, [.control, .shift], 31, [.command, .shift]),
+        rule("browser.clearData", 117, [.control, .shift], 51, [.command, .shift]),
+        rule("browser.devTools", 34, [.control, .shift], 34, [.command, .option]),
+        rule("browser.webConsole", 40, [.control, .shift], 40, [.command, .option]),
+        rule("browser.console", 38, [.control, .shift], 38, [.command, .shift]),
+        rule("browser.inspector", 8, [.control, .shift], 8, [.command, .option])
     ]
+    /// Chromium-based browsers can assign different native commands to the same
+    /// Windows input. Resolve those differences once when compiling the tables.
+    private static func overriding(_ base: [ShortcutRule], with overrides: [ShortcutRule]) -> [ShortcutRule] {
+        let inputs = Set(overrides.map(\.input))
+        return base.filter { !inputs.contains($0.input) } + overrides
+    }
+    private static let edge = overriding(chromium, with: [
+        rule("browser.downloads", 38, .control, 37, [.command, .option])
+    ])
+    private static let opera = overriding(chromium, with: [
+        rule("browser.history", 4, .control, 4, [.command, .shift]),
+        rule("browser.downloads", 38, .control, 38, .command),
+        rule("browser.viewSource", 32, .control, 32, .command)
+    ])
+    private static let vivaldi = overriding(chromium, with: [
+        rule("browser.downloadsPanel", 2, [.control, .shift], 37, [.command, .option])
+    ])
     private static let safari = [
         rule("browser.history", 4, .control, 16, .command),
         rule("browser.downloads", 38, .control, 37, [.command, .option]),
         rule("browser.reloadIgnoringCacheCtrlR", 15, [.control, .shift], 15, [.command, .option]),
         rule("browser.reloadIgnoringCache", 96, .shift, 15, [.command, .option])
     ]
-    public static let browserKeys = Set((browserCommon + chromium + firefox + safari).map { $0.input.keyCode })
+    public static let browserKeys = Set((browserCommon + chromium + firefox + safari + edge + opera + vivaldi).map { $0.input.keyCode })
     private static let generalTable = try! RuleEngine(rules: general)
     private static let finderTable = try! RuleEngine(rules: finder)
     private static let commonTable = try! RuleEngine(rules: browserCommon)
     private static let chromiumTable = try! RuleEngine(rules: chromium)
     private static let firefoxTable = try! RuleEngine(rules: firefox)
     private static let safariTable = try! RuleEngine(rules: safari)
+    private static let edgeTable = try! RuleEngine(rules: edge)
+    private static let operaTable = try! RuleEngine(rules: opera)
+    private static let vivaldiTable = try! RuleEngine(rules: vivaldi)
 
     public static func prepare() {
         _ = generalTable; _ = finderTable; _ = commonTable
         _ = chromiumTable; _ = firefoxTable; _ = safariTable
+        _ = edgeTable; _ = operaTable; _ = vivaldiTable
     }
     public static func generalRule(key: UInt16, modifiers: Modifiers, context: ApplicationContext) -> ShortcutRule? {
         if context.mode == .terminal {
@@ -105,9 +138,11 @@ public enum WindowsShortcutExtensions {
         switch context.bundleID {
         case let id where id.hasPrefix("org.mozilla.firefox"): family = firefoxTable
         case "com.apple.Safari", "com.apple.SafariTechnologyPreview": family = safariTable
-        case "com.google.Chrome", "com.google.Chrome.canary", "com.microsoft.edgemac",
-             "com.microsoft.edgemac.Beta", "com.microsoft.edgemac.Dev", "com.microsoft.edgemac.Canary",
-             "com.brave.Browser", "company.thebrowser.Browser", "com.vivaldi.Vivaldi", "com.operasoftware.Opera":
+        case "com.microsoft.edgemac", "com.microsoft.edgemac.Beta", "com.microsoft.edgemac.Dev", "com.microsoft.edgemac.Canary":
+            family = edgeTable
+        case "com.operasoftware.Opera": family = operaTable
+        case "com.vivaldi.Vivaldi": family = vivaldiTable
+        case "com.google.Chrome", "com.google.Chrome.canary", "com.brave.Browser", "company.thebrowser.Browser":
             family = chromiumTable
         default: family = nil
         }
@@ -117,6 +152,7 @@ public enum WindowsShortcutExtensions {
 
 public enum TextNavigationAction: String, CaseIterable, Sendable {
     case home, end, selectHome, selectEnd, paragraphUp, paragraphDown, selectParagraphUp, selectParagraphDown
+    case documentHome, documentEnd, selectDocumentHome, selectDocumentEnd
 
     public var ruleID: String {
         switch self {
@@ -128,17 +164,26 @@ public enum TextNavigationAction: String, CaseIterable, Sendable {
         case .paragraphDown: "text.contextual.paragraphDown"
         case .selectParagraphUp: "text.contextual.selectParagraphUp"
         case .selectParagraphDown: "text.contextual.selectParagraphDown"
+        case .documentHome: "text.contextual.documentHome"
+        case .documentEnd: "text.contextual.documentEnd"
+        case .selectDocumentHome: "text.contextual.selectDocumentHome"
+        case .selectDocumentEnd: "text.contextual.selectDocumentEnd"
         }
     }
 
     public func output(textFocused: Bool) -> Shortcut? {
-        let select = self == .selectHome || self == .selectEnd || self == .selectParagraphUp || self == .selectParagraphDown
+        let select = self == .selectHome || self == .selectEnd || self == .selectParagraphUp || self == .selectParagraphDown ||
+            self == .selectDocumentHome || self == .selectDocumentEnd
         let shift: Modifiers = select ? .shift : []
         switch self {
         case .home, .selectHome:
             return .init(keyCode: textFocused ? 123 : 115, modifiers: textFocused ? shift.union(.command) : shift)
         case .end, .selectEnd:
             return .init(keyCode: textFocused ? 124 : 119, modifiers: textFocused ? shift.union(.command) : shift)
+        case .documentHome, .selectDocumentHome:
+            return .init(keyCode: textFocused ? 126 : 115, modifiers: textFocused ? shift.union(.command) : shift)
+        case .documentEnd, .selectDocumentEnd:
+            return .init(keyCode: textFocused ? 125 : 119, modifiers: textFocused ? shift.union(.command) : shift)
         case .paragraphUp, .selectParagraphUp:
             return textFocused ? .init(keyCode: 126, modifiers: shift.union(.option)) : nil
         case .paragraphDown, .selectParagraphDown:
@@ -149,17 +194,20 @@ public enum TextNavigationAction: String, CaseIterable, Sendable {
 
 public enum TextNavigationPolicy {
     public static func match(key: UInt16, modifiers: Modifiers, context: ApplicationContext) -> ShortcutRule? {
-        guard let ordinary = RuleEngine.textNavigation.match(keyCode: key, modifiers: modifiers) else { return nil }
+        let finderDocument = context.bundleID == "com.apple.finder" && (key == 115 || key == 119) &&
+            modifiers.subtracting(.shift) == .control
+        guard let ordinary = finderDocument ? RuleEngine.windows.match(keyCode: key, modifiers: modifiers) :
+            RuleEngine.textNavigation.match(keyCode: key, modifiers: modifiers) else { return nil }
         // Option+Up/Down moves source lines in several IDEs. Never treat an
         // editor or shell's native Ctrl+Up/Down bindings as Cocoa paragraphs.
         if (key == 125 || key == 126), context.mode == .ide || context.mode == .terminal { return nil }
         guard context.isBrowser || context.bundleID == "com.apple.finder" else { return ordinary }
         let action: TextNavigationAction
         switch (key, modifiers.contains(.shift)) {
-        case (115, false): action = .home
-        case (115, true): action = .selectHome
-        case (119, false): action = .end
-        case (119, true): action = .selectEnd
+        case (115, false): action = finderDocument ? .documentHome : .home
+        case (115, true): action = finderDocument ? .selectDocumentHome : .selectHome
+        case (119, false): action = finderDocument ? .documentEnd : .end
+        case (119, true): action = finderDocument ? .selectDocumentEnd : .selectEnd
         case (126, false): action = .paragraphUp
         case (126, true): action = .selectParagraphUp
         case (125, false): action = .paragraphDown

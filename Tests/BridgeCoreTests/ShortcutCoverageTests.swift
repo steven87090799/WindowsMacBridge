@@ -30,8 +30,25 @@ struct ShortcutCoverageTests {
         .init(app: "chrome", key: 99, input: [], output: 5),
         .init(app: "chrome", key: 103, input: [], output: 3, flags: [.control, .command]),
         .init(app: "chrome", key: 111, input: [], output: 34, flags: [.command, .option]),
+        .init(app: "chrome", key: 34, input: [.control, .shift], output: 34, flags: [.command, .option]),
         .init(app: "firefox", key: 4, output: 4, flags: [.command, .shift]),
         .init(app: "firefox", key: 38, output: 38),
+        .init(app: "firefox", key: 103, input: [], output: 3, flags: [.command, .shift]),
+        .init(app: "firefox", key: 40, output: 40),
+        .init(app: "firefox", key: 14, output: 40),
+        .init(app: "firefox", key: 96, output: 15, flags: [.command, .shift]),
+        .init(app: "firefox", key: 115, input: .command, output: 115, flags: .option),
+        .init(app: "firefox", key: 31, input: [.control, .shift], output: 31, flags: [.command, .shift]),
+        .init(app: "firefox", key: 117, input: [.control, .shift], output: 51, flags: [.command, .shift]),
+        .init(app: "firefox", key: 34, input: [.control, .shift], output: 34, flags: [.command, .option]),
+        .init(app: "firefox", key: 40, input: [.control, .shift], output: 40, flags: [.command, .option]),
+        .init(app: "firefox", key: 38, input: [.control, .shift], output: 38, flags: [.command, .shift]),
+        .init(app: "firefox", key: 8, input: [.control, .shift], output: 8, flags: [.command, .option]),
+        .init(app: "edge", key: 38, output: 37, flags: [.command, .option]),
+        .init(app: "opera", key: 38, output: 38),
+        .init(app: "opera", key: 4, output: 4, flags: [.command, .shift]),
+        .init(app: "opera", key: 32, output: 32),
+        .init(app: "vivaldi", key: 2, input: [.control, .shift], output: 37, flags: [.command, .option]),
         .init(app: "safari", key: 38, output: 37, flags: [.command, .option]),
         .init(app: "safari", key: 15, input: [.control, .shift], output: 15, flags: [.command, .option]),
         .init(app: "finder", key: 3, output: 3), .init(app: "finder", key: 17, output: 17),
@@ -40,9 +57,10 @@ struct ShortcutCoverageTests {
     ]
     private func context(_ app: String) -> ApplicationContext {
         let bundles = ["text": "com.apple.TextEdit", "chrome": "com.google.Chrome",
-            "firefox": "org.mozilla.firefox", "safari": "com.apple.Safari", "finder": "com.apple.finder"]
+            "firefox": "org.mozilla.firefox", "safari": "com.apple.Safari", "finder": "com.apple.finder",
+            "edge": "com.microsoft.edgemac", "opera": "com.operasoftware.Opera", "vivaldi": "com.vivaldi.Vivaldi"]
         return .init(processID: 100, bundleID: bundles[app]!, mode: .macOS,
-            isBrowser: ["chrome", "firefox", "safari"].contains(app))
+            isBrowser: ["chrome", "firefox", "safari", "edge", "opera", "vivaldi"].contains(app))
     }
     private func policy(_ context: ApplicationContext) -> SourceTranslationConfiguration {
         var c = SourceTranslationConfiguration()

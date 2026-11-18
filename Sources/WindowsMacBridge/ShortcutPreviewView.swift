@@ -60,7 +60,7 @@ struct ShortcutPreviewView: View {
                     TableColumn("預期輸出／操作") { Text($0.output).textSelection(.enabled).help($0.output) }
                 }.frame(minHeight: 260)
                 if mode == .terminal {
-                    Text("Ctrl+C 會在實際按下時確認選取範圍；若 App 無法提供選取狀態，僅嘗試複製。Ctrl+Shift+C 可明確中斷命令。")
+                    Text("Ctrl+C 一律送出原生複製，不會因沒有選取內容而中斷命令。Ctrl+Shift+C 可明確中斷命令。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

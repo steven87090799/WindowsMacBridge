@@ -13,7 +13,7 @@ import BridgeCore
 
     @Test func textFocusUsesLineNavigationAndPageFocusKeepsNativeHomeEnd() async {
         for text in [false, true] {
-            for action in [TextNavigationAction.home, .end, .selectHome, .selectEnd, .paragraphUp] {
+            for action in TextNavigationAction.allCases {
                 var output: [Shortcut] = []
                 let dispatcher = ShortcutActionDispatcher(marker: 1, authorization: { _ in true }, clock: { 0 },
                     keyEmitter: { key, flags, _ in output.append(.init(keyCode: key, modifiers: flags)); return true },

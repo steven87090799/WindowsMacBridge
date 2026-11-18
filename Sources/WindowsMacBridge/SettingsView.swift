@@ -357,7 +357,7 @@ struct SettingsView: View {
 
     private var profiles: some View {
         VStack(alignment: .leading, spacing: 12) {
-            explanation("規則依 App 的 bundle ID 套用到整個 App。本機 App、Terminal 與 IDE 都套用完整 Windows 相容快捷鍵；Terminal 的 Ctrl+C 有選取時複製、沒有選取時中斷；Ctrl+Shift+C 明確中斷。")
+            explanation("規則依 App 的 bundle ID 套用到整個 App。本機 App、Terminal 與 IDE 都套用完整 Windows 相容快捷鍵；Terminal 的 Ctrl+C 一律複製；Ctrl+Shift+C 明確中斷。")
             if let app = controller.targetApp {
                 HStack {
                     VStack(alignment: .leading) {
@@ -408,7 +408,7 @@ struct SettingsView: View {
     private func profileExplanation(_ mode: ApplicationMode) -> String {
         switch mode {
         case .macOS: "本機 App 使用完整 Windows 相容快捷鍵：複製、儲存、復原／重做、搜尋、分頁、文字導覽與系統操作。"
-        case .terminal: "Terminal 使用完整 Windows 相容快捷鍵；Ctrl+C 有選取文字時複製，沒有選取時中斷命令；Ctrl+Shift+C 明確中斷。"
+        case .terminal: "Terminal 使用完整 Windows 相容快捷鍵；Ctrl+C 一律複製，不會因沒有選取內容而中斷命令；Ctrl+Shift+C 明確中斷。"
         case .ide: "IDE 整個 App 共用完整 Windows 相容快捷鍵，包含儲存、復原／重做、搜尋、分頁與文字導覽。"
         case .remoteWindows: "讓遠端 Client 收到原按鍵，停止本機翻譯、系統動作與輸入法守護。Windows 或 Mac 目標都適用；本 App 無法從 Client 的前景程序判斷連線目標，也不替 Client 設定轉送。"
         case .virtualMachine: "讓 VM 接收原按鍵，停止本機翻譯與輸入法切換；VM 是否捕捉 Alt+Tab 由虛擬機軟體控制。"

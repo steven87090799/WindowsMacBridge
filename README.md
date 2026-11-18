@@ -2,7 +2,10 @@
 
 Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。正式版本 **1.0.2（build 66）**，修正系統應用程式清單包含重複無效 PID 時，背景程式會當機退出的問題。Ctrl+C／X／V／A 共用本機剪貼簿規則，涵蓋系統浮動視窗、Terminal、輸入法與本機 App Profile；截圖縮圖點擊後直接置中並啟用 App 內的圖片預覽視窗。設定側邊欄保留清晰文字與原生液態玻璃切換動畫；包含規則預覽與遠端校準介面（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。
 
-## v1.0.3 開發版（build 68）
+## v1.0.3 開發版（build 69）
+
+- 正式環境審查補上 Finder Ctrl+Home／End 的文字焦點判斷，避免導覽檔案時開啟父資料夾或所選項目；修正 Firefox 全螢幕、搜尋與強制重新載入，以及 Edge、Opera、Vivaldi 的不同原生對應。
+- 已完成的遠端輸入通道可安全重用；仍按住的按鍵、修飾鍵與切換器不會被新來源取代。審查與正式使用前的實機驗收見 [Windows 快捷鍵正式環境審查](Docs/WindowsProductionReview-2026-11-05.md)。
 
 - 補上 Ctrl＋左鍵多選：舊版只監聽鍵盤事件，因此 Ctrl+C／V 可用卻無法轉換滑鼠多選。新版在本機及已辨識的 Google 遠端桌面／Apple 螢幕共享來源，把 Ctrl＋左鍵轉成 Command＋左鍵。
 - Finder 的 Ctrl＋拖曳改為複製，Ctrl＋Shift＋拖曳建立替身；放鍵順序不會把複製變成 Command 強制移動。保留原生 Command 點擊、一般右鍵及遠端 Windows／VM 的原始操作。

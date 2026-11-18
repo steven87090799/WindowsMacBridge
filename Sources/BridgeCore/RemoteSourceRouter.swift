@@ -98,8 +98,11 @@ public struct RemoteSourceRouter: Sendable {
         let producer = snapshot.producers[producerIndex]
         guard producer.work.isCurrentWithoutWaiting else { return .init() }
         let existing = slots.firstIndex { $0?.producer == producer && $0?.stateID == evidence.stateID }
-        guard let index = existing ?? slots.firstIndex(where: { $0 == nil }) else { return .init() }
+        guard let index = existing ?? availableSlot() else { return .init() }
         if existing == nil {
+            // A completed stream must not permanently occupy capacity. Revoke
+            // only its detached work; other streams of the producer stay valid.
+            slots[index]?.frame.invalidate()
             var stream = Stream(producer: producer, stateID: evidence.stateID)
             configure(&stream.processor, producer: producer, config: configuration)
             slots[index] = stream
@@ -177,6 +180,17 @@ public struct RemoteSourceRouter: Sendable {
         }
         return .init(decision, validity: .init(origin: producer.work, frame: slots[index]!.frame,
                                               producerProcessID: producer.processID, producerSession: producer.session))
+    }
+    private func availableSlot() -> Int? {
+        var oldest: Int?
+        for i in slots.indices {
+            guard let stream = slots[i] else { return i }
+            // Never sacrifice a held key, modifier, switcher or release tombstone.
+            guard stream.processor.activePressCount == 0, stream.processor.modifiers.aggregate.isEmpty,
+                  !stream.appSwitchHeld else { continue }
+            if oldest == nil || stream.lastEventAt < slots[oldest!]!.lastEventAt { oldest = i }
+        }
+        return oldest
     }
     public mutating func rejectAction(keyCode: UInt16, evidence: InputOriginEvidence) {
         guard let index = slots.firstIndex(where: { $0?.producer.processID == evidence.processID && $0?.stateID == evidence.stateID }) else { return }
