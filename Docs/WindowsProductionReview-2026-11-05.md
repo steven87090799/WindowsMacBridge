@@ -2,6 +2,8 @@
 
 2026-11-05，審查基準為已合併 PR #26 的主分支 `1b4c120`，修正候選版為 **1.0.3 build 69**。本輪已修正可重現的快捷鍵與遠端輸入問題，Debug 與 Release 各 584 項測試通過。正式使用判定仍須完成下列本機及遠端實機驗收；目前沒有把 build 69 安裝到日常環境。
 
+2026-11-18 更新：build 69 的兩項 [GitHub Actions 檢查](https://github.com/steven87090799/WindowsMacBridge/actions/runs/42037441116)已通過，[PR #27](https://github.com/steven87090799/WindowsMacBridge/pull/27) 已合併 `main`。下列實機驗收仍待完成，發行版與開發版的對照見 [README](../README.md)。
+
 ## 已修正的問題
 
 | 優先度 | 觸發方式與原有結果 | build 69 行為 |

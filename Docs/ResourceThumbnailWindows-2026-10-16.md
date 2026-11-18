@@ -1,6 +1,8 @@
 # WindowsMacBridge build 51：Windows 操作、截圖縮圖與 OCR 資源複查
 
-本報告接續 [build 50 功能審查](/Users/steven/Documents/ChatGPT/我/Docs/FeatureReview-2026-10-16.md)、[完整逐檔審查](/Users/steven/Documents/ChatGPT/我/Docs/CurrentMainAudit-2026-10-15.md) 與 [修復報告](/Users/steven/Documents/ChatGPT/我/Docs/RepairReport-2026-10-15.md)。舊報告的版本、雜湊與測試結果保持為當時快照，本報告記錄後續需求變更。
+> 文中標示的本機檔案屬於當時的驗證紀錄，未隨 GitHub 倉庫提供。
+
+本報告接續 [build 50 功能審查](FeatureReview-2026-10-16.md)、[完整逐檔審查](CurrentMainAudit-2026-10-15.md) 與 [修復報告](RepairReport-2026-10-15.md)。舊報告的版本、雜湊與測試結果保持為當時快照，本報告記錄後續需求變更。
 
 ## 基準與需求
 
@@ -27,7 +29,7 @@
 
 一般圖片截圖不會啟動 OCR。沒有 OCR 啟動預熱、常駐 worker 或模型輪詢；每輪最多一個辨識程序，完成即退出，取消／逾時與主程序退出會結束自己的 worker。輸入仍受 64 MiB、解碼與像素預算限制，辨識縮圖最多長邊 2560／400 萬像素，回覆最多 64 KiB／1,000 行。私有影像先 unlink 再透過 fd 傳入；主程式不保留辨識文字或寫入文字日誌。
 
-OCR 執行期間仍需 CPU 與記憶體。程序退出會回收該程序的配置；macOS 的共享框架、檔案與模型快取由系統管理，不能承諾全系統記憶體立刻歸零。先前首次約 24 秒的延遲是在 Vision `perform`，模型初始化／編譯／快取或系統等待是可能原因，尚無證據能只歸因於模型載入；詳見 [延遲量測](/Users/steven/Documents/ChatGPT/我/Docs/OCRLatencyAndNoFeeAI-2026-10-16.md)。
+OCR 執行期間仍需 CPU 與記憶體。程序退出會回收該程序的配置；macOS 的共享框架、檔案與模型快取由系統管理，不能承諾全系統記憶體立刻歸零。先前首次約 24 秒的延遲是在 Vision `perform`，模型初始化／編譯／快取或系統等待是可能原因，尚無證據能只歸因於模型載入；詳見 [延遲量測](OCRLatencyAndNoFeeAI-2026-10-16.md)。
 
 其他使用例子：[macOCR](https://github.com/schappim/macOCR) 明確使用 Apple Vision；Apple 的[照片](https://support.apple.com/en-ie/guide/photos/pht6bc6bd5f5/mac)、[預覽程式](https://support.apple.com/en-euro/guide/preview/prvw625a5b2c/mac)與 [Safari](https://support.apple.com/en-ca/guide/safari/ibrw20183ad7/mac) 都提供 Live Text。Apple 未公開保證這些 App 與本程式使用相同的辨識 request 或模型快取，不能據此推論本程式 OCR 沒有任何額外開銷。
 
@@ -37,7 +39,7 @@ Win+Shift+S、PrintScreen、Alt+PrintScreen、Win+PrintScreen 與攔截的 ⌘�
 
 ## 驗證與界線
 
-本輪結果與檔案雜湊記錄於 [驗證清單](/Users/steven/Documents/ChatGPT/我/build/resource-thumbnail-20261016/verification.json)。包括 Debug／Release 完整回歸、獨立程序的重複截圖記憶體測試、原生 Vision 合成圖片辨識、取消／逾時與主程序退出、縮圖資料／檔案所有權、完整本機快捷鍵與 HID 系統動作、封裝簽章與框架依賴，以及六張離屏合成介面。
+本輪結果與檔案雜湊記錄於 驗證清單（當時的本機記錄：build/resource-thumbnail-20261016/verification.json）。包括 Debug／Release 完整回歸、獨立程序的重複截圖記憶體測試、原生 Vision 合成圖片辨識、取消／逾時與主程序退出、縮圖資料／檔案所有權、完整本機快捷鍵與 HID 系統動作、封裝簽章與框架依賴，以及六張離屏合成介面。
 
 Debug 與 Release 各 **473 項通過**（42＋2＋14＋40＋206＋168＋1），最後一項為獨立程序的截圖記憶體回歸。App、OCR helper 與 HID 無輸入自檢、`codesign --verify --deep --strict`、shell 語法與 `git diff --check` 通過。主執行檔沒有直接連結 Vision，helper 連結 Vision 且沒有直接連結 AppKit／SwiftUI；三次 metadata-only 啟動的 dyld 清單都沒有 Vision／VisionKit／CoreML。安裝器 62 項與監測工具 6 項沿用前輪結果；本輪比對相關輸入檔雜湊，沒有宣稱重新執行。
 
@@ -51,4 +53,4 @@ Debug 與 Release 各 **473 項通過**（42＋2＋14＋40＋206＋168＋1），
 
 兩次不同版本的自檢不能證明整體 App 的固定節省量；本輪能確認的是依賴隔離、按需生命週期與有限測試下的有界資源。新產物為 **0.6.0 build 51**，已安裝的版本仍為 **build 47**。
 
-未安裝或啟動候選版的鍵盤 GUI，未變更 TCC、Driver 或實體鍵盤設定，沒有讀取使用者畫面與一般剪貼簿。實體鍵盤、Terminal／IDE 具體命令、浮動縮圖焦點／位置／點擊查看、跨 Mac／遠端與完整 GUI 長時間 CPU／footprint 仍需依 [驗收指南](/Users/steven/Documents/ChatGPT/我/Resources/AcceptanceGuide.md) 實測。有限測試無法證明零缺陷或全系統效能絕對最佳。
+未安裝或啟動候選版的鍵盤 GUI，未變更 TCC、Driver 或實體鍵盤設定，沒有讀取使用者畫面與一般剪貼簿。實體鍵盤、Terminal／IDE 具體命令、浮動縮圖焦點／位置／點擊查看、跨 Mac／遠端與完整 GUI 長時間 CPU／footprint 仍需依 [驗收指南](../Resources/AcceptanceGuide.md) 實測。有限測試無法證明零缺陷或全系統效能絕對最佳。

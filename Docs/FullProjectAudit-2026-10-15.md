@@ -1,6 +1,8 @@
 # WindowsMacBridge 全專案程式審查報告
 
-> **歷史報告，現行結論已由 [最新 main build 49 審查](/Users/steven/Documents/ChatGPT/我/Docs/CurrentMainAudit-2026-10-15.md) 取代。** 本檔基準為舊 build 46；未先同步造成 F01（HID 一秒期限）與 F03（輸入法 pending）被誤套到最新版本。兩項在最新 main 均已修復，不能將下方「8 項尚未修復」當作 build 49 的狀態。其餘六項經新版重新驗證，詳見新報告。
+> 文中標示的本機檔案屬於當時的驗證紀錄，未隨 GitHub 倉庫提供。
+
+> **歷史報告，現行結論已由 [最新 main build 49 審查](CurrentMainAudit-2026-10-15.md) 取代。** 本檔基準為舊 build 46；未先同步造成 F01（HID 一秒期限）與 F03（輸入法 pending）被誤套到最新版本。兩項在最新 main 均已修復，不能將下方「8 項尚未修復」當作 build 49 的狀態。其餘六項經新版重新驗證，詳見新報告。
 
 審查日期：2026-10-15，Asia/Taipei。審查對象為目前工作目錄的 **0.6.0 build 46**，分支 `codex/input-source-guard-intent`，commit `2e1b21ffc557e3c5c0e4bc10b84342c765495041`。開始審查時工作區乾淨；本次只新增報告、覆蓋清單及本機驗證證據，沒有修正正式碼、變更測試或安裝 App。
 
@@ -15,7 +17,7 @@
 - 29 個文件／指南做現行行為與歷史版本的一致性核對；10 份第三方授權文字做存在性與打包清單檢查；4 個圖示核對格式及尺寸。這些不冒稱逐行程式安全審查。
 - 跨檔追查 production 呼叫鏈、狀態所有權、取消／重試、權限、來源識別及安裝回復，並以隔離 fixture 重現可執行的問題。
 
-**逐檔路徑、行數、審查方式及 SHA-256** 見 [完整覆蓋清單](/Users/steven/Documents/ChatGPT/我/Docs/FullProjectAudit-2026-10-15-files.json)。清單以審查前的 238 個 tracked files 為基準，不把本報告或驗證輸出灌入覆蓋數字。
+**逐檔路徑、行數、審查方式及 SHA-256** 見 [完整覆蓋清單](FullProjectAudit-2026-10-15-files.json)。清單以審查前的 238 個 tracked files 為基準，不把本報告或驗證輸出灌入覆蓋數字。
 
 | 分區 | 檔案 | 行數 | 審查重點 |
 |---|---:|---:|---|
@@ -34,20 +36,20 @@ P1 代表高影響、應先修復的功能故障；P2 代表需排程修復的�
 
 | ID | 優先度 | 問題 | 主要位置 | 證據 |
 |---|---|---|---|---|
-| F01 | P1 | HID 一秒後丟棄複合裝置的指標報告，仍持續接管裝置 | [DeviceCapture.swift:401](/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/Sources/HIDRuntime/DeviceCapture.swift:401) | production 呼叫鏈、期限條件核對 |
-| F02 | P2 | 按鍵仍按住時正常退出，Fn／Ctrl 交換留在系統 | [MacBookKeyboardMapper.swift:167](/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/MacBookKeyboardMapper.swift:167) | 實際編譯模組＋假鍵盤 fixture |
-| F03 | P2 | TIS 請求後進入 Secure Input，驗證退出卻留下未完成交易 | [GuardController.swift:843](/Users/steven/Documents/ChatGPT/我/Sources/InputSourceSupport/GuardController.swift:843) | 未修改正式碼＋記憶體 provider 重現 |
-| F04 | P2 | Windows 核心開關同時停用仍開啟的截圖與 Fn 功能 | [RuntimePolicy.swift:45](/Users/steven/Documents/ChatGPT/我/Sources/BridgeCore/RuntimePolicy.swift:45) | 實際 Core 模組政策重現、UI／host 呼叫鏈 |
-| F05 | P2 | 安裝 journal 已發布、旗標尚未更新時中斷，刪除復原快照 | [InstallBackend.sh:298](/Users/steven/Documents/ChatGPT/我/Resources/Installer/InstallBackend.sh:298) | 私人安裝 fixture 的 SIGTERM／命令失敗注入 |
-| F06 | P2 | 可儲存超過 64 KiB 的設定，重開卻拒絕載入 | [SettingsStore.swift:120](/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/SettingsStore.swift:120) | 實際編譯模組＋隔離 UserDefaults suite |
-| F07 | P3 | 失敗復原每重試一次，遺留一份完整 payload | [InstallBackend.sh:153](/Users/steven/Documents/ChatGPT/我/Resources/Installer/InstallBackend.sh:153) | 私人 fixture 連續兩次失敗，副本 1→2→3 |
-| F08 | P3 | 權限重新啟動參數使監控誤報 App 停止 | [monitor-runtime.py:31](/Users/steven/Documents/ChatGPT/我/scripts/monitor-runtime.py:31) | 正式 regex 與正式啟動參數比對 |
+| F01 | P1 | HID 一秒後丟棄複合裝置的指標報告，仍持續接管裝置 | [DeviceCapture.swift:401](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/Tools/HIDBackend/Sources/HIDRuntime/DeviceCapture.swift#L401) | production 呼叫鏈、期限條件核對 |
+| F02 | P2 | 按鍵仍按住時正常退出，Fn／Ctrl 交換留在系統 | [MacBookKeyboardMapper.swift:167](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/Sources/BridgePlatform/MacBookKeyboardMapper.swift#L167) | 實際編譯模組＋假鍵盤 fixture |
+| F03 | P2 | TIS 請求後進入 Secure Input，驗證退出卻留下未完成交易 | [GuardController.swift:843](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/Sources/InputSourceSupport/GuardController.swift#L843) | 未修改正式碼＋記憶體 provider 重現 |
+| F04 | P2 | Windows 核心開關同時停用仍開啟的截圖與 Fn 功能 | [RuntimePolicy.swift:45](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/Sources/BridgeCore/RuntimePolicy.swift#L45) | 實際 Core 模組政策重現、UI／host 呼叫鏈 |
+| F05 | P2 | 安裝 journal 已發布、旗標尚未更新時中斷，刪除復原快照 | [InstallBackend.sh:298](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/Resources/Installer/InstallBackend.sh#L298) | 私人安裝 fixture 的 SIGTERM／命令失敗注入 |
+| F06 | P2 | 可儲存超過 64 KiB 的設定，重開卻拒絕載入 | [SettingsStore.swift:120](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/Sources/BridgePlatform/SettingsStore.swift#L120) | 實際編譯模組＋隔離 UserDefaults suite |
+| F07 | P3 | 失敗復原每重試一次，遺留一份完整 payload | [InstallBackend.sh:153](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/Resources/Installer/InstallBackend.sh#L153) | 私人 fixture 連續兩次失敗，副本 1→2→3 |
+| F08 | P3 | 權限重新啟動參數使監控誤報 App 停止 | [monitor-runtime.py:31](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/scripts/monitor-runtime.py#L31) | 正式 regex 與正式啟動參數比對 |
 
 ### F01　HID 接管與 pointing 輸出使用不同租約條件
 
 **觸發條件：** 選用 HID，成功接管 descriptor 支援的 keyboard＋pointing 複合服務；設定與前景保持不變超過一秒。一般 EventTap 模式不走這條路徑。
 
-`DeviceCapture.configure()` 第 90 行才更新 `lastHeartbeat`，但 GUI 的 [HIDBackendClient.update():132](/Users/steven/Documents/ChatGPT/我/Sources/BridgePlatform/HIDBackendClient.swift:132) 只在設定變動時送出 configure，已沒有定期心跳。capture lifecycle 在 `DeviceCapture.swift:307` 改用連線 lease，因此仍能保持 seized；`flushPointing()` 第 401–403 行卻仍要求 `systemUptime - lastHeartbeat < 1`，不符合就直接 return。
+`DeviceCapture.configure()` 第 90 行才更新 `lastHeartbeat`，但 GUI 的 [HIDBackendClient.update():132](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/Sources/BridgePlatform/HIDBackendClient.swift#L132) 只在設定變動時送出 configure，已沒有定期心跳。capture lifecycle 在 `DeviceCapture.swift:307` 改用連線 lease，因此仍能保持 seized；`flushPointing()` 第 401–403 行卻仍要求 `systemUptime - lastHeartbeat < 1`，不符合就直接 return。
 
 **影響：** 滑鼠位移、滾輪及按鈕事件停止轉送，實體服務仍被獨占。若 button-down 在一秒內送出、button-up 在一秒後到達，release 也可能遺失而留下虛擬按鈕按住狀態。鍵盤輸出不受同一舊期限約束，所以這不是完整失效後正常交回原生裝置。
 
@@ -59,9 +61,9 @@ P1 代表高影響、應先修復的功能故障；P2 代表需排程修復的�
 
 **觸發條件：** 啟用本機 MacBook Fn／Ctrl 原生交換，退出時任意按鍵仍未達 neutral，例如透過鍵盤執行退出並持續按住修飾鍵。
 
-`MacBookKeyboardMapper.stop()` 第 167–170 行先停止觀察再執行一次 `refresh()`；`restore()` 第 180–182 行在非 neutral 時保留映射與 journal，等待稍後重試。但 [AppMain.swift:54](/Users/steven/Documents/ChatGPT/我/Sources/WindowsMacBridge/AppMain.swift:54) 的 terminate handler 直接執行 stop，[BridgeController.swift:275](/Users/steven/Documents/ChatGPT/我/Sources/WindowsMacBridge/BridgeController.swift:275) 也先移除 mapper callback，再停 mapper／engine，沒有延後終止或保留還原機會。
+`MacBookKeyboardMapper.stop()` 第 167–170 行先停止觀察再執行一次 `refresh()`；`restore()` 第 180–182 行在非 neutral 時保留映射與 journal，等待稍後重試。但 [AppMain.swift:54](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/Sources/WindowsMacBridge/AppMain.swift#L54) 的 terminate handler 直接執行 stop，[BridgeController.swift:275](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/Sources/WindowsMacBridge/BridgeController.swift#L275) 也先移除 mapper callback，再停 mapper／engine，沒有延後終止或保留還原機會。
 
-**重現：** 假內建鍵盤先套用交換；改為 `keysNeutral=false` 再呼叫正式 mapper.stop。輸出仍為 `swapped=true`、`restorePending=true`、`awaitingNeutral=true`，觀察已關閉，journal 仍存在；之後放開鍵但沒有 refresh，交換不會自行復原。[重現輸出](/Users/steven/Documents/ChatGPT/我/build/audit-20261015/platform-repro.log)
+**重現：** 假內建鍵盤先套用交換；改為 `keysNeutral=false` 再呼叫正式 mapper.stop。輸出仍為 `swapped=true`、`restorePending=true`、`awaitingNeutral=true`，觀察已關閉，journal 仍存在；之後放開鍵但沒有 refresh，交換不會自行復原。重現輸出（當時的本機記錄：build/audit-20261015/platform-repro.log）
 
 **影響：** 正常退出後原生交換可能繼續存在，與指南「正常退出後還原」不符。Apple 說明指出映射隨 keyboard service 存續，系統重開或服務移除才會清除，因此不能假定 App 退出會自動撤銷。[Apple TN2450](https://developer.apple.com/library/archive/technotes/tn2450/_index.html)
 
@@ -73,17 +75,17 @@ P1 代表高影響、應先修復的功能故障；P2 代表需排程修復的�
 
 `scheduleVerification()` 第 843–846 行直接 return，沒有清除 `pendingInternalSourceID` 或建立 Secure Input recovery。第 871–877 行雖有 Secure Input 分支，卻已被前方 `!isSecureInputEnabled` guard 擋住，無法處理這個時序。
 
-**重現：** 直接編譯未修改的 GuardController／InputSourceManager，以假 provider 回 noErr、保持來源不變；設定 Secure Input，700 ms 後解除，再等 3.5 秒。選取次數仍為 1、`selectionInProgress=true`，沒有自動重試。[重現輸出](/Users/steven/Documents/ChatGPT/我/build/audit-20261015/guard-repro.log)
+**重現：** 直接編譯未修改的 GuardController／InputSourceManager，以假 provider 回 noErr、保持來源不變；設定 Secure Input，700 ms 後解除，再等 3.5 秒。選取次數仍為 1、`selectionInProgress=true`，沒有自動重試。重現輸出（當時的本機記錄：build/audit-20261015/guard-repro.log）
 
-**影響：** 在新的 App、來源或按鍵等外部事件發生前，交易可能停滯。父層 [BridgeController.swift:338](/Users/steven/Documents/ChatGPT/我/Sources/WindowsMacBridge/BridgeController.swift:338) 又依 `selectionInProgress` 壓低 layoutSupported，可能連帶暫停快捷鍵。後續事件或 policy 更新可能解除，所以不稱為不可恢復。
+**影響：** 在新的 App、來源或按鍵等外部事件發生前，交易可能停滯。父層 [BridgeController.swift:338](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/Sources/WindowsMacBridge/BridgeController.swift#L338) 又依 `selectionInProgress` 壓低 layoutSupported，可能連帶暫停快捷鍵。後續事件或 policy 更新可能解除，所以不稱為不可恢復。
 
 **修正與驗收：** 安全狀態打斷驗證時明確收尾或轉為有界復原狀態，不能直接遺留交易。新增「noErr→驗證前 Secure Input→解除且沒有額外通知」測試，驗證 pending 清除／恢復、來源結果及 host shortcut gate。
 
 ### F04　獨立功能開關依賴核心快捷鍵旗標
 
-[SettingsView.swift:178](/Users/steven/Documents/ChatGPT/我/Sources/WindowsMacBridge/SettingsView.swift:178) 將「Windows 核心快捷鍵」、「MacBook 鍵盤模式」及「Windows 快捷截圖」分成獨立開關。`BridgeController.swift:516` 卻以核心開關決定 shortcutEnabled，而 RuntimePolicy 第 45–55 行的實體正規化、截圖都再依賴它。
+[SettingsView.swift:178](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/Sources/WindowsMacBridge/SettingsView.swift#L178) 將「Windows 核心快捷鍵」、「MacBook 鍵盤模式」及「Windows 快捷截圖」分成獨立開關。`BridgeController.swift:516` 卻以核心開關決定 shortcutEnabled，而 RuntimePolicy 第 45–55 行的實體正規化、截圖都再依賴它。
 
-**重現：** 在權限及 session 正常、`shortcutEnabled=false`、`screenshotEnabled=true` 下，實際 Core 回傳 `permitsScreenshots=false`、`permitsPhysicalNormalization=false`。[重現輸出](/Users/steven/Documents/ChatGPT/我/build/audit-20261015/policy-repro.log)
+**重現：** 在權限及 session 正常、`shortcutEnabled=false`、`screenshotEnabled=true` 下，實際 Core 回傳 `permitsScreenshots=false`、`permitsPhysicalNormalization=false`。重現輸出（當時的本機記錄：build/audit-20261015/policy-repro.log）
 
 **影響：** 關閉核心快捷鍵會停止截圖並還原 Fn 交換，另外兩個開關仍顯示開啟；使用者無法只選用這兩項功能。
 
@@ -95,7 +97,7 @@ P1 代表高影響、應先修復的功能故障；P2 代表需排程修復的�
 
 **重現：** 以既有私人安裝 fixture 與系統命令 stubs，在 ln 成功後注入 SIGTERM：退出碼 -15，journal 存在、其指向的 snapshot 已不存在。令發布後的 rm 失敗也得到同樣殘留。未執行真正管理員安裝。
 
-**影響：** 下次 recovery 第 134–138 行拒絕缺失的 snapshot，[UninstallBackend.sh:8](/Users/steven/Documents/ChatGPT/我/Resources/Installer/UninstallBackend.sh:8) 也因 pending journal 拒絕操作。App 可能顯示安裝復原中並阻擋進階輸入，正常重試無法解決。這個窗口發生在切換 App／Driver 前，不據此聲稱當下已破壞舊 App。
+**影響：** 下次 recovery 第 134–138 行拒絕缺失的 snapshot，[UninstallBackend.sh:8](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/Resources/Installer/UninstallBackend.sh#L8) 也因 pending journal 拒絕操作。App 可能顯示安裝復原中並阻擋進階輸入，正常重試無法解決。這個窗口發生在切換 App／Driver 前，不據此聲稱當下已破壞舊 App。
 
 **修正與驗收：** 明確追蹤「本程序已發布 journal」與 stage 保護責任，讓所有 publication 後的退出都保留可用快照或安全移除自己發布的 journal；不能只把需要回收的事實綁在較晚的 switched 旗標。補 ln 後、rm 後、sync 前後的中斷及命令失敗測試。不要以直接刪掉使用者真實 recovery journal 作為修正。
 
@@ -103,7 +105,7 @@ P1 代表高影響、應先修復的功能故障；P2 代表需排程修復的�
 
 `SettingsStore.update()` 第 120–123 行僅驗證 next.valid，編碼後直接保存；valid 第 36–40 行沒有 overrides 的數量或長度上限。初始化第 95 行卻拒絕超過 65,536 bytes 的資料。
 
-**重現：** 隔離 suite 中加入 2,000 個 overrides，正式模組寫出 135,452 bytes，`valid=true`、儲存沒有錯誤；重新建構 SettingsStore 後 `enabled=false`、overrides=0 且回報無法讀取。[重現輸出](/Users/steven/Documents/ChatGPT/我/build/audit-20261015/platform-repro.log)
+**重現：** 隔離 suite 中加入 2,000 個 overrides，正式模組寫出 135,452 bytes，`valid=true`、儲存沒有錯誤；重新建構 SettingsStore 後 `enabled=false`、overrides=0 且回報無法讀取。重現輸出（當時的本機記錄：build/audit-20261015/platform-repro.log）
 
 **影響：** App 可以自行寫出下一次無法讀取的設定；大量自訂規則後重開會停用功能。原始 blob 在讀取失敗時仍保留，並非當場刪除；若使用者接著儲存安全預設，才可能覆寫原資料。
 
@@ -121,7 +123,7 @@ P1 代表高影響、應先修復的功能故障；P2 代表需排程修復的�
 
 ### F08　監控未接受主程式的正式啟動參數
 
-`monitor-runtime.py:31` 對主 App 使用 executable path 加結尾 `$`；[RelaunchApp.sh:8](/Users/steven/Documents/ChatGPT/我/Resources/Installer/RelaunchApp.sh:8) 正式透過 `--permission-relaunch` 開啟 App，程序 command 含參數而不匹配。Finder 分支已允許空白／結尾，主程式分支沒有。
+`monitor-runtime.py:31` 對主 App 使用 executable path 加結尾 `$`；[RelaunchApp.sh:8](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/Resources/Installer/RelaunchApp.sh#L8) 正式透過 `--permission-relaunch` 開啟 App，程序 command 含參數而不匹配。Finder 分支已允許空白／結尾，主程式分支沒有。
 
 **重現：** 相同 executable path，無參數 regex 匹配 true，附上 ` --permission-relaunch` 為 false。
 
@@ -135,13 +137,13 @@ P1 代表高影響、應先修復的功能故障；P2 代表需排程修復的�
 
 | 檢查 | 結果 | 證據 |
 |---|---|---|
-| 完整 Swift Debug | PASS 354：VirtualHID 20、InputSourceSupport 13、InputSourceCore 40、BridgePlatform 132、BridgeCore 149 | [Debug log](/Users/steven/Documents/ChatGPT/我/build/audit-20261015/swift-debug.log) |
-| 完整 Swift Release | 同一套 354 項全部 PASS | [Release log](/Users/steven/Documents/ChatGPT/我/build/audit-20261015/swift-release.log) |
-| Installer／rollback／SDK／source version | PASS 38 | [Installer log](/Users/steven/Documents/ChatGPT/我/build/audit-20261015/installer.log) |
-| Monitoring | PASS 5 | [Monitoring log](/Users/steven/Documents/ChatGPT/我/build/audit-20261015/monitoring.log) |
-| Release App 建置、Finder extension、strict codesign、registry self-check | PASS，build 46、28 個 registry entries；來源 clean 且 revision 符合基準 | [Build log](/Users/steven/Documents/ChatGPT/我/build/audit-20261015/build.log) |
-| App deep／strict codesign、自身 self-check、HID codec self-check | PASS；離線 codec 不連 Driver | [驗證結果](/Users/steven/Documents/ChatGPT/我/build/audit-20261015/verification-checks.json) |
-| Shell／plist／JSON／Python 靜態檢查 | 18 shell、6 plist、4 JSON、9 Python PASS | [靜態檢查](/Users/steven/Documents/ChatGPT/我/build/audit-20261015/static.json) |
+| 完整 Swift Debug | PASS 354：VirtualHID 20、InputSourceSupport 13、InputSourceCore 40、BridgePlatform 132、BridgeCore 149 | Debug log（當時的本機記錄：build/audit-20261015/swift-debug.log） |
+| 完整 Swift Release | 同一套 354 項全部 PASS | Release log（當時的本機記錄：build/audit-20261015/swift-release.log） |
+| Installer／rollback／SDK／source version | PASS 38 | Installer log（當時的本機記錄：build/audit-20261015/installer.log） |
+| Monitoring | PASS 5 | Monitoring log（當時的本機記錄：build/audit-20261015/monitoring.log） |
+| Release App 建置、Finder extension、strict codesign、registry self-check | PASS，build 46、28 個 registry entries；來源 clean 且 revision 符合基準 | Build log（當時的本機記錄：build/audit-20261015/build.log） |
+| App deep／strict codesign、自身 self-check、HID codec self-check | PASS；離線 codec 不連 Driver | 驗證結果（當時的本機記錄：build/audit-20261015/verification-checks.json） |
+| Shell／plist／JSON／Python 靜態檢查 | 18 shell、6 plist、4 JSON、9 Python PASS | 靜態檢查（當時的本機記錄：build/audit-20261015/static.json） |
 | 隔離故障重現 | F02／F03／F04／F06 已執行正式模組或未修改正式碼；F05／F07 使用私人安裝 fixture；F01／F08 核對正式條件 | 同目錄重現原碼及輸出 |
 
 共 **397 項不同的現有測試**通過（354＋38＋5）；Debug／Release 重跑不重複加總。新缺陷的隔離重現另計，沒有修改既有測試來取得通過結果。
@@ -168,7 +170,7 @@ P1 代表高影響、應先修復的功能故障；P2 代表需排程修復的�
 
 ## 5. 文件及測試可達性問題
 
-1. [HID backend README](/Users/steven/Documents/ChatGPT/我/Tools/HIDBackend/README.md:6) 仍要求不存在的 `build-hid-helper.sh`、`package-hid-release.sh`，指向舊 `Sources/BridgeHIDHelper`，root 入口仍寫 `--serve`；目前為單一 App 與 `--hid-service`。應改成現行 build/package 與離線自查方式。這是開發文件錯誤，與 F01–F08 分開計數。
+1. [HID backend README](https://github.com/steven87090799/WindowsMacBridge/blob/2e1b21ffc557e3c5c0e4bc10b84342c765495041/Tools/HIDBackend/README.md#L6) 仍要求不存在的 `build-hid-helper.sh`、`package-hid-release.sh`，指向舊 `Sources/BridgeHIDHelper`，root 入口仍寫 `--serve`；目前為單一 App 與 `--hid-service`。應改成現行 build/package 與離線自查方式。這是開發文件錯誤，與 F01–F08 分開計數。
 2. 文件掃描找到 10 處失效的本地 Markdown 引用，全部在舊 PreReleaseRepair 報告：部分是未隨 Git 保存的歷史 build 證據，部分為已移除的舊程式／腳本。保留歷史數字可以，但應明確標示其來源快照及是否仍可取得，避免當成目前路徑。
 3. `NativeScreenshotObserver` 與其直接接收原生存檔的測試仍存在，production 目前沒有建構／接線該 observer。現行截圖主要由快捷鍵 gate→本 App capture lifecycle 執行；observer 測試通過不能當作現行 ⌘⇧3／4 完整成功證據。
 4. `VirtualHIDTests` 依賴 VirtualHID／HIDLifecycle，沒有直接測 HIDRuntime 的 DeviceCapture。因此目前大量 codec／模型測試無法抓出 F01。需增加可注入 clock／transport 的 adapter 層測試。
@@ -200,4 +202,4 @@ P1 代表高影響、應先修復的功能故障；P2 代表需排程修復的�
 4. **修 F07、F08 及文件**：回收當次 scratch、補正式啟動參數監控，更新已失效的開發入口。
 5. 針對每項先保留重現，再執行對應回歸及完整 Debug／Release。只有實際執行的硬體／跨機／Driver 情境才能補上驗收通過。
 
-本次交付為審查與證據，**8 項缺陷尚未修復**。本機詳細 log／harness 位於 [audit-20261015](/Users/steven/Documents/ChatGPT/我/build/audit-20261015)，該目錄為 ignored；可提交的報告與逐檔 manifest 位於 Docs。此結論僅適用於上方精確 commit 與檔案雜湊，不能套用至其他分支、較新版 release 或已安裝 App。
+本次交付為審查與證據，**8 項缺陷尚未修復**。本機詳細 log／harness 位於 audit-20261015（當時的本機記錄：build/audit-20261015），該目錄為 ignored；可提交的報告與逐檔 manifest 位於 Docs。此結論僅適用於上方精確 commit 與檔案雜湊，不能套用至其他分支、較新版 release 或已安裝 App。

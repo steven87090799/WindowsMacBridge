@@ -1,6 +1,8 @@
 # WindowsMacBridge：Apple AI API 與功能建議
 
-查核日期：2026-10-16，Asia/Taipei。這份文件是官方 API 調查與產品提案；下列 AI 功能尚未加入 App。本輪已實作的規則預覽、遠端校準與 Vision OCR，見 [功能與效能複查報告](/Users/steven/Documents/ChatGPT/我/Docs/FeatureReview-2026-10-16.md)。
+> 文中標示的本機檔案屬於當時的驗證紀錄，未隨 GitHub 倉庫提供。
+
+查核日期：2026-10-16，Asia/Taipei。這份文件是官方 API 調查與產品提案；下列 AI 功能尚未加入 App。本輪已實作的規則預覽、遠端校準與 Vision OCR，見 [功能與效能複查報告](FeatureReview-2026-10-16.md)。
 
 ## 可以使用的官方 API
 
@@ -37,7 +39,7 @@ macOS 27 的 [Foundation Models 更新](https://developer.apple.com/documentatio
 - `supportsLocale(Locale(identifier: "zh_TW"))`：`true`。
 - 不可用狀態下讀出的 `contextSize` 為 0；這不是模型實際 context 上限為 0 的證據。
 
-所以硬體／系統符合門檻，**目前模型尚未就緒**。此狀態不能單獨區分資產未完成準備與其他系統原因。證據：[唯讀能力查核](/Users/steven/Documents/ChatGPT/我/build/feature-review-20261016/apple-ai-research/local-availability.json)、[查核程式](/Users/steven/Documents/ChatGPT/我/build/feature-review-20261016/apple-ai-research/check-availability.swift)。
+所以硬體／系統符合門檻，**目前模型尚未就緒**。此狀態不能單獨區分資產未完成準備與其他系統原因。證據：唯讀能力查核（當時的本機記錄：build/feature-review-20261016/apple-ai-research/local-availability.json）、查核程式（當時的本機記錄：build/feature-review-20261016/apple-ai-research/check-availability.swift）。
 
 ## 效能與相容性設計
 

@@ -1,128 +1,75 @@
 # WindowsMacBridge
 
-Apple Silicon、macOS 14+ 的選單列鍵盤工具，整合 Windows 快捷鍵、MacBook 內建 Fn／Ctrl、Finder 操作、截圖與選配唯音／ABC 管理。正式版本 **1.0.2（build 66）**，修正系統應用程式清單包含重複無效 PID 時，背景程式會當機退出的問題。Ctrl+C／X／V／A 共用本機剪貼簿規則，涵蓋系統浮動視窗、Terminal、輸入法與本機 App Profile；截圖縮圖點擊後直接置中並啟用 App 內的圖片預覽視窗。設定側邊欄保留清晰文字與原生液態玻璃切換動畫；包含規則預覽與遠端校準介面（歷史審查：[FinalProductionReview-2026-10-03](Docs/FinalProductionReview-2026-10-03.md)）。
+WindowsMacBridge 是給 **Apple M 系列 Mac**（macOS 14 以上）的選單列工具。它把 Windows 習慣的 Ctrl、Win、Alt 快捷鍵轉成 macOS 操作，並提供 Finder 操作、截圖複製、MacBook 內建 Fn／左 Ctrl 交換及選配的唯音／ABC 管理。也可在接收端 Mac 處理已辨識的遠端輸入。
 
-## v1.0.3 開發版（build 69）
+WindowsMacBridge brings Windows-style shortcuts, Finder actions and screenshot copying to Apple silicon Macs. Start with the release download or the build guide. The Intel porting guide is for readers who want to adapt their own fork to x86_64.
 
-- 正式環境審查補上 Finder Ctrl+Home／End 的文字焦點判斷，避免導覽檔案時開啟父資料夾或所選項目；修正 Firefox 全螢幕、搜尋與強制重新載入，以及 Edge、Opera、Vivaldi 的不同原生對應。
-- 已完成的遠端輸入通道可安全重用；仍按住的按鍵、修飾鍵與切換器不會被新來源取代。審查與正式使用前的實機驗收見 [Windows 快捷鍵正式環境審查](Docs/WindowsProductionReview-2026-11-05.md)。
+| 我要做什麼 | 從這裡開始 |
+| --- | --- |
+| 下載與安裝 | [目前正式發行版](https://github.com/steven87090799/WindowsMacBridge/releases/latest)、[操作指南](Resources/UserGuide.md) |
+| 在 M 系列 Mac 從原始碼建置 | [Build 與封裝](Docs/Build.md) |
+| 自行做 Intel 版 | [Intel x86_64 移植步驟](Docs/IntelPorting.md) |
+| 了解程式、測試或提交修改 | [架構與原始碼索引](Docs/Architecture.md)、[貢獻指南](CONTRIBUTING.md)、[給程式助理的注意事項](AGENTS.md) |
 
-- 補上 Ctrl＋左鍵多選：舊版只監聽鍵盤事件，因此 Ctrl+C／V 可用卻無法轉換滑鼠多選。新版在本機及已辨識的 Google 遠端桌面／Apple 螢幕共享來源，把 Ctrl＋左鍵轉成 Command＋左鍵。
-- Finder 的 Ctrl＋拖曳改為複製，Ctrl＋Shift＋拖曳建立替身；放鍵順序不會把複製變成 Command 強制移動。保留原生 Command 點擊、一般右鍵及遠端 Windows／VM 的原始操作。
-- 補上 Ctrl+B／I／U、Ctrl+Shift+Z／V、Ctrl+Insert／Shift+Insert、Ctrl+F4、段落移動／選取，以及 Finder 搜尋、分頁、檔案資訊與瀏覽器歷史、下載、搜尋、功能鍵；Chrome、Firefox、Safari 使用各自的原生對應。
-- 瀏覽器／Finder 的 Home／End 在回呼外只查 AX 焦點角色：文字欄位使用行首／行尾，其餘使用原生 Home／End，避免誤觸上一頁／下一頁。未知文字焦點不會送出 Ctrl+上下鍵開啟視窗總覽。
-- Google 遠端「自動」模式補上明確的 Alt+F4／Alt+PrintScreen；一般 Command 與 Apple 螢幕共享 Command 輸入仍保持原樣。完整 Windows Alt 規則可使用該來源的「原始 Windows 按鍵」。
-- 實體本機與 Windows → Google 遠端桌面驗收待完成，步驟見 [TwoMacAcceptance.md](Resources/TwoMacAcceptance.md)。
+## 版本與相容性
 
-## v1.0.2 正式版（build 66）
+| 版本 | 可取得的內容 |
+| --- | --- |
+| **v1.0.2（build 66）** | [正式發行的 arm64 ZIP／DMG](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.2)。含背景當機修正與有界自動復原。[發行說明](Docs/ReleaseNotes-1.0.2.md) |
+| **v1.0.3 預覽（build 68）** | [預覽發行的 arm64 ZIP／DMG](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.3-shortcuts.20261103)。新增 Ctrl 點選與拖曳、Finder／瀏覽器快捷鍵和遠端相容規則。 |
+| **`main`（1.0.3 build 69）** | 含上述預覽的功能及 Finder 文字導覽、瀏覽器快捷鍵、遠端通道重用修正。可由原始碼建置。各輸入路徑的實機驗收狀態列於[審查紀錄](Docs/WindowsProductionReview-2026-11-05.md)。 |
 
-- [背景當機的證據、原因與修正](Docs/BackgroundCrash-2026-10-24.md)
-- [更新與跨機安裝說明](Docs/ReleaseNotes-1.0.2.md)／[下載 v1.0.2](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.2)
+發行包供 Apple Silicon（`arm64`）使用。Intel 讀者可在自己的環境依指南移植。App 的執行版本下限是 macOS 14，建置工具的系統需求另見 Build 指南。Liquid Glass 界面在支援該 API 的 SDK 與 macOS 26 以上使用，較舊系統有毛玻璃介面。
 
-修正重複無效 PID 當機，並加入異常停止後的自動恢復與提示；正常結束不重開，連續失敗有次數限制。恢復程序採事件等待，沒有固定心跳輪詢。
+## 安裝與第一次使用
 
-## v1.0.1 正式版（build 64）
+1. 下載相符版本的 DMG，開啟後把 WindowsMacBridge 拖到「應用程式」。更新前先從選單列正常結束舊版。
+2. 從「應用程式」開啟 App，保留預設的「一般模式」。在權限頁依序核准**輔助使用**與**輸入監控**。回到 App 確認狀態，依提示重開 App。需要截圖時另核准**螢幕錄製**。
+3. 在 TextEdit 測試 Ctrl+C／V。需要調整時，從選單列開啟設定或「規則預覽」。可隨時從選單列暫停、恢復或結束。登入時啟動可自行開啟。
 
-- [Apple 螢幕共享／VNC 問題、修正與雙向驗證](Docs/ScreenSharingVNC-2026-10-24.md)
-- [更新與安裝說明](Docs/ReleaseNotes-1.0.1.md)／[下載 v1.0.1](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.1)
+現有發行包使用 ad hoc 簽章，尚未經 Apple 公證。確認下載頁及 SHA-256 後，若 macOS 阻擋開啟，可依系統提供的「仍要打開」流程處理。更新可能要求重新核准當前 App。安裝一般模式不需要 Homebrew、Xcode、管理員密碼或額外 Driver。見[發行版安裝說明](Docs/ReleaseNotes-1.0.2.md)。
 
-## v1.0.0 正式版（build 63）
+## 一般模式與進階 HID
 
-- [本次問題、根因、修改位置、事件證據與後續注意事項](Docs/Build62-FnControl-UniversalControl-Handoff.md)
-- [完整實機診斷紀錄](Docs/FnControlDiagnosis-2026-10-23.md)／[修復前後事件節錄](Docs/UCControlEventEvidence-2026-10-23.txt)
-- [正式版更新與換機安裝說明](Docs/ReleaseNotes-1.0.0.md)／[下載 v1.0.0 完整 ZIP 或 DMG](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.0)
-- [build 63 的修正、資源量測與驗證範圍](Docs/Build62-Review-2026-10-23.md)
+| | 一般模式（預設） | 進階 HID（選用） |
+| --- | --- | --- |
+| 鍵盤 | 使用者層 EventTap，涵蓋本機鍵盤，沒有可靠的逐裝置識別 | 可依裝置選擇實體鍵盤及鍵位偏好 |
+| 權限 | 輔助使用、輸入監控。截圖另需螢幕錄製 | 同左，另須安裝背景服務和核准官方 Karabiner Driver |
+| 啟用 | 由 Windows 模式總開關控制 | 先解鎖進階選項，選 HID 後明確安裝 |
 
-535 項自動測試通過。build 62 的前次操作中，使用者已在本次 MacBook 實測內建 Fn+C／X／V／A、左 Ctrl→Fn，以及另一台 Mac 外接鍵盤經通用控制送入的 Ctrl+C／V。其他硬體、舊系統與進階 HID 安裝仍需各自驗收；一般模式不需要另裝 Driver。
+切回一般模式前，App 會確認舊 HID 已釋放鍵盤。若畫面顯示尚未確認，放開按鍵並確認鍵盤正常，再選「恢復／重啟引擎」。移除 WindowsMacBridge 的背景服務會保留共用 Driver。完整流程見[單一 App 安裝說明](Resources/Installer/READ-ME-FIRST.md)與 [HID 後端](Tools/HIDBackend/README.md)。
 
-## 一般模式與進階模式已分開
+## 快捷鍵與功能
 
-預設使用**一般模式**。Windows 快捷鍵、Finder 操作、截圖及內建鍵盤 Fn／Ctrl 交換都能從一般設定開啟；不必先安裝 HID 或 Driver。
+| 功能 | 使用方式 |
+| --- | --- |
+| 複製、貼上與常用快捷鍵 | Ctrl+C／X／V／A、儲存、復原、文字導覽、分頁。Terminal 的 **Ctrl+C 一律複製，Ctrl+Shift+C 中斷命令**。 |
+| Win 與 Alt | Mac 的 **Option ⌥ 對應 Win，Command ⌘ 對應 Alt**。Option+E 開 Finder、Option+L 鎖定，Command+Tab 切 App、Command+F4 關目前視窗。外接鍵盤以實際送入的修飾鍵為準。 |
+| Finder | Ctrl+X 再 Ctrl+V 移動、F2 改名、Delete 移到垃圾桶。Shift+Delete 經 Finder 確認。本機檔案焦點無法確認時，剪下移動規則不猜測要移哪個項目。 |
+| 滑鼠（build 68 起） | Ctrl＋左鍵多選。Finder Ctrl＋拖曳複製、Ctrl＋Shift＋拖曳建立替身。 |
+| 截圖 | Shift+Option+S、PrintScreen 或啟用時的 ⌘⇧3／4。完成後直接複製 PNG，點縮圖開啟 App 內的圖片預覽。Option+PrintScreen 另存到桌面；⌘⇧5 可使用系統標記與分享。OCR 目前停用。 |
+| MacBook 鍵盤 | Fn／左 Ctrl 交換預設關閉。啟用只影響該台 MacBook 的內建鍵盤，外接鍵盤與另一台 Mac 各自維持原設定。 |
+| 輸入法 | 唯音／ABC 切換和守護都是選用功能，各自預設關閉。 |
+| 設定與診斷 | Windows 模式總開關控制快捷鍵、Fn／Ctrl、Finder 和截圖。規則預覽使用合成輸入。遠端校準需確認來源及結果後才套用。 |
 
-| 項目 | 一般模式（預設） | 進階模式（明確選用） |
-|---|---|---|
-| 輸入後端 | 使用者層 EventTap | 可選 EventTap 或裝置 HID／VirtualHID |
-| 鍵盤範圍 | 所有鍵盤；EventTap 無可靠逐裝置 ID | HID 可設定實體鍵盤範圍與偏好 |
-| 基本權限 | 輔助功能與輸入監控 | 相同；HID 另驗證背景元件的讀取授權 |
-| 截圖 | 另需螢幕錄製；完成直接複製 | 相同 |
-| Root Helper／XPC／Driver | 不建立 HID client、不連線、不自動安裝或提權 | 開啟進階選項、選 HID 並明確安裝後才使用 |
-| 登入時啟動 | 選用，使用者自行開啟 | 選用 |
+詳細按鍵與前景 App 差異見[操作指南](Resources/UserGuide.md)、[Windows 鍵位對應](Docs/WindowsKeyMapping-2026-10-28.md)。預設規則與自訂 App 綁定衝突時，先檢查「規則預覽」和目的 App 的選單。
 
-一般模式**仍需要正常的鍵盤與截圖授權**；拆開的是 HID／Root／Driver 依賴。權限頁逐項列出所需設定，每次只申請一項，回到 App 後重新讀取原生授權結果。權限綠燈只代表該項授權通過，鍵盤後端也必須實際啟動才能顯示運作中。
+## 遠端與實機驗收
 
-切回一般模式會釋放本 App 的 HID 所有權並銷毀連線；舊 HID 確認停止前兩種後端都不翻譯（最多 3 秒）；只有停止回覆、從未擷取或背景元件確定結束才算釋放，XPC 中斷或逾時都保持停用到使用者按「恢復／重啟引擎」。舊 HID 設定不會自動啟用進階模式；已安裝的共用 Karabiner Driver／服務會保留，避免影響其他使用者，不能把它們仍存在誤稱為全機已沒有背景服務。
+- **Windows → Google 遠端桌面 → Mac**。由接收的 Mac 執行 Bridge。已辨識來源的原始 Ctrl 可翻譯，已轉成 Command 的組合保持原樣。可在接收端校準來源。尚未辨識的第一個事件可能原樣通過。
+- **Apple 螢幕共享**。各 Mac 分別安裝、授權與設定。Bridge 驗證接收端的 Apple 螢幕共享代理程式身分。兩個方向分開測試，各用對應的實體 Ctrl 或已設定的 Fn。
+- **通用控制**。分別記錄來源鍵盤、操作實際落在哪台 Mac，以及重連結果。
+- **Mac → 遠端 Windows 或 VM**。原始 Windows 按鍵交給目的系統處理。避免把遠端客戶端的 App Profile 改成本機 App 規則。
 
-## 安裝
+原始碼測試、下載包驗證、系統權限與實體輸入各有獨立的驗收結果。兩台 Mac 間能傳送剪貼簿內容，只證明剪貼簿同步。見[功能驗收](Resources/AcceptanceGuide.md)、[雙機驗收](Resources/TwoMacAcceptance.md)、[Apple 螢幕共享紀錄](Docs/ScreenSharingVNC-2026-10-24.md)。
 
-點兩下DMG，把WindowsMacBridge.app拖進Applications，正常退出舊版後替換。一般模式逐項列出輔助功能、輸入監控、螢幕錄製與選用的登入啟動，回到App由原生API確認各項授權。一般快捷鍵先核准前兩項；截圖另需螢幕錄製。沒有自動Root安裝、HID/XPC連接或Driver提示；登錄啓動需用戶明確開啓。截圖第一次明確使用可能需要ScreenCapture授權。
-
-App使用ad-hoc簽章、尚無Apple公證；更新可能需要重新核准本版App，不能以同名舊授權項視為已通過。不要關閉SIP／Gatekeeper或重設其他App權限。
-
-## 功能與默認
-
-「Windows 模式總開關」統一控制快捷鍵、Fn／Ctrl 交換、Finder 加強與截圖自動複製。關閉時暫停這些功能並保留子項設定；唯音輸入法守護與登入啟動各自獨立。
-
-| 功能 | 一般模式默認 |
-|---|---|
-| Ctrl複製／貼上／復原／全選／儲存、文字導覽、瀏覽器分頁 | 開 |
-| Alt+Tab、Alt+F4 | macOS原生切換／當前窗口關閉，保留未儲存提示 |
-| Finder Ctrl+X→V移動、F2、Delete、確認式ShiftDelete | 開；ShiftDelete由Finder原生確認；焦點無法確認時只貼上不搬移；不需FinderSync，根目錄監控已移除 |
-| Shift+Option+S、PrintScreen 與 ⌘⇧3／4 | 開；完成直接寫PNG clipboard，取消／舊session不寫入 |
-| MacBook Fn／左Ctrl | 關，明確開關只改本機builtIn鍵盤 |
-| Windows鍵位置 | Option ⌥；Command ⌘ 對應 Alt，舊版 Command 設定自動遷移 |
-| 唯音守護／Carbon切換熱鍵 | 各自關；守護開啟後維持本 App 明確選定的唯音／ABC，預設唯音 |
-| Terminal／IDE | 共用完整 Windows 相容規則；Ctrl+C 一律複製，不查詢選取狀態；Terminal 的 Ctrl+Shift+C 中斷命令 |
-| Remote viewer／VM／Game | 遠端 Windows／VM 保留 Ctrl 給 Windows 處理；本機 Game／停用延伸規則的 Profile 仍提供 Ctrl+C／X／V／A，其他按鍵通過 |
-| HID／VirtualHID／root runtime | 進階選配，默認關 |
-| 快捷鍵規則預覽 | 設定 → 規則預覽；使用實際處理器計算，不啟用監聽、不輸出按鍵或更改 App 規則 |
-| 遠端來源校準 | 設定 → 遠端校準；明確開始、一次 Ctrl+C、60 秒期限、確認套用與還原 |
-
-一般模式EventTap使用全部鍵盤，沒有可靠逐裝置ID。舊HID選擇不自動解鎖新進階模式，已有App規則、鍵位與明確功能選擇保留。Settings schema 6，損壞設置安全停用。
-
-進階抽屜勾選後才顯示後端、安裝／移除、Driver、裝置偏好與診斷。所有材料封裝在同一App；root模式用root-owned簽章鏡像，不讓root執行用戶可替換的Applications文件。共享官方Karabiner Driver不改簽章名稱、不因切一般或卸載本App的runtime被刪除。支持的Driver版本有checksum／簽章／交易恢復限制，不宣稱任意升級與降級都已驗收。
-
-## Windows 按鍵對應
-
-所有流程統一使用 Option＝Windows Win、Command＝Windows Alt。Shift+Option+S 框選截圖；Option+E 開啟 Finder、Option+L 鎖定，選用的 Option+R／I／Tab 分別開啟搜尋、系統設定與 Mission Control。Command+Tab／F4 對應 Alt+Tab／F4；瀏覽器與 Finder 的 Alt+左右鍵使用 Command+左右鍵。Ctrl+C 等仍輸出 macOS 原生 ⌘C。新安裝、舊設定、快捷鍵預覽、一般 EventTap、HID 與已辨識遠端來源共用此對應。
-
-Windows／VM 的原樣通過保護維持原始輸入；未知來源不猜測鍵位。外部鍵盤若已由系統或其他工具換位，以實際送入的 Option／Command 為準；本 App 不更改外部工具設定。
-
-[完整按鍵對應與驗證記錄](Docs/WindowsKeyMapping-2026-10-28.md)。
-
-## 截圖與儲存位置
-
-Shift+Option+S／PrintScreen、Command+PrintScreen（Alt+PrintScreen）及攔截的 ⌘⇧3／4 使用 App 私有暫存 PNG；擷取成功先複製，再顯示自製「截圖已複製」預覽，不等待 macOS 浮動縮圖存檔。預覽消失或點開的圖片視窗關閉後清除自己的暫存原圖。只有 Option+PrintScreen（Win+PrintScreen）明確保存全螢幕圖片到桌面，檔案不隨預覽關閉刪除。
-
-預覽由 220×160 放大為 320×248，採圓角圖片區與主副文字；macOS 26+ 且建置 SDK 支援時使用 Apple Liquid Glass，較舊版本使用毛玻璃。一般顯示 5 秒，滑鼠移入會保留，移出重新計時；點圖開啟系統快速查看。需要原生標記／分享工具時可用 ⌘⇧5；停用本 App 截圖功能後 ⌘⇧3／4 也恢復系統行為，該路徑才遵循系統截圖儲存位置。
-
-## 雙機與遠端
-
-Mac mini固定外接鍵盤、MacBook內建鍵盤，只有MacBook開啓Fn交換。兩端都裝同版、先用一般模式；[雙機步驟](Resources/TwoMacAcceptance.md)涵蓋UC兩個方向及來源Terminal／目的TextEdit。CRD incoming host用Google簽章身份辨識，raw Ctrl在Mac目的端翻譯，已是Command通過；遠端Windows viewer保持Windows Ctrl。UC隱藏metadata與不同Remote組合仍需實機驗收，不承諾100%。
-
-## 資源與驗證
-
-一般模式沒有250ms／1s固定閒置輪詢，只有按鍵、系統通知及明確deadline；一般打字不會為計數喚醒主執行緒，遠端來源結束由kqueue事件通知。HID使用XPC ownership lease和Driver回報，放開所有鍵後不輪詢；尚有held output時保留單次安全檢查。截圖單輪、臨時PNG直接clipboard，TIFF／PDF按預算處理。代碼審查或CI不證明CPU穩定0.0–0.1%、完整App記憶體峰值、硬件交接或Driver恢復已通過。
-
-OCR 目前停用：設定頁與選單沒有文字擷取入口，App 不封裝 OCR worker，不啟動辨識或載入 Vision／CoreML。原始碼與測試保留，內部開關位於 `ProductFeatures.screenshotTextRecognition`，預設為 `false`。一般截圖複製的是圖片，不需要 OCR。
-
-[2026-10-19 資源研究](Docs/BackgroundResources-2026-10-19.md) 分開記錄已安裝 build 54 的背景量測與 build 55 的合成 UI 生命週期檢查，附可重現數據。液態玻璃可見時的 GPU 成本仍待實機 profiling；無 GUI 自檢不能當成完整 App 的記憶體數字。
-
-- [操作說明](Resources/UserGuide.md)
-- [人工驗收八類功能](Resources/AcceptanceGuide.md)
-- [外部審查逐項核對、修復與支援缺口](Docs/DualModeReview-2026-10-03.md)
-
-## 建置
+## 開發與回報
 
 ```sh
-bash scripts/build-app.sh
-bash scripts/package-single-app.sh
-bash scripts/package-app-dmg.sh
+bash scripts/build-app.sh             # arm64 App，輸出路徑在 build/APP_PATH.txt
+bash scripts/test.sh                  # Swift 測試及獨立記憶體回歸
 ```
 
-產出arm64 Release App與可拖入Applications的DMG，進階payload封裝於App內。Pinned SDK準備不需要安裝系統Driver；GitHub無.git ZIP仍可建置，來源會明確標記為archive，不冒用其他目錄的Git revision。`bash scripts/test.sh`是開發／Hosted CI測試入口，不執行權限授予或實際硬件驗收。
+Git clone 和 GitHub 無 `.git` ZIP 都可建置。首次建置下載並驗證固定版本的 SDK。完整 ZIP／DMG、工具鏈與檢查步驟見 [Build 指南](Docs/Build.md)。歷史版本與修正可從 [Releases](https://github.com/steven87090799/WindowsMacBridge/releases) 查閱；有問題可用 [Issues](https://github.com/steven87090799/WindowsMacBridge/issues) 回報。
 
-完整測試會先執行一般測試，再以獨立程序執行截圖與診斷快照記憶體回歸，兩者都必須通過；`bash scripts/test.sh -c release` 同樣涵蓋兩階段。128 MiB 增量門檻與 60 次處理次數不變。明確指定 `--filter`／`--skip`、`--no-parallel`、測試清單或自訂報告輸出時，腳本保留該次呼叫；量測整個程序記憶體時請只選該測試或使用 `--no-parallel`。
-
-`BridgePerformanceCheck` 是不封裝進 App 的離線工具，提供 `--modifier-cycles`、`--routing-updates`、`--preview` 與 `--ocr-roundtrip <App executable>`，只使用合成按鍵／產生的圖片。App 的 `--render-feature-checks <new output directory>` 用合成狀態離線輸出新頁面供版面檢查，不建立輸入控制器或顯示視窗。
-
-第三方MIT資源及官方Driver許可證保留在Resources/Licenses。未經Apple Developer／DriverKit資格，不能把官方簽章dext冒充為自制WindowsMacBridge Driver。
+本倉庫目前沒有專案層級的授權檔。第三方組件各有自己的授權，見 [Resources/Licenses](Resources/Licenses)。對外分發專案衍生版本前，請先與權利人確認授權。

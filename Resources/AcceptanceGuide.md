@@ -64,7 +64,7 @@ ABC與唯音各測組字、選字、Enter／Backspace／Shift／CapsLock，再�
 
 一般模式、關閉診斷、設置窗口關閉，開機等待兩分鐘，Activity Monitor觀察5分鐘，目標平均0.0–0.1%，不能只看一張瞬間截圖。主App沒有固定250ms／1s閒置timer；按鍵、App/session通知和明確deadline會產生正常短暫活動。記錄同PID累計CPU增量、RSS與physical footprint；PID/version改變重新建baseline。自己的HID root process應無client後結束，共享Karabiner進程可能因其他軟件繼續運行。
 
-分別從Git clone和無.git ZIP做Release arm64 build，核對Info版本／commit、資源allowlist、簽章與DMG App→Applications拖入；登入開關只改本App。停止／移除進階runtime保留共享Driver。沒有自制 MRU 或窗口遍歷切換器；AltTab 只使用 macOS native path。截圖縮圖只在成功截圖後短暫建立，未使用時沒有視窗與固定輪詢。
+在 Apple M 系列 Mac 分別從 Git checkout 和 GitHub 來源 ZIP 建置 Release App，核對 `arm64`、版本／commit、資源、簽章和 DMG 拖放安裝。建置步驟見 [Build 指南](https://github.com/steven87090799/WindowsMacBridge/blob/main/Docs/Build.md)。登入開關只改本 App。停止或移除進階模式會保留共用 Driver。Alt+Tab 使用 macOS 原生切換器。截圖縮圖只在成功擷取後短暫建立，未使用時沒有視窗與固定輪詢。
 
 ## 9. 規則預覽與遠端校準
 

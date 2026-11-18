@@ -1,4 +1,4 @@
-> 這份文件保留歷史版本記錄；目前行為、測試與阻擋項目以 [2026-09-30 修復報告](PreReleaseRepair-2026-09-30.md) 為準。自製 Alt+Tab 已移除，不再列為待實作功能。
+> 本頁保留早期開發預覽的驗收記錄。現行版本的流程見 [Build](Build.md)、[功能驗收](../Resources/AcceptanceGuide.md)及[雙機驗收](../Resources/TwoMacAcceptance.md)。
 
 > 此頁保留 0.2 驗收歷史。0.3 新增項目與仍未完成的 HID 替代要求見 [KarabinerReplacement.md](KarabinerReplacement.md)。中文 IME 與 Finder 功能現為可選預覽；未宣稱實機通過。
 

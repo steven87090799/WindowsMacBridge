@@ -1,5 +1,7 @@
 # OCR 延遲複測與免開發者年費的 AI 路線
 
+> 文中標示的本機檔案屬於當時的驗證紀錄，未隨 GitHub 倉庫提供。
+
 日期：2026-10-16，Asia/Taipei。使用者不希望為本專案購買 Apple Developer Program，已有 iCloud+。本輪只做官方資料查核與生成圖片的離線量測，沒有申請方案、使用雲端推論、改變 Apple Intelligence 設定或更換已測的正式程式。
 
 ## iCloud+ 與 App API 是不同的資格
@@ -51,4 +53,4 @@ Apple 說明 [`preferBackgroundProcessing`](https://developer.apple.com/document
 
 這輪沒有找到可同時保留繁中能力、消除首次初始化等待、又不增加背景成本的簡單開關。因此**正式程式維持原狀**；來源雜湊仍符合已通過 Debug／Release 各 465 項與 Python 68 項測試的版本，未宣稱這些是對實驗工具的新測試結果。
 
-證據：[相同產物複測](/Users/steven/Documents/ChatGPT/我/build/ocr-latency-20261016/existing-worker-repeat.json)、[分段與模式比較](/Users/steven/Documents/ChatGPT/我/build/ocr-latency-20261016/stage-comparison.json)、[CPU 比較](/Users/steven/Documents/ChatGPT/我/build/ocr-latency-20261016/cpu-comparison.json)。獨立測量程式及生成圖片保存在同一資料夾，實驗工具未加入 App 包裝。
+證據：相同產物複測（當時的本機記錄：build/ocr-latency-20261016/existing-worker-repeat.json）、分段與模式比較（當時的本機記錄：build/ocr-latency-20261016/stage-comparison.json）、CPU 比較（當時的本機記錄：build/ocr-latency-20261016/cpu-comparison.json）。獨立測量程式及生成圖片保存在同一資料夾，實驗工具未加入 App 包裝。
