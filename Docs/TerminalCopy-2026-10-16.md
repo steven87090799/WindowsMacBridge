@@ -1,6 +1,8 @@
 # WindowsMacBridge build 52：Terminal Ctrl+C 依選取狀態執行
 
-依使用者後續明確選擇，Terminal 的 Ctrl+C 改採 Windows Terminal 的條件式語意，取代 build 51 的固定複製。此前的 [build 51 報告](/Users/steven/Documents/ChatGPT/我/Docs/ResourceThumbnailWindows-2026-10-16.md) 保留為歷史快照。
+> 文中標示的本機檔案屬於當時的驗證紀錄，未隨 GitHub 倉庫提供。
+
+依使用者後續明確選擇，Terminal 的 Ctrl+C 改採 Windows Terminal 的條件式語意，取代 build 51 的固定複製。此前的 [build 51 報告](ResourceThumbnailWindows-2026-10-16.md) 保留為歷史快照。
 
 | 狀態 | Ctrl+C 的行為 |
 | --- | --- |
@@ -24,7 +26,7 @@ HID 新增固定 action ID `terminal.copyOrInterrupt`，App／helper 的 XPC 協
 
 ## 驗證
 
-完整來源雜湊、測試與候選 App 記錄於 [驗證清單](/Users/steven/Documents/ChatGPT/我/build/terminal-copy-20261016/verification.json)。新增測試使用合成範圍與注入的查詢／按鍵發送器，不讀取使用者 Terminal、不送出真實按鍵。
+完整來源雜湊、測試與候選 App 記錄於 驗證清單（當時的本機記錄：build/terminal-copy-20261016/verification.json）。新增測試使用合成範圍與注入的查詢／按鍵發送器，不讀取使用者 Terminal、不送出真實按鍵。
 
 驗證涵蓋有選取／沒有選取／未知、單一／多範圍、錯誤型別與非法數值、非 Terminal 不查詢、查詢期間暫停／本機規則失效／權限撤銷／切 App／deadline／來源撤銷，以及兩套後端的持鍵／放鍵配對、HID 固定 action 編解碼與舊協定拒絕。完整 Debug／Release 回歸、候選 App 自檢、HID 無輸入自檢、OCR helper 自檢、深層嚴格簽章與離屏介面也納入本輪驗證。
 

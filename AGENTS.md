@@ -1,5 +1,7 @@
 # WindowsMacBridge agent notes
 
+Start with [README](README.md), [Architecture](Docs/Architecture.md), and the [Build guide](Docs/Build.md). Apple Silicon is the primary build and release target. The [Intel porting guide](Docs/IntelPorting.md) is for downstream forks. Treat dated audit reports as versioned evidence. Use the current source, release, and CI run when verifying behavior.
+
 For Apple Screen Sharing / VNC shortcut work, read [the incident and acceptance record](Docs/ScreenSharingVNC-2026-10-24.md) before changing routing, calibration, or the MacBook Fn/Ctrl switch.
 
 - The **receiving** Mac runs the remote-source router. The MacBook switch changes only that MacBook's built-in Fn/left-Control mapping. Each Mac needs its own Bridge installation and permissions; preferences are not shared.

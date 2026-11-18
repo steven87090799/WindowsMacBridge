@@ -1,17 +1,26 @@
-# WindowsMacBridge HID helper
+# WindowsMacBridge 選配 HID 後端
 
-0.4 整合測試版：已接入 App 的 NSXPC、IOHIDDevice 擷取與官方 VirtualHID 輸出。仍待實機驗收；未在開發期間安裝 root 服務、啟動 Driver 或擷取任何實體鍵盤。
+同一份 WindowsMacBridge App 包含一般模式的介面與 `--hid-service` 背景模式。預設一般模式使用 EventTap。只有在 App 裡解鎖進階選項、選 HID 並安裝後，才啟動 HID 服務、核准 Driver 並擷取指定鍵盤。
+
+## 建置與檢查
+
+從倉庫根目錄執行：
 
 ```sh
-bash scripts/build-hid-helper.sh
 bash scripts/build-app.sh
-bash scripts/package-hid-release.sh
+bash scripts/package-single-app.sh
+bash scripts/package-app-dmg.sh
 ```
 
-SDK revision `ba98de7fae2d529b9debe82890765dc66246f4ff`，archive SHA256 `a682e6a6afa1f06014e8065bde1adf42da1f1eaf81cc9a95943a2337581f667f`；官方 package 8.6.0，Driver 10800、client protocol 7。SDK archive 保持原狀，`prepare-hid-sdk.py` 另複製 headers 加入 service output-completion signal，供 wrapper 的 256 筆 outstanding 上限與 500 ms 無回應保護使用。這代表 service 回應，不代表目的 App 已收到按鍵。
+操作詳見 [Build 指南](../../Docs/Build.md)。建置會準備固定版本的 SDK，完整封裝才附帶安裝材料。三個步驟皆不安裝 Driver、啟動服務或擷取鍵盤。選配 HID 的實際安裝與移除由 App 的進階設定提供。見[單一 App 安裝說明](../../Resources/Installer/READ-ME-FIRST.md)。
 
-C ABI 在 `Sources/VirtualHID`；root daemon 入口與裝置 adapter 在 `Sources/BridgeHIDHelper`；純生命周期模型在 `Sources/HIDLifecycle`；核心轉譯與 USB/Carbon 鍵位表共用主專案 `BridgeCore`；控制／status／固定 action ID 共用 `HIDProtocol`。
+`--hid-self-check` 在 App 執行檔中檢查 report codec，`--controller-pin AppPath` 讀取靜態簽章身分，兩者都不連接 Driver。`--hid-service` 是已安裝的 root launchd 入口，要求 root 擁有的 App 副本及 pin。`--probe-driver` 會建立暫時虛擬鍵盤，僅用於有意驗證 Driver 的測試機。
 
-`--self-check` 僅測 report codec；`--controller-pin AppPath` 僅驗證靜態簽章及輸出 CDHash pin，均不連 Driver／不擷取。`--serve` 僅供安裝完成後的 root launchd 使用，要求 root-owned pin；`--probe-driver` 會建立暫時虛擬鍵盤，未在這次開發驗證中執行。
+## 程式與依賴
 
-安裝／移除、授權、Terminal／Remote 策略、Caps Lock／Fn／layout 限制與硬體驗收：[HIDIntegration](../../Docs/HIDIntegration.md)、[READ-ME-FIRST](../../Resources/Installer/READ-ME-FIRST.md)。
+- [VirtualHID](Sources/VirtualHID) 提供 C ABI，[HIDRuntime](Sources/HIDRuntime) 實作裝置擷取與 XPC，[HIDLifecycle](Sources/HIDLifecycle) 定義停止／釋放行為。
+- [BridgeCore](../../Sources/BridgeCore) 共用鍵位及翻譯規則，[HIDProtocol](../../Sources/HIDProtocol) 共用設定、狀態和固定動作。
+- SDK revision 為 `ba98de7fae2d529b9debe82890765dc66246f4ff`。建置檢查 archive SHA-256 `a682e6a6afa1f06014e8065bde1adf42da1f1eaf81cc9a95943a2337581f667f`。完整安裝包使用簽署的 Karabiner 8.6.0 及 7.3.0 回滾套件。
+- [prepare-hid-sdk.py](../../scripts/prepare-hid-sdk.py) 在獨立的 header 副本加入輸出回覆信號。包內官方 Driver 的名稱、二進位與簽章保持原樣。服務回報成功與目的 App 接到按鍵分開驗證。
+
+停止、遠端交接和實體驗收仍需依[操作驗收](../../Resources/AcceptanceGuide.md)檢查。歷史設計見 [HID 整合紀錄](../../Docs/HIDIntegration.md)。

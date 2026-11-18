@@ -1,5 +1,9 @@
 # WindowsMacBridge 上線前修復與驗證報告
 
+> 文中標示的本機檔案屬於當時的驗證紀錄，未隨 GitHub 倉庫提供。
+
+> 本頁保留 0.5.14 的歷史審查。現行建置和封裝入口見 [Build 指南](Build.md)。
+
 審查基準：0.5.13（build 25），2026-09-30。修復候選版：0.5.14（build 26）。最終本機驗證日期：2026-10-01，Asia/Taipei。
 
 **判定：尚不可宣稱可正式上線。** 已修正本次可重現的鍵盤狀態、Finder、截圖、首次安裝及狀態交接問題，新增 regression tests 並重新執行原有完整測試。仍有實體輸入、Universal Control、Remote、TCC、Driver 安裝／升級的驗收缺口，以及下文列出的 P1 限制。自製 Alt+Tab 已確認沒有 runtime 實作，本次沒有重新加入。
@@ -118,10 +122,10 @@
 
 | 產物 | bytes | SHA-256 |
 | --- | ---: | --- |
-| [WindowsMacBridge-0.5.14-preflight.5-macos-arm64.dmg](../build/download/WindowsMacBridge-0.5.14-preflight.5-macos-arm64.dmg) | 1,300,813 | `bc4748043498af5e494b92e7d626f09e5d94ca9730668a163c75bf4da5afc51d` |
-| [WindowsMacBridge-0.5.14-preflight.5-macos-arm64.zip](../build/download/WindowsMacBridge-0.5.14-preflight.5-macos-arm64.zip) | 5,482,965 | `aa142c063aa2a0c7fe2590571caba3815cd2868fc0e04784334fdcc9e3c25ec7` |
+| WindowsMacBridge-0.5.14-preflight.5-macos-arm64.dmg（當時的本機記錄：build/download/WindowsMacBridge-0.5.14-preflight.5-macos-arm64.dmg） | 1,300,813 | `bc4748043498af5e494b92e7d626f09e5d94ca9730668a163c75bf4da5afc51d` |
+| WindowsMacBridge-0.5.14-preflight.5-macos-arm64.zip（當時的本機記錄：build/download/WindowsMacBridge-0.5.14-preflight.5-macos-arm64.zip） | 5,482,965 | `aa142c063aa2a0c7fe2590571caba3815cd2868fc0e04784334fdcc9e3c25ec7` |
 
-詳細驗證：[artifact-verification.json](../build/verification/artifact-verification.json)；來源與 log digest：[manifest.json](../build/verification/manifest.json)。
+詳細驗證：artifact-verification.json（當時的本機記錄：build/verification/artifact-verification.json）；來源與 log digest：manifest.json（當時的本機記錄：build/verification/manifest.json）。
 
 ## 6. 最後跨模組 code review
 
@@ -168,7 +172,7 @@ Alt+Tab 搜尋涵蓋 source、helper、extension、settings、IPC、tests 與目
 
 本次已降低不必要 UI polling、keyboard inventory polling、notification backlog、log backlog、圖片重複編碼及 runtime resource duplication；安全 lease、Secure Input、session/generation 與失聯 release 保留。
 
-Finder Release 本輪實際比較：未簽章 `-O` 92,568 bytes，`-Osize` 95,920 bytes；`-O` 小約 3.5%，所以預設使用 `-O`。簽章 Finder binary 92,640 bytes。主 App 25 files 共 3,141,934 bytes（約 3.0 MiB），主執行檔 2,863,776 bytes，helper 1,737,232 bytes。見 [finder-optimization.json](../build/verification/finder-optimization.json) 與 [artifact-verification.json](../build/verification/artifact-verification.json)。這是檔案體積證據，不是 CPU／RAM benchmark。本候選版未在真實常駐輸入狀態量測 CPU、wakeups、physical footprint 或大圖 peak；不能沿用舊版本的 idle 數字。
+Finder Release 本輪實際比較：未簽章 `-O` 92,568 bytes，`-Osize` 95,920 bytes；`-O` 小約 3.5%，所以預設使用 `-O`。簽章 Finder binary 92,640 bytes。主 App 25 files 共 3,141,934 bytes（約 3.0 MiB），主執行檔 2,863,776 bytes，helper 1,737,232 bytes。見 finder-optimization.json（當時的本機記錄：build/verification/finder-optimization.json） 與 artifact-verification.json（當時的本機記錄：build/verification/artifact-verification.json）。這是檔案體積證據，不是 CPU／RAM benchmark。本候選版未在真實常駐輸入狀態量測 CPU、wakeups、physical footprint 或大圖 peak；不能沿用舊版本的 idle 數字。
 
 後續可在不犧牲可靠性下：
 
@@ -200,7 +204,7 @@ Finder Release 本輪實際比較：未簽章 `-O` 92,568 bytes，`-Osize` 95,92
 - [README.md](../README.md)
 - [Resources/AcceptanceGuide.md](../Resources/AcceptanceGuide.md)
 - [Resources/Info.plist](../Resources/Info.plist)
-- [Resources/Installer/HIDHelper-Info.plist](../Resources/Installer/HIDHelper-Info.plist)
+- [Resources/Installer/HIDHelper-Info.plist](https://github.com/steven87090799/WindowsMacBridge/blob/77cb68bc01c755f25330c14e8dd61da1c6bf9ad6/Resources/Installer/HIDHelper-Info.plist)
 - [Resources/Installer/InstallBackend.sh](../Resources/Installer/InstallBackend.sh)
 - [Resources/Installer/READ-ME-FIRST.md](../Resources/Installer/READ-ME-FIRST.md)
 - [Resources/UserGuide.md](../Resources/UserGuide.md)
@@ -252,12 +256,12 @@ Finder Release 本輪實際比較：未簽章 `-O` 92,568 bytes，`-Osize` 95,92
 - [Tests/InstallerTests/test_hid_sdk_build.py](../Tests/InstallerTests/test_hid_sdk_build.py)
 - [Tests/InstallerTests/test_install_backend.py](../Tests/InstallerTests/test_install_backend.py)
 - [Tests/InstallerTests/test_source_version.py](../Tests/InstallerTests/test_source_version.py)
-- [Tools/HIDBackend/Sources/BridgeHIDHelper/DeviceCapture.swift](../Tools/HIDBackend/Sources/BridgeHIDHelper/DeviceCapture.swift)
+- [Tools/HIDBackend/Sources/BridgeHIDHelper/DeviceCapture.swift](https://github.com/steven87090799/WindowsMacBridge/blob/77cb68bc01c755f25330c14e8dd61da1c6bf9ad6/Tools/HIDBackend/Sources/BridgeHIDHelper/DeviceCapture.swift)
 - [Tools/HIDBackend/Sources/VirtualHID/VirtualHID.cpp](../Tools/HIDBackend/Sources/VirtualHID/VirtualHID.cpp)
 - [Tools/HIDBackend/Sources/VirtualHID/include/VirtualHID.h](../Tools/HIDBackend/Sources/VirtualHID/include/VirtualHID.h)
 - [Tools/HIDBackend/Tests/VirtualHIDTests/ReportTests.swift](../Tools/HIDBackend/Tests/VirtualHIDTests/ReportTests.swift)
 - [scripts/build-app.sh](../scripts/build-app.sh)
-- [scripts/build-hid-helper.sh](../scripts/build-hid-helper.sh)
-- [scripts/package-hid-release.sh](../scripts/package-hid-release.sh)
+- [scripts/build-hid-helper.sh](https://github.com/steven87090799/WindowsMacBridge/blob/77cb68bc01c755f25330c14e8dd61da1c6bf9ad6/scripts/build-hid-helper.sh)
+- [scripts/package-hid-release.sh](https://github.com/steven87090799/WindowsMacBridge/blob/77cb68bc01c755f25330c14e8dd61da1c6bf9ad6/scripts/package-hid-release.sh)
 - [scripts/prepare-hid-sdk.py](../scripts/prepare-hid-sdk.py)
 - [scripts/source-version.sh](../scripts/source-version.sh)
