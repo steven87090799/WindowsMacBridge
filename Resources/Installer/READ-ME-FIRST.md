@@ -10,7 +10,7 @@
 
 ## 開發者停止與移除
 
-一般使用者可從選單列暫停／結束。進階面板可移除本 App 的背景元件。單一 App 套件不提供另一份 Install.command 安裝包。開發者可使用原始碼中的 Stop.command，或 App 內 `Contents/Resources/BackendPayload/UninstallBackend.sh` 移除本工具註冊。移除會保留主 App、設定與共享官方 Driver／服務；不以 client-count 推定可以停止共享服務。
+從選單列暫停或正常結束。要移除本 App 的背景元件，請使用進階面板的移除功能。這會走完整的停止、釋放與移除流程，保留主 App、設定和共用官方 Driver／服務。原始碼中的舊 `.command` 檔案屬於歷史流程，現在的單一 App 安裝從進階面板操作。
 
 root launchd 只執行 root-owned 的同簽章 WindowsMacBridge 副本與 `--hid-service`，不執行可被使用者取代的 Applications 路徑。舊 HIDHelper launchd／Mach label 只保留作內部相容，並非另一個權限 App 身分。更新時保存、還原舊版 Helper 或新版 runtime，成功才移除舊 Helper App。
 

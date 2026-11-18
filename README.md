@@ -41,6 +41,8 @@ WindowsMacBridge brings Windows-style shortcuts, Finder actions and screenshot c
 
 ## 快捷鍵與功能
 
+以下以 `main` 的行為為準。正式版的鍵位及功能請查閱其 [v1.0.2 發行說明](Docs/ReleaseNotes-1.0.2.md)和下載包隨附的指南。
+
 | 功能 | 使用方式 |
 | --- | --- |
 | 複製、貼上與常用快捷鍵 | Ctrl+C／X／V／A、儲存、復原、文字導覽、分頁。Terminal 的 **Ctrl+C 一律複製，Ctrl+Shift+C 中斷命令**。 |
