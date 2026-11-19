@@ -6,6 +6,8 @@
 
 2026-11-19 更新：[build 69 Apple M 系列預覽版](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.3-preview.69)附 ZIP、DMG、校驗值及更新說明。下載包來自 `5613a31` 的 [main CI](https://github.com/steven87090799/WindowsMacBridge/actions/runs/44333947348)，已複查版本、簽章、自檢與兩個包的內容一致性。下方的實機驗收仍待完成。
 
+[v1.0.3 正式發行](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.3)沿用這一組已驗證的 Apple M 系列 build 69 安裝檔。發行頁也列出了下方的待驗收項目。
+
 ## 已修正的問題
 
 | 優先度 | 觸發方式與原有結果 | build 69 行為 |
@@ -80,4 +82,4 @@
 
 ## 交付狀態
 
-build 69 是審查候選版，採 ad hoc 簽章；不標示為已公證正式版。本輪沒有更動系統權限、Driver、Karabiner、Fn／Ctrl 映射或已安裝 App；開始時核對日常環境為 **1.0.3 build 67**。本機與各條遠端路徑驗收完成前，不能將自動測試通過改寫成「正式環境已確認沒有問題」。
+build 69 採 ad hoc 簽章，尚未經 Apple 公證。審查期間沒有更動系統權限、Driver、Karabiner、Fn／Ctrl 映射或已安裝 App。開始時核對日常環境為 **1.0.3 build 67**。各條實機路徑的結果應依上表個別記錄。
