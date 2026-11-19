@@ -15,8 +15,9 @@ WindowsMacBridge brings Windows-style shortcuts, Finder actions and screenshot c
 
 | 版本 | 可取得的內容 |
 | --- | --- |
-| **v1.0.2（build 66）** | [正式發行的 arm64 ZIP／DMG](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.2)。含背景當機修正與有界自動復原。[發行說明](Docs/ReleaseNotes-1.0.2.md) |
-| **v1.0.3 預覽（build 69）** | [Apple M 系列 ZIP／DMG、更新說明與待驗收項目](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.3-preview.69)。修正 Finder 文字導覽、瀏覽器快捷鍵及遠端通道重用。 |
+| **v1.0.3（build 69）** | [最新正式版的 Apple M 系列 ZIP／DMG、更新說明與待驗收項目](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.3)。包含 Ctrl 多選、Finder 文字導覽、瀏覽器快捷鍵和遠端通道修正。 |
+| **v1.0.3 預覽（build 69）** | [原預覽發行](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.3-preview.69)，與 v1.0.3 正式版使用相同的安裝檔。 |
+| **v1.0.2（build 66）** | [上一個正式版的 arm64 ZIP／DMG](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.2)。含背景當機修正與有界自動復原。[發行說明](Docs/ReleaseNotes-1.0.2.md) |
 | **v1.0.3 上一版預覽（build 68）** | [預覽發行的 arm64 ZIP／DMG](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.3-shortcuts.20261103)。新增 Ctrl 點選與拖曳、Finder／瀏覽器快捷鍵和遠端相容規則。 |
 | **`main`** | 最新開發原始碼，見 [Build 指南](Docs/Build.md)。build 69 各輸入路徑的實機驗收狀態列於[審查紀錄](Docs/WindowsProductionReview-2026-11-05.md)。 |
 
@@ -28,7 +29,7 @@ WindowsMacBridge brings Windows-style shortcuts, Finder actions and screenshot c
 2. 從「應用程式」開啟 App，保留預設的「一般模式」。在權限頁依序核准**輔助使用**與**輸入監控**。回到 App 確認狀態，依提示重開 App。需要截圖時另核准**螢幕錄製**。
 3. 在 TextEdit 測試 Ctrl+C／V。需要調整時，從選單列開啟設定或「規則預覽」。可隨時從選單列暫停、恢復或結束。登入時啟動可自行開啟。
 
-現有發行包使用 ad hoc 簽章，尚未經 Apple 公證。確認下載頁及 SHA-256 後，若 macOS 阻擋開啟，可依系統提供的「仍要打開」流程處理。更新可能要求重新核准當前 App。安裝一般模式不需要 Homebrew、Xcode、管理員密碼或額外 Driver。見[發行版安裝說明](Docs/ReleaseNotes-1.0.2.md)。
+現有發行包使用 ad hoc 簽章，尚未經 Apple 公證。確認下載頁及 SHA-256 後，若 macOS 阻擋開啟，可依系統提供的「仍要打開」流程處理。更新可能要求重新核准當前 App。安裝一般模式不需要 Homebrew、Xcode、管理員密碼或額外 Driver。見[最新版安裝說明](https://github.com/steven87090799/WindowsMacBridge/releases/latest)。
 
 ## 一般模式與進階 HID
 
@@ -42,7 +43,7 @@ WindowsMacBridge brings Windows-style shortcuts, Finder actions and screenshot c
 
 ## 快捷鍵與功能
 
-以下以 `main` 的行為為準。正式版的鍵位及功能請查閱其 [v1.0.2 發行說明](Docs/ReleaseNotes-1.0.2.md)和下載包隨附的指南。
+以下以 `main` 的行為為準。各發行版的變更見[發行說明](https://github.com/steven87090799/WindowsMacBridge/releases)和下載包隨附的指南。
 
 | 功能 | 使用方式 |
 | --- | --- |
