@@ -4,6 +4,8 @@
 
 2026-11-18 更新：build 69 的兩項 [GitHub Actions 檢查](https://github.com/steven87090799/WindowsMacBridge/actions/runs/42037441116)已通過，[PR #27](https://github.com/steven87090799/WindowsMacBridge/pull/27) 已合併 `main`。下列實機驗收仍待完成，發行版與開發版的對照見 [README](../README.md)。
 
+2026-11-19 更新：[build 69 Apple M 系列預覽版](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.3-preview.69)附 ZIP、DMG、校驗值及更新說明。下載包來自 `5613a31` 的 [main CI](https://github.com/steven87090799/WindowsMacBridge/actions/runs/44333947348)，已複查版本、簽章、自檢與兩個包的內容一致性。下方的實機驗收仍待完成。
+
 ## 已修正的問題
 
 | 優先度 | 觸發方式與原有結果 | build 69 行為 |
