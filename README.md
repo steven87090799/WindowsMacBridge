@@ -6,7 +6,7 @@ WindowsMacBridge brings Windows-style shortcuts, Finder actions and screenshot c
 
 | 我要做什麼 | 從這裡開始 |
 | --- | --- |
-| 下載與安裝 | [目前正式發行版](https://github.com/steven87090799/WindowsMacBridge/releases/latest)、[操作指南](Resources/UserGuide.md) |
+| 下載與安裝 | [目前正式發行版](https://github.com/steven87090799/WindowsMacBridge/releases/latest)、[build 69 預覽版](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.3-preview.69)、[操作指南](Resources/UserGuide.md) |
 | 在 M 系列 Mac 從原始碼建置 | [Build 與封裝](Docs/Build.md) |
 | 自行做 Intel 版 | [Intel x86_64 移植步驟](Docs/IntelPorting.md) |
 | 了解程式、測試或提交修改 | [架構與原始碼索引](Docs/Architecture.md)、[貢獻指南](CONTRIBUTING.md)、[給程式助理的注意事項](AGENTS.md) |
@@ -16,8 +16,9 @@ WindowsMacBridge brings Windows-style shortcuts, Finder actions and screenshot c
 | 版本 | 可取得的內容 |
 | --- | --- |
 | **v1.0.2（build 66）** | [正式發行的 arm64 ZIP／DMG](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.2)。含背景當機修正與有界自動復原。[發行說明](Docs/ReleaseNotes-1.0.2.md) |
-| **v1.0.3 預覽（build 68）** | [預覽發行的 arm64 ZIP／DMG](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.3-shortcuts.20261103)。新增 Ctrl 點選與拖曳、Finder／瀏覽器快捷鍵和遠端相容規則。 |
-| **`main`（1.0.3 build 69）** | 含上述預覽的功能及 Finder 文字導覽、瀏覽器快捷鍵、遠端通道重用修正。可由原始碼建置。各輸入路徑的實機驗收狀態列於[審查紀錄](Docs/WindowsProductionReview-2026-11-05.md)。 |
+| **v1.0.3 預覽（build 69）** | [Apple M 系列 ZIP／DMG、更新說明與待驗收項目](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.3-preview.69)。修正 Finder 文字導覽、瀏覽器快捷鍵及遠端通道重用。 |
+| **v1.0.3 上一版預覽（build 68）** | [預覽發行的 arm64 ZIP／DMG](https://github.com/steven87090799/WindowsMacBridge/releases/tag/v1.0.3-shortcuts.20261103)。新增 Ctrl 點選與拖曳、Finder／瀏覽器快捷鍵和遠端相容規則。 |
+| **`main`** | 最新開發原始碼，見 [Build 指南](Docs/Build.md)。build 69 各輸入路徑的實機驗收狀態列於[審查紀錄](Docs/WindowsProductionReview-2026-11-05.md)。 |
 
 發行包供 Apple Silicon（`arm64`）使用。Intel 讀者可在自己的環境依指南移植。App 的執行版本下限是 macOS 14，建置工具的系統需求另見 Build 指南。Liquid Glass 界面在支援該 API 的 SDK 與 macOS 26 以上使用，較舊系統有毛玻璃介面。
 
